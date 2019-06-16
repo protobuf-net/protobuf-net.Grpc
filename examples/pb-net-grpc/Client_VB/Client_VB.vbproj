@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Client_VB</RootNamespace>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    <ProjectReference Include="..\Shared_VB\Shared_VB.vbproj" />
+  </ItemGroup>
+</Project>

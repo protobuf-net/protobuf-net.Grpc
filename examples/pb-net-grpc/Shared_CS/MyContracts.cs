@@ -3,7 +3,7 @@ using System.ServiceModel;
 using System.Threading.Tasks;
 namespace Shared_CS
 {
-    [ServiceContract]
+    [ServiceContract(Name = "Hyper.Calculator")]
     public interface ICalculator
     {
         public ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
