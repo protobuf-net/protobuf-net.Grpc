@@ -1,16 +1,23 @@
 using Grpc.Core;
+using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Internal;
 using ProtoBuf.Grpc.Server;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test
 {
     public class ContractOperationTests
     {
+        private readonly ITestOutputHelper _output;
+        public ContractOperationTests(ITestOutputHelper output) => _output = output;
         [Fact]
         public void SimpleInterface()
         {
@@ -43,9 +50,15 @@ namespace protobuf_net.Grpc.Test
 
 
         [Fact]
-        public void GeneralPurposeCountsMatch()
+        public void GeneralPurposeSignatureCount()
         {
-            Assert.Equal(ContractOperation.GeneralPurposeSignatureCount(), ServicesExtensions.GeneralPurposeSignatureCount());
+            Assert.Equal(38, ContractOperation.GeneralPurposeSignatureCount());
+        }
+
+        [Fact]
+        public void ServerSignatureCount()
+        {
+            Assert.Equal(38, ServicesExtensions.GeneralPurposeSignatureCount());
         }
 
         [Fact]
@@ -144,6 +157,64 @@ namespace protobuf_net.Grpc.Test
             Assert.Equal(to, operation.To);
             Assert.Equal((VoidKind)@void, operation.Void);
         }
+
+        [Fact]
+        public void WriteAllMethodSignatures()
+        {
+            var list = new List<(MethodType Kind, string Signature)>();
+            var sb = new StringBuilder();
+            foreach (var method in typeof(IAllOptions).GetMethods())
+            {
+                if (ContractOperation.TryIdentifySignature(method, out var operation))
+                {
+                    sb.Clear();
+                    sb.Append(Sanitize(method.ReturnType)).Append(" Foo(");
+                    var p = method.GetParameters();
+                    for (int i = 0; i < p.Length; i++)
+                    {
+                        if (i != 0) sb.Append(", ");
+                        sb.Append(Sanitize(p[i].ParameterType));
+                    }
+                    sb.Append(")");
+                    list.Add((operation.MethodType, sb.ToString()));
+                }
+            }
+
+            foreach (var grp in list.GroupBy(x => x.Kind))
+            {
+                _output.WriteLine(grp.Key.ToString());
+                _output.WriteLine("");
+                foreach(var item in grp.OrderBy(x => x.Signature))
+                    _output.WriteLine(item.Signature);
+                _output.WriteLine("");
+            }
+
+            string Sanitize(Type type)
+            {
+                if (type == typeof(HelloRequest)) return "TRequest";
+                if (type == typeof(HelloReply)) return "TReply";
+                if (type == typeof(void)) return "void";
+                if (type == typeof(ValueTask) || type == typeof(Task)
+                    || type == typeof(CallOptions) || type == typeof(ServerCallContext)
+                    || type == typeof(CallContext)) return type.Name;
+
+                if (type == typeof(ValueTask<HelloReply>)) return "ValueTask<TReply>";
+                if (type == typeof(Task<HelloReply>)) return "Task<TReply>";
+                if (type == typeof(IAsyncEnumerable<HelloReply>)) return "IAsyncEnumerable<TReply>";
+                if (type == typeof(IAsyncEnumerable<HelloRequest>)) return "IAsyncEnumerable<TRequest>";
+
+                if (type == typeof(IServerStreamWriter<HelloReply>)) return "IServerStreamWriter<TReply>";
+                if (type == typeof(IAsyncStreamReader<HelloRequest>)) return "IAsyncStreamReader<TRequest>";
+                if (type == typeof(AsyncClientStreamingCall<HelloRequest, HelloReply>)) return "AsyncClientStreamingCall<TRequest,TReply>";
+                if (type == typeof(AsyncDuplexStreamingCall<HelloRequest, HelloReply>)) return "AsyncDuplexStreamingCall<TRequest,TReply>";
+                if (type == typeof(AsyncServerStreamingCall<HelloReply>)) return "AsyncServerStreamingCall<TReply>";
+                if (type == typeof(AsyncUnaryCall<HelloReply>)) return "AsyncUnaryCall<TReply>";
+
+
+                return "**" + type.Name + "**";
+            }
+        }
+
 #pragma warning restore CS0618
         class C : B, IC { }
         class B : A, IB { }
