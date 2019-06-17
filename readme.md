@@ -72,7 +72,7 @@ public class MultiplyResult
 }
 ```
 
-Object models can be arbitrarily deep and complex, but should be trees (not graphs).
+Object models can be arbitrarily deep and complex (including lists, arrays, etc), but should be trees (not graphs).
 
 
 Service contracts are interfaces marked with `[ServiceContract]`. You can optionally specify the gRPC service name, otherwise it'll use
