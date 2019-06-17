@@ -33,12 +33,9 @@ namespace ProtoBuf.Grpc.Server
                 // ignore any services that are known to be the default handler
                 if (Attribute.IsDefined(typeof(TService), typeof(BindServiceMethodAttribute))) return;
 
-                // we support methods that match suitable signatures, where:
-                // 1. (removed - no longer supported) the method is directly on TService and is marked [OperationContract]
-                // 2. the method is on an interface that TService implements, and the interface is marked [ServiceContract]
-                // AddMethodsForService(context,typeof(TService));
-
-                foreach (var iType in typeof(TService).GetInterfaces())
+                // we support methods that match suitable signatures, where the method is on an
+                // interface that TService implements, and the interface is marked [ServiceContract]
+                foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
                 {
                     AddMethodsForService(context, iType);
                 }

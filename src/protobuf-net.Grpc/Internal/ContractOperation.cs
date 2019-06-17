@@ -15,7 +15,6 @@ namespace ProtoBuf.Grpc.Internal
         public Type From { get; }
         public Type To { get; }
         public MethodInfo Method { get; }
-        public Type[] ParameterTypes { get; }
         public MethodType MethodType { get; }
         public ContextKind Context { get; }
         public ResultKind Result { get; }
@@ -23,8 +22,7 @@ namespace ProtoBuf.Grpc.Internal
         public override string ToString() => $"{Name}: {From.Name}=>{To.Name}, {MethodType}, {Result}, {Context}";
 
         public ContractOperation(string name, Type from, Type to, MethodInfo method,
-            MethodType methodType, ContextKind contextKind, ResultKind resultKind,
-            Type[] parameterTypes)
+            MethodType methodType, ContextKind contextKind, ResultKind resultKind)
         {
             Name = name;
             From = from;
@@ -33,7 +31,6 @@ namespace ProtoBuf.Grpc.Internal
             MethodType = methodType;
             Context = contextKind;
             Result = resultKind;
-            ParameterTypes = parameterTypes;
         }
 
         public static bool TryGetServiceName(Type contractType, out string? serviceName, bool demandAttribute = false)
@@ -241,10 +238,9 @@ namespace ProtoBuf.Grpc.Internal
                 Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, types[0], types[1]);
             }
 
-            Type[] argTypes = Array.ConvertAll(args, x => x.ParameterType);
             if (resultKind != ResultKind.Unknown && from != null && to != null)
             {
-                operation = new ContractOperation(opName, from, to, method, methodType, contextKind, resultKind, argTypes);
+                operation = new ContractOperation(opName, from, to, method, methodType, contextKind, resultKind);
                 return true;
             }
             return false;

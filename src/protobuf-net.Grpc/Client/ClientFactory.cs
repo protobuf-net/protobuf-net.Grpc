@@ -10,28 +10,6 @@ using System.Reflection.Emit;
 
 namespace ProtoBuf.Grpc.Client
 {
-    //public readonly struct ClientProxy<T> : IDisposable
-    //    where T : class
-    //{
-    //    private readonly ClientBase _client;
-
-    //    internal ClientProxy(ClientBase client) => _client = client;
-
-
-    //    public T Channel
-    //    {
-    //        // assume default behaviour is for the client to implement it directly, but allow alternatives
-    //        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    //        get => (T)(object)_client;
-    //    }
-
-    //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    //    public void Dispose() => (_client as IDisposable)?.Dispose();
-
-    //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    //    public static implicit operator T (ClientProxy<T> proxy) => proxy.Channel;
-    //}
-
     public static class ClientFactory
     {
         public static TService Create<TService>(HttpClient httpClient, ILoggerFactory? loggerFactory = null)
@@ -53,7 +31,7 @@ namespace ProtoBuf.Grpc.Client
             private readonly Func<CallInvoker, TService> _callInvoker;
             private readonly Func<Channel, TService> _channel;
             // public readonly Func<ClientBaseConfiguration, TService> ClientBaseConfiguration;
-            
+
             public ProxyCache(Type type)
             {
                 if (!FindFactory(type, out _httpClient!)) _httpClient = (a, b) => throw new NotSupportedException();
@@ -152,7 +130,7 @@ namespace ProtoBuf.Grpc.Client
             }
             private static void Ldarg(ILGenerator il, ushort index)
             {
-                switch(index)
+                switch (index)
                 {
                     case 0: il.Emit(OpCodes.Ldarg_0); break;
                     case 1: il.Emit(OpCodes.Ldarg_1); break;
@@ -169,8 +147,7 @@ namespace ProtoBuf.Grpc.Client
                 // front-load reflection discovery
                 if (!typeof(TService).IsInterface)
                     throw new InvalidOperationException("Type is not an interface: " + typeof(TService).FullName);
-                ContractOperation.TryGetServiceName(typeof(TService), out var serviceName);
-                var ops = ContractOperation.FindOperations(typeof(TService));
+
 
                 lock (s_module)
                 {
@@ -181,9 +158,6 @@ namespace ProtoBuf.Grpc.Client
                     // : ClientBase
                     Type baseType = typeof(ClientBase);
                     type.SetParent(baseType);
-
-                    // : TService
-                    type.AddInterfaceImplementation(typeof(TService));
 
                     // private IFooProxy() : base() { }
                     type.DefineDefaultConstructor(MethodAttributes.Private);
@@ -202,84 +176,100 @@ namespace ProtoBuf.Grpc.Client
                         var toString = type.DefineMethod(nameof(ToString), s_Object_ToString.Attributes, s_Object_ToString.CallingConvention,
                         typeof(string), Type.EmptyTypes);
                         var il = toString.GetILGenerator();
-                        il.Emit(OpCodes.Ldstr, serviceName);
+                        ContractOperation.TryGetServiceName(typeof(TService), out var primaryServiceName);
+                        il.Emit(OpCodes.Ldstr, primaryServiceName);
                         il.Emit(OpCodes.Ret);
                         type.DefineMethodOverride(toString, s_Object_ToString);
                     }
 
                     var cctor = type.DefineTypeInitializer().GetILGenerator();
 
-                    // add each method of the interface
+                    var ops = ContractOperation.FindOperations(typeof(TService));
+
                     int fieldIndex = 0;
-                    foreach (var op in ops)
+                    foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
                     {
-                        Type[] fromTo = new Type[] { op.From, op.To };
-                        // public static readonly Method<from, to> s_{i}
-                        var field = type.DefineField("s_op_" + fieldIndex++, typeof(Method<,>).MakeGenericType(fromTo),
-                            FieldAttributes.Static | FieldAttributes.Public | FieldAttributes.InitOnly);
-                        // = new FullyNamedMethod<from, to>(opName, methodType, serviceName, method.Name);
-                        cctor.Emit(OpCodes.Ldstr, op.Name); // opName
-                        Ldc_I4(cctor, (int)op.MethodType); // methodType
-                        cctor.Emit(OpCodes.Ldstr, serviceName); // serviceName
-                        cctor.Emit(OpCodes.Ldnull); // methodName: leave null (uses opName)
-                        cctor.Emit(OpCodes.Ldnull); // requestMarshaller: always null
-                        cctor.Emit(OpCodes.Ldnull); // responseMarshaller: always null
-                        cctor.Emit(OpCodes.Newobj, typeof(FullyNamedMethod<,>).MakeGenericType(fromTo)
-                            .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single()); // new FullyNamedMethod
-                        cctor.Emit(OpCodes.Stsfld, field);
+                        ContractOperation.TryGetServiceName(iType, out var serviceName);
 
-                        var impl = type.DefineMethod(typeof(TService).Name + "." + op.Method.Name,
-                            MethodAttributes.HideBySig | MethodAttributes.Final | MethodAttributes.NewSlot | MethodAttributes.Private | MethodAttributes.Virtual,
-                            op.Method.CallingConvention, op.Method.ReturnType, op.ParameterTypes);
+                        // : TService
+                        type.AddInterfaceImplementation(iType);
 
-                        // implement the method
-                        var il = impl.GetILGenerator();
-
-                        switch(op.Context)
+                        // add each method of the interface
+                        foreach (var iMethod in iType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                         {
-                            case ContextKind.CallOptions:
-                                // we only support this for signatures that match the exat google pattern, but:
-                                // defer for now
-                                il.ThrowException(typeof(NotImplementedException));
-                                break;
-                            case ContextKind.NoContext:
-                            case ContextKind.CallContext:
-                                // typically looks something like (where this is an extension method on Reshape):
-                                // => context.{ReshapeMethod}(CallInvoker, {method}, request, [host: null]);
-                                var method = op.TryGetClientHelper();
-                                if (method == null)
-                                {
-                                    // unexpected, but...
-                                    il.ThrowException(typeof(NotSupportedException));
-                                }
-                                else
-                                {
-                                    if (op.Context == ContextKind.CallContext)
+                            var pTypes = Array.ConvertAll(iMethod.GetParameters(), x => x.ParameterType);
+                            var impl = type.DefineMethod(iType.Name + "." + iMethod.Name,
+                                    MethodAttributes.HideBySig | MethodAttributes.Final | MethodAttributes.NewSlot | MethodAttributes.Private | MethodAttributes.Virtual,
+                                    iMethod.CallingConvention, iMethod.ReturnType, pTypes);
+                            // mark it as the interface implementation
+                            type.DefineMethodOverride(impl, iMethod);
+
+                            var il = impl.GetILGenerator();
+                            if (!ContractOperation.TryIdentifySignature(iMethod, out var op))
+                            {
+                                il.ThrowException(typeof(NotSupportedException));
+                                continue;
+                            }
+
+                            Type[] fromTo = new Type[] { op.From, op.To };
+                            // public static readonly Method<from, to> s_{i}
+                            var field = type.DefineField("s_op_" + fieldIndex++, typeof(Method<,>).MakeGenericType(fromTo),
+                                FieldAttributes.Static | FieldAttributes.Public | FieldAttributes.InitOnly);
+                            // = new FullyNamedMethod<from, to>(opName, methodType, serviceName, method.Name);
+                            cctor.Emit(OpCodes.Ldstr, op.Name); // opName
+                            Ldc_I4(cctor, (int)op.MethodType); // methodType
+                            cctor.Emit(OpCodes.Ldstr, serviceName); // serviceName
+                            cctor.Emit(OpCodes.Ldnull); // methodName: leave null (uses opName)
+                            cctor.Emit(OpCodes.Ldnull); // requestMarshaller: always null
+                            cctor.Emit(OpCodes.Ldnull); // responseMarshaller: always null
+                            cctor.Emit(OpCodes.Newobj, typeof(FullyNamedMethod<,>).MakeGenericType(fromTo)
+                                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single()); // new FullyNamedMethod
+                            cctor.Emit(OpCodes.Stsfld, field);
+
+                            // implement the method
+                            switch (op.Context)
+                            {
+                                case ContextKind.CallOptions:
+                                    // we only support this for signatures that match the exat google pattern, but:
+                                    // defer for now
+                                    il.ThrowException(typeof(NotImplementedException));
+                                    break;
+                                case ContextKind.NoContext:
+                                case ContextKind.CallContext:
+                                    // typically looks something like (where this is an extension method on Reshape):
+                                    // => context.{ReshapeMethod}(CallInvoker, {method}, request, [host: null]);
+                                    var method = op.TryGetClientHelper();
+                                    if (method == null)
                                     {
-                                        Ldarga(il, 2);
+                                        // unexpected, but...
+                                        il.ThrowException(typeof(NotSupportedException));
                                     }
                                     else
                                     {
-                                        il.Emit(OpCodes.Ldsflda, s_CallContext_Default);
+                                        if (op.Context == ContextKind.CallContext)
+                                        {
+                                            Ldarga(il, 2);
+                                        }
+                                        else
+                                        {
+                                            il.Emit(OpCodes.Ldsflda, s_CallContext_Default);
+                                        }
+                                        il.Emit(OpCodes.Ldarg_0); // this.
+                                        il.EmitCall(OpCodes.Callvirt, s_ClientBase_CallInvoker, null); // get_CallInvoker
+
+                                        il.Emit(OpCodes.Ldsfld, field); // {method}
+                                        il.Emit(OpCodes.Ldarg_1); // request
+                                        il.Emit(OpCodes.Ldnull); // host (always null)
+                                        il.EmitCall(OpCodes.Call, method, null);
+                                        il.Emit(OpCodes.Ret); // return
                                     }
-                                    il.Emit(OpCodes.Ldarg_0); // this.
-                                    il.EmitCall(OpCodes.Callvirt, s_ClientBase_CallInvoker, null); // get_CallInvoker
-
-                                    il.Emit(OpCodes.Ldsfld, field); // {method}
-                                    il.Emit(OpCodes.Ldarg_1); // request
-                                    il.Emit(OpCodes.Ldnull); // host (always null)
-                                    il.EmitCall(OpCodes.Call, method, null);
-                                    il.Emit(OpCodes.Ret); // return
-                                }
-                                break;
-                        case ContextKind.ServerCallContext: // server call? we're writing a client!
-                            default: // who knows!
-                                il.ThrowException(typeof(NotSupportedException));
-                                break;
+                                    break;
+                                case ContextKind.ServerCallContext: // server call? we're writing a client!
+                                default: // who knows!
+                                    il.ThrowException(typeof(NotSupportedException));
+                                    break;
+                            }
                         }
-
-                        // mark it as the interface implementation
-                        type.DefineMethodOverride(impl, op.Method);
                     }
 
                     cctor.Emit(OpCodes.Ret); // end the type initializer (after creating all the field types)
@@ -313,7 +303,7 @@ namespace ProtoBuf.Grpc.Client
                         var signature = new[] { typeof(T) };
                         var baseCtor = baseType.GetConstructor(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, signature, null);
                         if (baseCtor == null) return null;
-                        
+
                         var ctor = type.DefineConstructor(accessibility, CallingConventions.HasThis, signature);
                         var il = ctor.GetILGenerator();
                         il.Emit(OpCodes.Ldarg_0);
