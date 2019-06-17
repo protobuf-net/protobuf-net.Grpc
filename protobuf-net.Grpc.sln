@@ -23,6 +23,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB
 	ProjectSection(SolutionItems) = preProject
 		Directory.build.props = Directory.build.props
 		global.json = global.json
+		readme.md = readme.md
 		version.json = version.json
 	EndProjectSection
 EndProject
@@ -40,11 +41,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "csharp", "csharp", "{0E7DB0
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "visualbasic", "visualbasic", "{27A4932C-258D-48E6-8997-030407669CA0}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Shared_FS", "examples\pb-net-grpc\Shared_FS\Shared_FS.fsproj", "{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Shared_FS", "examples\pb-net-grpc\Shared_FS\Shared_FS.fsproj", "{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fsharp", "fsharp", "{9081C1B9-4F7B-4855-A782-0246C52D6C17}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Client_FS", "examples\pb-net-grpc\Client_FS\Client_FS.fsproj", "{9DD7E118-A48B-493B-9760-3FB70E57F29A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Client_FS", "examples\pb-net-grpc\Client_FS\Client_FS.fsproj", "{9DD7E118-A48B-493B-9760-3FB70E57F29A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

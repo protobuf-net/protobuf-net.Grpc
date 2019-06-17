@@ -22,7 +22,8 @@ namespace Server_CS
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapGrpcService<MyService>();
+                endpoints.MapGrpcService<MyCalculator>();
+                endpoints.MapGrpcService<MyTimeService>();
             });
         }
     }

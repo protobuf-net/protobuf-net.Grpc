@@ -7,8 +7,6 @@ namespace Shared_CS
     public interface ICalculator
     {
         ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
-
-        ValueTask Nil();
     }
 
     [DataContract]
