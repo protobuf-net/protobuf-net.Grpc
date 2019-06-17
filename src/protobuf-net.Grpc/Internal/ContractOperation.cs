@@ -94,149 +94,172 @@ namespace ProtoBuf.Grpc.Internal
             return false;
         }
 
-        public static List<ContractOperation> FindOperations(Type contractType, bool demandAttribute = false)
+        const int MinBufferLength = 10;
+        public static bool TryIdentifySignature(MethodInfo method, out ContractOperation operation)
         {
-            var ops = new List<ContractOperation>();
-            var types = ArrayPool<Type>.Shared.Rent(10);
+            var types = ArrayPool<Type>.Shared.Rent(MinBufferLength);
             try
             {
-                foreach (var method in contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                return TryGetPattern(method, types, false, out operation);
+            }
+            finally
+            {
+                ArrayPool<Type>.Shared.Return(types);
+            }
+        }
+        private static bool TryGetPattern(MethodInfo method, Type[] types, bool demandAttribute, out ContractOperation operation)
+        {
+            operation = default;
+
+            if (method.IsGenericMethodDefinition) return false; // can't work with <T> methods
+
+            var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
+            if (demandAttribute && oca == null) return false;
+
+            string? opName = oca?.Name;
+            if (string.IsNullOrWhiteSpace(opName))
+            {
+                opName = method.Name;
+                if (opName.EndsWith("Async"))
+                    opName = opName.Substring(0, opName.Length - 5);
+            }
+            if (string.IsNullOrWhiteSpace(opName)) return false;
+
+            var args = method.GetParameters();
+
+            var ret = method.ReturnType;
+
+            ContextKind contextKind = default;
+            MethodType methodType = default;
+            ResultKind resultKind = ResultKind.Unknown;
+            Type? from = null, to = null;
+
+            void Configure(ContextKind ck, MethodType mt, ResultKind rt, Type f, Type t)
+            {
+                contextKind = ck;
+                methodType = mt;
+                resultKind = rt;
+                from = f;
+                to = t;
+            }
+
+            // google server APIs
+            if (IsMatch(ret, args, types, typeof(IAsyncStreamReader<>), typeof(ServerCallContext), typeof(Task<>)))
+            {
+                Configure(ContextKind.ServerCallContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, typeof(IAsyncStreamReader<>), typeof(IServerStreamWriter<>), typeof(ServerCallContext), typeof(Task)))
+            {
+                Configure(ContextKind.ServerCallContext, MethodType.DuplexStreaming, ResultKind.Task, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(IServerStreamWriter<>), typeof(ServerCallContext), typeof(Task)))
+            {
+                Configure(ContextKind.ServerCallContext, MethodType.ServerStreaming, ResultKind.Task, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(ServerCallContext), typeof(Task<>)))
+            {
+                Configure(ContextKind.ServerCallContext, MethodType.Unary, ResultKind.Task, types[0], types[2]);
+            }
+
+            // google client APIs
+            else if (IsMatch(ret, args, types, null, typeof(CallOptions), typeof(AsyncUnaryCall<>)))
+            {
+                Configure(ContextKind.CallOptions, MethodType.Unary, ResultKind.Grpc, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, typeof(CallOptions), typeof(AsyncClientStreamingCall<,>)))
+            {
+                Configure(ContextKind.CallOptions, MethodType.ClientStreaming, ResultKind.Grpc, types[1], ret.GetGenericArguments()[1]);
+            }
+            else if (IsMatch(ret, args, types, typeof(CallOptions), typeof(AsyncDuplexStreamingCall<,>)))
+            {
+                Configure(ContextKind.CallOptions, MethodType.DuplexStreaming, ResultKind.Grpc, types[1], ret.GetGenericArguments()[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(CallOptions), typeof(AsyncServerStreamingCall<>)))
+            {
+                Configure(ContextKind.CallOptions, MethodType.ServerStreaming, ResultKind.Grpc, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(CallOptions), null))
+            {
+                Configure(ContextKind.CallOptions, MethodType.Unary, ResultKind.Sync, types[0], types[2]);
+            }
+
+
+            else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(IAsyncEnumerable<>)))
+            {
+                Configure(ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(IAsyncEnumerable<>)))
+            {
+                Configure(ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(IAsyncEnumerable<>)))
+            {
+                Configure(ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(IAsyncEnumerable<>)))
+            {
+                Configure(ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(Task<>)))
+            {
+                Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(Task<>)))
+            {
+                Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(ValueTask<>)))
+            {
+                Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(ValueTask<>)))
+            {
+                Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(Task<>)))
+            {
+                Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Task, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(Task<>)))
+            {
+                Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(ValueTask<>)))
+            {
+                Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(ValueTask<>)))
+            {
+                Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, types[0], types[1]);
+            }
+            else if (IsMatch(ret, args, types, null, typeof(CallContext), null))
+            {
+                Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, types[0], types[2]);
+            }
+            else if (IsMatch(ret, args, types, null, null))
+            {
+                Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, types[0], types[1]);
+            }
+
+            Type[] argTypes = Array.ConvertAll(args, x => x.ParameterType);
+            if (resultKind != ResultKind.Unknown && from != null && to != null)
+            {
+                operation = new ContractOperation(opName, from, to, method, methodType, contextKind, resultKind, argTypes);
+                return true;
+            }
+            return false;
+        }
+        public static List<ContractOperation> FindOperations(Type contractType, bool demandAttribute = false)
+        {
+            var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var ops = new List<ContractOperation>(all.Length);
+            var types = ArrayPool<Type>.Shared.Rent(MinBufferLength);
+            try
+            {
+                foreach (var method in all)
                 {
-                    if (method.IsGenericMethodDefinition) continue; // can't work with <T> methods
-
-                    var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
-                    if (demandAttribute && oca == null) continue;
-                    string? opName = oca?.Name;
-                    if (string.IsNullOrWhiteSpace(opName))
-                    {
-                        opName = method.Name;
-                        if (opName.EndsWith("Async"))
-                            opName = opName.Substring(0, opName.Length - 5);
-                    }
-                    if (string.IsNullOrWhiteSpace(opName)) continue;
-
-                    var args = method.GetParameters();
-                    if (args.Length == 0) continue; // no way of inferring anything!
-
-                    var ret = method.ReturnType;
-
-                    ContextKind contextKind = default;
-                    MethodType methodType = default;
-                    ResultKind resultKind = ResultKind.Unknown;
-                    Type? from = null, to = null;
-
-                    void Configure(ContextKind ck, MethodType mt, ResultKind rt, Type f, Type t)
-                    {
-                        contextKind = ck;
-                        methodType = mt;
-                        resultKind = rt;
-                        from = f;
-                        to = t;
-                    }
-
-                    // google server APIs
-                    if (IsMatch(ret, args, types, typeof(IAsyncStreamReader<>), typeof(ServerCallContext), typeof(Task<>)))
-                    {
-                        Configure(ContextKind.ServerCallContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(IAsyncStreamReader<>), typeof(IAsyncStreamWriter<>), typeof(ServerCallContext), typeof(Task)))
-                    {
-                        Configure(ContextKind.ServerCallContext, MethodType.DuplexStreaming, ResultKind.Task, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(IServerStreamWriter<>), typeof(ServerCallContext), typeof(Task)))
-                    {
-                        Configure(ContextKind.ServerCallContext, MethodType.ServerStreaming, ResultKind.Task, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(ServerCallContext), typeof(Task<>)))
-                    {
-                        Configure(ContextKind.ServerCallContext, MethodType.Unary, ResultKind.Task, types[0], types[2]);
-                    }
-
-                    // google client APIs
-                    else if (IsMatch(ret, args, types, null, typeof(CallOptions), typeof(AsyncUnaryCall<>)))
-                    {
-                        Configure(ContextKind.CallOptions, MethodType.Unary, ResultKind.Grpc, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(CallOptions), typeof(AsyncClientStreamingCall<,>)))
-                    {
-                        Configure(ContextKind.CallOptions, MethodType.ClientStreaming, ResultKind.Grpc, types[1], ret.GetGenericArguments()[1]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(CallOptions), typeof(AsyncDuplexStreamingCall<,>)))
-                    {
-                        Configure(ContextKind.CallOptions, MethodType.DuplexStreaming, ResultKind.Grpc, types[1], ret.GetGenericArguments()[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(CallOptions), typeof(AsyncServerStreamingCall<>)))
-                    {
-                        Configure(ContextKind.CallOptions, MethodType.ServerStreaming, ResultKind.Grpc, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(CallOptions), null))
-                    {
-                        Configure(ContextKind.CallOptions, MethodType.Unary, ResultKind.Sync, types[0], types[2]);
-                    }
-
-
-                    else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(IAsyncEnumerable<>)))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(IAsyncEnumerable<>)))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(IAsyncEnumerable<>)))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(IAsyncEnumerable<>)))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(Task<>)))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(Task<>)))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(ValueTask<>)))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(ValueTask<>)))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(Task<>)))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Task, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(Task<>)))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(ValueTask<>)))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(ValueTask<>)))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, types[0], types[1]);
-                    }
-                    else if (IsMatch(ret, args, types, null, typeof(CallContext), null))
-                    {
-                        Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, types[0], types[2]);
-                    }
-                    else if (IsMatch(ret, args, types, null, null))
-                    {
-                        Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, types[0], types[1]);
-                    }
-
-                    Type[] argTypes = Array.ConvertAll(args, x => x.ParameterType);
-                    if (resultKind != ResultKind.Unknown && from != null && to != null)
-                    {
-                        ops.Add(new ContractOperation(opName, from, to, method, methodType, contextKind, resultKind, argTypes));
-                    }
+                    if (TryGetPattern(method, types, demandAttribute, out var op))
+                        ops.Add(op);
                 }
             }
             finally
@@ -302,6 +325,13 @@ namespace ProtoBuf.Grpc.Internal
             var ret = Method.ReturnType;
             return ret.IsGenericType && ret.GetGenericTypeDefinition() == typeof(ValueTask<>)
                 && ret.GetGenericArguments()[0] == To;
+        }
+
+        internal static ISet<Type> ExpandInterfaces(Type type)
+        {
+            var set = type.GetInterfaces().ToHashSet();
+            if (type.IsInterface) set.Add(type);
+            return set;
         }
     }
 

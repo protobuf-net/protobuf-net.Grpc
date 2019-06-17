@@ -32,6 +32,10 @@ Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Shared_VB", "examples\pb-ne
 EndProject
 Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Client_VB", "examples\pb-net-grpc\Client_VB\Client_VB.vbproj", "{62FE32A0-A8C9-4D36-80F5-61D0C676B57A}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0A84599D-2CE9-416E-888F-24652EEAB0B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.Grpc.Test", "tests\protobuf-net.Grpc.Test\protobuf-net.Grpc.Test.csproj", "{0E369567-844A-4FB6-9B03-0D4491026E1F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -75,6 +79,12 @@ Global
 		{62FE32A0-A8C9-4D36-80F5-61D0C676B57A}.Release|Any CPU.Build.0 = Release|Any CPU
 		{62FE32A0-A8C9-4D36-80F5-61D0C676B57A}.VS|Any CPU.ActiveCfg = Debug|Any CPU
 		{62FE32A0-A8C9-4D36-80F5-61D0C676B57A}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{0E369567-844A-4FB6-9B03-0D4491026E1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E369567-844A-4FB6-9B03-0D4491026E1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E369567-844A-4FB6-9B03-0D4491026E1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E369567-844A-4FB6-9B03-0D4491026E1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E369567-844A-4FB6-9B03-0D4491026E1F}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E369567-844A-4FB6-9B03-0D4491026E1F}.VS|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -89,6 +99,7 @@ Global
 		{C170A4B4-618A-47AD-B805-ADDBF855F753} = {7F457A71-E0C6-4DB1-B692-56541CAEDB5A}
 		{1A32027C-600E-4E17-B597-A3F5F6104041} = {7F457A71-E0C6-4DB1-B692-56541CAEDB5A}
 		{62FE32A0-A8C9-4D36-80F5-61D0C676B57A} = {7F457A71-E0C6-4DB1-B692-56541CAEDB5A}
+		{0E369567-844A-4FB6-9B03-0D4491026E1F} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA14B07C-CA29-430D-A600-F37A050636D3}

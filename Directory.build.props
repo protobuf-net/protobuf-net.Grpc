@@ -22,7 +22,6 @@
     <DefaultLanguage>en-US</DefaultLanguage>
     <IncludeSymbols>false</IncludeSymbols>
     <IsTestProject>$(MSBuildProjectName.Contains('Test'))</IsTestProject>
-    <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
   </PropertyGroup>
@@ -40,4 +39,16 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!--
+    System.Interactive.Async contains IAsyncEnumerable<T> that conflicts with .NET Core version
+    Give assembly an alias so .NET Core version can be referenced in C#
+  -->
+  <Target Name="ChangeAliasesOfReactiveExtensions" BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
+    <ItemGroup>
+      <ReferencePath Condition="'%(FileName)' == 'System.Interactive.Async'">
+        <Aliases>ix</Aliases>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
 </Project>

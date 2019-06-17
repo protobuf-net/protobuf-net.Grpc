@@ -3,7 +3,6 @@
   <PropertyGroup>
     <RootNamespace>Shared_VB</RootNamespace>
     <TargetFramework>netcoreapp3.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.ServiceModel.Primitives" Version="4.5.3" />
