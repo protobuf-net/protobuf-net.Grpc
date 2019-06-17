@@ -45,8 +45,8 @@ namespace protobuf_net.Grpc.Test
         void Shared_BlockingUnary_NoContext_VoidVoid();
         void Shared_BlockingUnary_Context_VoidVoid(CallContext context);
 
-        void Shared_BlockingUnary_NoContext_VoidVal(HelloRequest request);
-        void Shared_BlockingUnary_Context_VoidVal(HelloRequest request, CallContext context);
+        HelloReply Shared_BlockingUnary_NoContext_VoidVal();
+        HelloReply Shared_BlockingUnary_Context_VoidVal(CallContext context);
 
         void Shared_BlockingUnary_NoContext_ValVoid(HelloRequest request);
         void Shared_BlockingUnary_Context_ValVoid(HelloRequest request, CallContext context);
