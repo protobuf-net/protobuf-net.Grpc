@@ -5,28 +5,16 @@ open System.Threading.Tasks
 open System.Runtime.Serialization
 
 [<DataContract>]
-type MultiplyRequest() =
-    let mutable _x : int = 0
-    let mutable _y : int = 0
-    
+type MultiplyRequest() =    
     [<DataMember(Order = 1)>]
-    member public l.X
-        with get() = _x
-        and set(value) = _x <- value
-
+    member val public X = 0 with get, set
     [<DataMember(Order = 2)>]
-    member public l.Y
-        with get() = _y
-        and set(value) = _y <- value
+    member val public Y = 0 with get, set
     
 [<DataContract>]
 type MultiplyResult() =
-    let mutable _result : int = 0
-
     [<DataMember(Order = 1)>]
-    member public l.Result
-        with get() = _result
-        and set(value) = _result <- value
+    member val public Result = 0 with get, set
 
 [<ServiceContract(Name = "Hyper.Calculator")>]
 type ICalculator =
