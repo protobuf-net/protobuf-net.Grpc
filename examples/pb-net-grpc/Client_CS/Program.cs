@@ -16,6 +16,11 @@ namespace Client_CS
                 var client = ClientFactory.Create<ICalculator>(http);
                 var result = await client.MultiplyAsync(new MultiplyRequest { X = 12, Y = 4 });
                 Console.WriteLine(result.Result);
+
+                for(int i = 0; i < 5; i++)
+                {
+                    await client.Nil();
+                }
             }
         }
     }

@@ -15,6 +15,94 @@ namespace ProtoBuf.Grpc.Internal
 
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static Task<Empty> EmptyValueTask(ValueTask task)
+        {
+            if (task.IsCompletedSuccessfully) return Empty.InstanceTask;
+
+            return Awaited(task);
+
+            async Task<Empty> Awaited(ValueTask t)
+            {
+                await t;
+                return Empty.Instance;
+            }
+        }
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static Task<Empty> EmptyTask(Task task)
+        {
+            if (task.IsCompletedSuccessfully) return Empty.InstanceTask;
+
+            return Awaited(task);
+
+            async Task<Empty> Awaited(Task t)
+            {
+                await t;
+                return Empty.Instance;
+            }
+        }
+
+        /* experimental; if we wanted to support server-side implementations using the client-side API? or is that just daft?
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static async Task<T> WriteTo<T>(AsyncUnaryCall<T> result, ServerCallContext context)
+        {
+            using (result)
+            {
+                var headersTask = result.ResponseHeadersAsync;
+                if (headersTask != null)
+                {
+                    var headers = await headersTask;
+                    if (headers != null) await context.WriteResponseHeadersAsync(headers);
+                }
+                var value = await result;
+                var trailers = result.GetTrailers();
+                if (trailers != null)
+                {
+                    foreach (var entry in trailers)
+                        context.ResponseTrailers.Add(entry);
+                }
+                return value;
+            }
+        }
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static async Task WriteTo<T>(AsyncServerStreamingCall<T> result, IServerStreamWriter<T> writer, ServerCallContext context)
+        {
+            using (result)
+            {
+                var headersTask = result.ResponseHeadersAsync;
+                if (headersTask != null)
+                {
+                    var headers = await headersTask;
+                    if (headers != null) await context.WriteResponseHeadersAsync(headers);
+                }
+                var reader = result.ResponseStream;
+                if (reader != null)
+                {
+                    using (reader)
+                    {
+                        while (await reader.MoveNext(context.CancellationToken))
+                        {
+                            await writer.WriteAsync(reader.Current);
+                        }
+                    }
+                }
+                var trailers = result.GetTrailers();
+                if (trailers != null)
+                {
+                    foreach (var entry in trailers)
+                        context.ResponseTrailers.Add(entry);
+                }
+            }
+        }
+        */
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static async IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IAsyncStreamReader<T> reader, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             using (reader)

@@ -1,5 +1,6 @@
 using Grpc.Core;
 using ProtoBuf.Grpc.Internal;
+using ProtoBuf.Grpc.Server;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -40,7 +41,13 @@ namespace protobuf_net.Grpc.Test
             Assert.Contains(typeof(IF), all);
         }
 
-        
+
+        [Fact]
+        public void GeneralPurposeCountsMatch()
+        {
+            Assert.Equal(ContractOperation.GeneralPurposeSignatureCount(), ServicesExtensions.GeneralPurposeSignatureCount());
+        }
+
         [Fact]
         public void CheckAllMethodsConvered()
         {

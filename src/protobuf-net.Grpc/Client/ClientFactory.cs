@@ -60,6 +60,11 @@ namespace ProtoBuf.Grpc.Client
             }
         }
 
+#pragma warning disable CS0618
+        internal static readonly FieldInfo s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
+            s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!;
+#pragma warning restore CS0618
+
         // this **abstract** inheritance is just to get access to ClientBaseConfiguration
         // (without that, this could be a static class)
         abstract class ProxyEmitter : ClientBase
@@ -74,11 +79,6 @@ namespace ProtoBuf.Grpc.Client
             private static readonly MethodInfo s_ClientBase_CallInvoker = typeof(ClientBase).GetProperty(nameof(CallInvoker),
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.GetGetMethod(true)!,
                 s_Object_ToString = typeof(object).GetMethod(nameof(object.ToString))!;
-
-#pragma warning disable CS0618
-            private static readonly FieldInfo s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
-                s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!;
-#pragma warning restore CS0618
 
             private static void Ldc_I4(ILGenerator il, int value)
             {

@@ -23,7 +23,7 @@ namespace ProtoBuf.Grpc.Internal
         public bool VoidRequest => (Void & VoidKind.Request) != 0;
         public bool VoidResponse => (Void & VoidKind.Response) != 0;
 
-        public override string ToString() => $"{Name}: {From.Name}=>{To.Name}, {MethodType}, {Result}, {Context}";
+        public override string ToString() => $"{Name}: {From.Name}=>{To.Name}, {MethodType}, {Result}, {Context}, {Void}";
 
         public ContractOperation(string name, Type from, Type to, MethodInfo method,
             MethodType methodType, ContextKind contextKind, ResultKind resultKind, VoidKind @void)
@@ -150,6 +150,8 @@ namespace ProtoBuf.Grpc.Internal
                 { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
         };
         internal static int SignatureCount => s_signaturePatterns.Count;
+
+        internal static int GeneralPurposeSignatureCount() => s_signaturePatterns.Values.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext);
 
         static TypeCategory GetCategory(Type type)
         {

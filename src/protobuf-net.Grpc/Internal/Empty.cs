@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using System;
 using System.ComponentModel;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -9,6 +10,7 @@ namespace ProtoBuf.Grpc.Internal
     public sealed class Empty : IEquatable<Empty>
     {
         public static readonly Empty Instance = new Empty();
+        internal static readonly Task<Empty> InstanceTask = Task.FromResult(Instance);
         private Empty() { }
         public override string ToString() => nameof(Empty);
         public override bool Equals(object? obj) => obj is Empty;

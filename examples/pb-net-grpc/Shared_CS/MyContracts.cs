@@ -6,7 +6,9 @@ namespace Shared_CS
     [ServiceContract(Name = "Hyper.Calculator")]
     public interface ICalculator
     {
-        public ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
+        ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
+
+        ValueTask Nil();
     }
 
     [DataContract]
