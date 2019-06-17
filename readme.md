@@ -120,7 +120,18 @@ public interface ITimeService
 {
     IAsyncEnumerable<TimeResult> SubscribeAsync(CallContext context = default);
 }
+
+[ProtoContract]
+public class TimeResult
+{
+    [ProtoMember(1, DataFormat = DataFormat.WellKnown)]
+    public DateTime Time { get; set; }
+}
 ```
+
+The `IAsyncEnumerable<TimeResult>` is a server-streaming sequence of values; the `DataFormat.WellKnown` here tells `protobuf-net` to use the `.google.protobuf.Timestamp` representation
+of time, which is recommended if you may need to work cross-platform (for legacy reasons, protobuf-net defaults to a different library-specific layout that pre-dates the
+introduction of `.google.protobuf.Timestamp`). It is recommended to use `DataFormat.WellKnown` on `DateTime` and `TimeSpan` values whenever possible.
 
 ### 2: implement the server
 
