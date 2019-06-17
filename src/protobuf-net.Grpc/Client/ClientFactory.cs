@@ -259,7 +259,7 @@ namespace ProtoBuf.Grpc.Client
                                     {
                                         if (op.Context == ContextKind.CallContext)
                                         {
-                                            Ldarga(il, op.VoidRequest ? (ushort)2 : (ushort)1);
+                                            Ldarga(il, op.VoidRequest ? (ushort)1 : (ushort)2);
                                         }
                                         else
                                         {

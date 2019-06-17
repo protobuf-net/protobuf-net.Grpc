@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Grpc.AspNetCore.Server" Version="0.1.21-pre1" />
     <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
+    <!--<ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />-->
     <ProjectReference Include="..\Shared_CS\Shared_CS.csproj" />
   </ItemGroup>
 

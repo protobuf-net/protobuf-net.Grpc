@@ -232,4 +232,13 @@ await foreach(var time in clock.SubscribeAsync(new CallContext(options)))
 }
 ```
 
-and ... what *should* happen is that you get the time every 10 seconds; there are some ... glitches in the `IAsyncEnumerable<T>` replies at the moment - I'm working on it!
+and now we see (with the lines appearing every 10 seconds, not all at once):
+
+```
+48
+The time is now: 17/06/2019 18:44:43
+The time is now: 17/06/2019 18:44:53
+The time is now: 17/06/2019 18:45:03
+The time is now: 17/06/2019 18:45:13
+The time is now: 17/06/2019 18:45:23
+```

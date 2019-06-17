@@ -2,13 +2,12 @@
 using MegaCorp;
 using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Client;
-using ProtoBuf.Grpc.Internal;
 using Shared_CS;
 using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-#pragma warning disable CS0618
+
 namespace Client_CS
 {
     class Program
@@ -25,10 +24,16 @@ namespace Client_CS
                 var clock = ClientFactory.Create<ITimeService>(http);
                 var cancel = new CancellationTokenSource(TimeSpan.FromMinutes(1));
                 var options = new CallOptions(cancellationToken: cancel.Token);
-                await foreach(var time in clock.SubscribeAsync(Empty.Instance, new CallContext(options)))
+
+                try
                 {
-                    Console.WriteLine($"The time is now: {time.Time}");
+                    await foreach (var time in clock.SubscribeAsync(new CallContext(options)))
+                    {
+                        Console.WriteLine($"The time is now: {time.Time}");
+                    }
                 }
+                catch (RpcException) { }
+                catch (TaskCanceledException) { }
             }
         }
     }
