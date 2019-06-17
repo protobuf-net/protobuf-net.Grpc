@@ -1,22 +1,19 @@
-namespace Server_FS
-
 open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Server.Kestrel.Core
+open Server_FS
 
-module Program =
-    let exitCode = 0
+let exitCode = 0
 
-    let CreateHostBuilder args =
-        WebHost.CreateDefaultBuilder(args)
-            .ConfigureKestrel(fun options ->
+let createHostBuilder args =
+    WebHost.CreateDefaultBuilder(args)
+           .ConfigureKestrel(fun options ->
                 options.ListenLocalhost(10042, fun listenOptions->
-                    listenOptions.Protocols <- HttpProtocols.Http2;
-                )
-            ).UseStartup<Startup>()
+                    listenOptions.Protocols <- HttpProtocols.Http2
+                ))
+           .UseStartup<Startup>()
 
-    [<EntryPoint>]
-    let main args =
-        CreateHostBuilder(args).Build().Run()
-
-        exitCode
+[<EntryPoint>]
+let main args =
+    createHostBuilder(args).Build().Run()
+    exitCode
