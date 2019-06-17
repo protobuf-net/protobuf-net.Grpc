@@ -67,7 +67,11 @@ namespace ProtoBuf.Grpc.Client
             private static readonly MethodInfo s_ClientBase_CallInvoker = typeof(ClientBase).GetProperty(nameof(CallInvoker),
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.GetGetMethod(true)!,
                 s_Object_ToString = typeof(object).GetMethod(nameof(object.ToString))!;
-            private static readonly FieldInfo s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!;
+
+#pragma warning disable CS0618
+            private static readonly FieldInfo s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
+                s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!;
+#pragma warning restore CS0618
 
             private static void Ldc_I4(ILGenerator il, int value)
             {
@@ -248,7 +252,7 @@ namespace ProtoBuf.Grpc.Client
                                     {
                                         if (op.Context == ContextKind.CallContext)
                                         {
-                                            Ldarga(il, 2);
+                                            Ldarga(il, op.VoidRequest ? (ushort)2 : (ushort)1);
                                         }
                                         else
                                         {
@@ -258,7 +262,14 @@ namespace ProtoBuf.Grpc.Client
                                         il.EmitCall(OpCodes.Callvirt, s_ClientBase_CallInvoker, null); // get_CallInvoker
 
                                         il.Emit(OpCodes.Ldsfld, field); // {method}
-                                        il.Emit(OpCodes.Ldarg_1); // request
+                                        if (op.VoidRequest)
+                                        {
+                                            il.Emit(OpCodes.Ldsfld, s_Empty_Instance); // Empty.Instance
+                                        }
+                                        else
+                                        {
+                                            il.Emit(OpCodes.Ldarg_1); // request
+                                        }
                                         il.Emit(OpCodes.Ldnull); // host (always null)
                                         il.EmitCall(OpCodes.Call, method, null);
                                         il.Emit(OpCodes.Ret); // return

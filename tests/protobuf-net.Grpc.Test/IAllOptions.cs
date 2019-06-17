@@ -42,21 +42,56 @@ namespace protobuf_net.Grpc.Test
         HelloReply Shared_BlockingUnary_NoContext(HelloRequest request);
         HelloReply Shared_BlockingUnary_Context(HelloRequest request, CallContext context);
 
+        void Shared_BlockingUnary_NoContext_VoidVoid();
+        void Shared_BlockingUnary_Context_VoidVoid(CallContext context);
+
+        void Shared_BlockingUnary_NoContext_VoidVal(HelloRequest request);
+        void Shared_BlockingUnary_Context_VoidVal(HelloRequest request, CallContext context);
+
+        void Shared_BlockingUnary_NoContext_ValVoid(HelloRequest request);
+        void Shared_BlockingUnary_Context_ValVoid(HelloRequest request, CallContext context);
+
         // async unary
         Task<HelloReply> Shared_TaskUnary_NoContext(HelloRequest request);
         Task<HelloReply> Shared_TaskUnary_Context(HelloRequest request, CallContext context);
+
+        Task<HelloReply> Shared_TaskUnary_NoContext_VoidVoid(HelloRequest request);
+        Task<HelloReply> Shared_TaskUnary_Context_VoidVoid(HelloRequest request, CallContext context);
+
+        Task<HelloReply> Shared_TaskUnary_NoContext_VoidVal();
+        Task<HelloReply> Shared_TaskUnary_Context_VoidVal(CallContext context);
+
+        Task Shared_TaskUnary_NoContext_ValVoid(HelloRequest request);
+        Task Shared_TaskUnary_Context_ValVoid(HelloRequest request, CallContext context);
+
         ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext(HelloRequest request);
         ValueTask<HelloReply> Shared_ValueTaskUnary_Context(HelloRequest request, CallContext context);
+
+        ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext_VoidVoid();
+        ValueTask<HelloReply> Shared_ValueTaskUnary_Context_VoidVoid(CallContext context);
+
+        ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext_VoidVal(HelloRequest request);
+        ValueTask<HelloReply> Shared_ValueTaskUnary_Context_VoidVal(HelloRequest request, CallContext context);
+
+        ValueTask Shared_ValueTaskUnary_NoContext_ValVoid(HelloRequest request);
+        ValueTask Shared_ValueTaskUnary_Context_ValVoid(HelloRequest request, CallContext context);
 
         // client-streaming
         Task<HelloReply> Shared_TaskClientStreaming_NoContext(IAsyncEnumerable<HelloRequest> request);
         Task<HelloReply> Shared_TaskClientStreaming_Context(IAsyncEnumerable<HelloRequest> request, CallContext context);
+        Task Shared_TaskClientStreaming_NoContext_ValVoid(IAsyncEnumerable<HelloRequest> request);
+        Task Shared_TaskClientStreaming_Context_ValVoid(IAsyncEnumerable<HelloRequest> request, CallContext context);
+
         ValueTask<HelloReply> Shared_ValueTaskClientStreaming_NoContext(IAsyncEnumerable<HelloRequest> request);
         ValueTask<HelloReply> Shared_ValueTaskClientStreaming_Context(IAsyncEnumerable<HelloRequest> request, CallContext context);
+        ValueTask Shared_ValueTaskClientStreaming_NoContext_ValVoid(IAsyncEnumerable<HelloRequest> request);
+        ValueTask Shared_ValueTaskClientStreaming_Context_ValVoid(IAsyncEnumerable<HelloRequest> request, CallContext context);
 
         // server-streaming
         IAsyncEnumerable<HelloReply> Shared_ServerStreaming_NoContext(HelloRequest request);
         IAsyncEnumerable<HelloReply> Shared_ServerStreaming_Context(HelloRequest request, CallContext context);
+        IAsyncEnumerable<HelloReply> Shared_ServerStreaming_NoContext_VoidVal();
+        IAsyncEnumerable<HelloReply> Shared_ServerStreaming_Context_VoidVal(CallContext context);
 
         // duplex
         IAsyncEnumerable<HelloReply> Shared_Duplex_NoContext(IAsyncEnumerable<HelloRequest> request);

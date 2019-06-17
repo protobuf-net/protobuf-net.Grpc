@@ -8,7 +8,7 @@ namespace ProtoBuf.Grpc.Internal
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
     public sealed class Empty : IEquatable<Empty>
     {
-        public static Empty Instance { get; } = new Empty();
+        public static readonly Empty Instance = new Empty();
         private Empty() { }
         public override string ToString() => nameof(Empty);
         public override bool Equals(object? obj) => obj is Empty;

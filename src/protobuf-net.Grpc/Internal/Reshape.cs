@@ -53,6 +53,18 @@ namespace ProtoBuf.Grpc.Internal
 
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static void UnarySyncVoid<TRequest, TResponse>(
+            this in CallContext context,
+            CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+        {
+            context.Prepare();
+            invoker.BlockingUnaryCall(method, host, context.Client, request);
+        }
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task<TResponse> UnaryTaskAsync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -68,6 +80,15 @@ namespace ProtoBuf.Grpc.Internal
             where TRequest : class
             where TResponse : class
             => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare()));
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static ValueTask UnaryValueTaskAsyncVoid<TRequest, TResponse>(
+            this in CallContext context, CallInvoker invoker,
+            Method<TRequest, TResponse> method, TRequest request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare()));
 
         private static async Task<TResponse> UnaryTaskAsyncImpl<TRequest, TResponse>(
             AsyncUnaryCall<TResponse> call, MetadataContext? metadata)
@@ -134,6 +155,15 @@ namespace ProtoBuf.Grpc.Internal
             where TRequest : class
             where TResponse : class
             => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request));
+
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static ValueTask ClientStreamingValueTaskAsyncVoid<TRequest, TResponse>(
+            this in CallContext options,
+            CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request));
 
         private static async Task<TResponse> ClientStreamingTaskAsyncImpl<TRequest, TResponse>(
             AsyncClientStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
