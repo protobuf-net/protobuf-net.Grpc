@@ -12,6 +12,13 @@ namespace ProtoBuf.Grpc.Client
 {
     public static class ClientFactory
     {
+        private const string Switch_AllowUnencryptedHttp2 = "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport";
+        public static bool AllowUnencryptedHttp2
+        {
+            get => AppContext.TryGetSwitch(Switch_AllowUnencryptedHttp2, out var enabled) ? enabled : false;
+            set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, true);
+        }
+
         public static TService Create<TService>(HttpClient httpClient, ILoggerFactory? loggerFactory = null)
             where TService : class => ProxyCache<TService>.Create(httpClient, loggerFactory);
         public static TService Create<TService>(Channel channel)

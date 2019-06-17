@@ -55,8 +55,8 @@ namespace protobuf_net.Grpc.Test
         Task<HelloReply> Shared_TaskUnary_NoContext(HelloRequest request);
         Task<HelloReply> Shared_TaskUnary_Context(HelloRequest request, CallContext context);
 
-        Task<HelloReply> Shared_TaskUnary_NoContext_VoidVoid(HelloRequest request);
-        Task<HelloReply> Shared_TaskUnary_Context_VoidVoid(HelloRequest request, CallContext context);
+        Task Shared_TaskUnary_NoContext_VoidVoid();
+        Task Shared_TaskUnary_Context_VoidVoid(CallContext context);
 
         Task<HelloReply> Shared_TaskUnary_NoContext_VoidVal();
         Task<HelloReply> Shared_TaskUnary_Context_VoidVal(CallContext context);
@@ -67,11 +67,11 @@ namespace protobuf_net.Grpc.Test
         ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext(HelloRequest request);
         ValueTask<HelloReply> Shared_ValueTaskUnary_Context(HelloRequest request, CallContext context);
 
-        ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext_VoidVoid();
-        ValueTask<HelloReply> Shared_ValueTaskUnary_Context_VoidVoid(CallContext context);
+        ValueTask Shared_ValueTaskUnary_NoContext_VoidVoid();
+        ValueTask Shared_ValueTaskUnary_Context_VoidVoid(CallContext context);
 
-        ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext_VoidVal(HelloRequest request);
-        ValueTask<HelloReply> Shared_ValueTaskUnary_Context_VoidVal(HelloRequest request, CallContext context);
+        ValueTask<HelloReply> Shared_ValueTaskUnary_NoContext_VoidVal();
+        ValueTask<HelloReply> Shared_ValueTaskUnary_Context_VoidVal(CallContext context);
 
         ValueTask Shared_ValueTaskUnary_NoContext_ValVoid(HelloRequest request);
         ValueTask Shared_ValueTaskUnary_Context_ValVoid(HelloRequest request, CallContext context);

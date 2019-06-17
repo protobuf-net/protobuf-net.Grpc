@@ -56,11 +56,11 @@ namespace ProtoBuf.Grpc.Internal
             }
             return !string.IsNullOrWhiteSpace(serviceName);
         }
-       
+
         public static bool TryIdentifySignature(MethodInfo method, out ContractOperation operation)
             => TryGetPattern(method, false, out operation);
 
-        enum TypeCategory
+        internal enum TypeCategory
         {
             None,
             Void,
@@ -80,7 +80,8 @@ namespace ProtoBuf.Grpc.Internal
             AsyncServerStreamingCall,
             Data,
         }
-        const int RET = 3, EMPTY = 4;
+
+        const int RET = -1, VOID = -2;
         private static readonly Dictionary<(TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret), (ContextKind Context, MethodType Method, ResultKind Result, VoidKind Void, int From, int To)>
             s_signaturePatterns = new Dictionary<(TypeCategory, TypeCategory, TypeCategory, TypeCategory), (ContextKind, MethodType, ResultKind, VoidKind, int, int)>
         {
@@ -96,7 +97,59 @@ namespace ProtoBuf.Grpc.Internal
                 { (TypeCategory.CallOptions, TypeCategory.None, TypeCategory.None, TypeCategory.AsyncDuplexStreamingCall), (ContextKind.CallOptions, MethodType.DuplexStreaming, ResultKind.Grpc, VoidKind.None, RET, RET) },
                 { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.AsyncServerStreamingCall), (ContextKind.CallOptions, MethodType.ServerStreaming, ResultKind.Grpc, VoidKind.None, 0, RET) },
                 { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.Data), (ContextKind.CallOptions, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET) },
+
+                // unary parameterless, with or without a return value
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.Both, VOID, VOID)},
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.Request, VOID, RET)},
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
+
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.Both,VOID, VOID)},
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.Request, VOID, RET)},
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Both,VOID, VOID) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
+
+                // unary with parameter, with or without a return value
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.Void), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.Response, 0, VOID)},
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.Data), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET)},
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.Void), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.Response,0, VOID)},
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.Data), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET)},
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Response,0, VOID) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+
+                // client streaming
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                // server streaming
+                { (TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+
+                // duplex
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
         };
+        internal static int SignatureCount => s_signaturePatterns.Count;
 
         static TypeCategory GetCategory(Type type)
         {
@@ -121,15 +174,31 @@ namespace ProtoBuf.Grpc.Internal
                 if (genType == typeof(AsyncDuplexStreamingCall<,>)) return TypeCategory.AsyncDuplexStreamingCall;
                 if (genType == typeof(AsyncServerStreamingCall<>)) return TypeCategory.AsyncServerStreamingCall;
             }
+
+            if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
             // otherwise, assume data
             return TypeCategory.Data;
         }
 
+        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MethodInfo method)
+            => GetSignature(method.GetParameters(), method.ReturnType);
+
+        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(ParameterInfo[] args, Type returnType)
+        {
+            (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
+            if (args.Length >= 1) signature.Arg0 = GetCategory(args[0].ParameterType);
+            if (args.Length >= 2) signature.Arg1 = GetCategory(args[1].ParameterType);
+            if (args.Length >= 3) signature.Arg2 = GetCategory(args[2].ParameterType);
+            signature.Ret = GetCategory(returnType);
+            return signature;
+        }
         private static bool TryGetPattern(MethodInfo method, bool demandAttribute, out ContractOperation operation)
         {
             operation = default;
 
             if (method.IsGenericMethodDefinition) return false; // can't work with <T> methods
+
+            if ((method.Attributes & (MethodAttributes.SpecialName)) != 0) return false; // some kind of accessor etc
 
             var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
             if (demandAttribute && oca == null) return false;
@@ -146,11 +215,7 @@ namespace ProtoBuf.Grpc.Internal
             var args = method.GetParameters();
             if (args.Length > 3) return false; // too many parameters
 
-            (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
-            if (args.Length >= 1) signature.Arg0 = GetCategory(args[0].ParameterType);
-            if (args.Length >= 2) signature.Arg1 = GetCategory(args[1].ParameterType);
-            if (args.Length >= 3) signature.Arg2 = GetCategory(args[2].ParameterType);
-            signature.Ret = GetCategory(method.ReturnType);
+            var signature = GetSignature(args, method.ReturnType);
 
             if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
 
@@ -162,22 +227,23 @@ namespace ProtoBuf.Grpc.Internal
                     case 1: return (args[1].ParameterType, signature.Arg1);
                     case 2: return (args[2].ParameterType, signature.Arg2);
                     case RET: return (method.ReturnType, signature.Ret);
-#pragma warning disable CS0618
-                    case EMPTY: return (typeof(Empty), TypeCategory.None);
-#pragma warning restore CS0618
+                    case VOID: return (typeof(void), TypeCategory.Void);
                     default: throw new IndexOutOfRangeException(nameof(index));
                 }
             }
-            Type GetEffectiveType((Type type, TypeCategory category) key, bool req)
+            Type GetDataType((Type type, TypeCategory category) key, bool req)
             {
                 var type = key.type;
                 switch (key.category)
                 {
-                    case TypeCategory.None:
                     case TypeCategory.Data:
+                        return type;
+                    case TypeCategory.Void:
                     case TypeCategory.UntypedTask:
                     case TypeCategory.UntypedValueTask:
-                        return type;
+#pragma warning disable CS0618
+                        return typeof(Empty);
+#pragma warning restore CS0618
                     case TypeCategory.TypedTask:
                     case TypeCategory.TypedValueTask:
                     case TypeCategory.IAsyncEnumerable:
@@ -194,183 +260,11 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
 
-            var from = GetEffectiveType(GetTypeByIndex(config.From), true);
-            var to = GetEffectiveType(GetTypeByIndex(config.To), false);
+            var from = GetDataType(GetTypeByIndex(config.From), true);
+            var to = GetDataType(GetTypeByIndex(config.To), false);
 
             operation = new ContractOperation(opName, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
-            /*
-
-
-                        else if (IsMatch(ret, args, types, typeof(void)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(void)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(Task)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(Task)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(IAsyncEnumerable<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(IAsyncEnumerable<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, types[0], types[1], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(IAsyncEnumerable<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(IAsyncEnumerable<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, types[0], types[1], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(Task<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(Task<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, types[0], types[1], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(Task)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(Task)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(ValueTask<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(CallContext), typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(ValueTask<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], types[1], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(IAsyncEnumerable<>), typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, types[0], typeof(void), VoidKind.Response);
-                        }
-
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(Task<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Task, typeof(void), types[1], VoidKind.Request);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(Task<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, typeof(void), types[0], VoidKind.Request);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(Task)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Task, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(Task)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(ValueTask<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, typeof(void), types[1], VoidKind.Request);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(ValueTask<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, typeof(void), types[0], VoidKind.Request);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, typeof(void), typeof(void), VoidKind.Both);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, typeof(void), typeof(void), VoidKind.Both);
-                        }
-
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(Task<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Task, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(Task<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, types[0], types[1], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(Task)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Task, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(Task)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Task, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(ValueTask<>)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(ValueTask<>)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, types[0], types[1], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(ValueTask)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), typeof(void)))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(CallContext), null))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, types[0], types[2], VoidKind.None);
-                        }
-                        else if (IsMatch(ret, args, types, null, typeof(void)))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, types[0], typeof(void), VoidKind.Response);
-                        }
-                        else if (IsMatch(ret, args, types, null))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, typeof(void), types[0], VoidKind.Request);
-                        }
-                        else if (IsMatch(ret, args, types, typeof(CallContext), null))
-                        {
-                            Configure(ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, typeof(void), types[1], VoidKind.Request);
-                        }
-                        else if (IsMatch(ret, args, types, null, null))
-                        {
-                            Configure(ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, types[0], types[1], VoidKind.None);
-                        }
-                        if (resultKind != ResultKind.Unknown && from != null && to != null)
-                        {
-                            operation = new ContractOperation(opName, from, to, method, methodType, contextKind, resultKind, @void);
-                            return true;
-                        }
-                        return false;
-                        */
         }
         public static List<ContractOperation> FindOperations(Type contractType, bool demandAttribute = false)
         {

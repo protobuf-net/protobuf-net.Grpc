@@ -8,7 +8,7 @@ Module Program
     End Sub
 
     Async Function DoIt() As Task
-        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", True)
+        ClientFactory.AllowUnencryptedHttp2 = True
         Using http As New HttpClient With {.BaseAddress = New Uri("http://localhost:10042")}
             Dim client = ClientFactory.Create(Of ICalculator)(http)
             Dim result = Await client.MultiplyAsync(New MultiplyRequest With {.X = 12, .Y = 4})

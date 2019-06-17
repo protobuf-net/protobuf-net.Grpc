@@ -45,6 +45,7 @@ namespace protobuf_net.Grpc.Test
         public void CheckAllMethodsConvered()
         {
             var expected =  typeof(IAllOptions).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(x => x.Name).ToHashSet();
+            Assert.Equal(ContractOperation.SignatureCount, expected.Count);
 
             var attribs = GetType().GetMethod(nameof(CheckMethodIdentification))!.GetCustomAttributesData();
             foreach(var attrib in attribs)
@@ -122,7 +123,11 @@ namespace protobuf_net.Grpc.Test
         {
             var method = typeof(IAllOptions).GetMethod(name);
             Assert.NotNull(method);
-            Assert.True(ContractOperation.TryIdentifySignature(method!, out var operation), "signature not recognized");
+            if (!ContractOperation.TryIdentifySignature(method!, out var operation))
+            {
+                var sig = ContractOperation.GetSignature(method!);
+                Assert.True(false, sig.ToString());
+            }
             Assert.Equal(method, operation.Method);
             Assert.Equal(methodType, operation.MethodType);
             Assert.Equal((ContextKind)context, operation.Context);

@@ -10,7 +10,7 @@ namespace Client_CS
     {
         static async Task Main()
         {
-            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+            ClientFactory.AllowUnencryptedHttp2 = true;
             using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
             {
                 var client = ClientFactory.Create<ICalculator>(http);
