@@ -30,7 +30,7 @@ namespace ProtoBuf.Grpc.Server
 
             public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory)
             {
-                _logger = _logger = loggerFactory.CreateLogger<CodeFirstServiceMethodProvider<TService>>();
+                _logger = loggerFactory.CreateLogger<CodeFirstServiceMethodProvider<TService>>();
             }
             public void OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
             {
