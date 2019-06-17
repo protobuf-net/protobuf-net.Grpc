@@ -242,3 +242,14 @@ The time is now: 17/06/2019 18:45:03
 The time is now: 17/06/2019 18:45:13
 The time is now: 17/06/2019 18:45:23
 ```
+
+As you would expect, `IAsyncEnumerable<T>` works similarly at the server, exposing values sent by the client as they
+arrive. In both cases, the thread doesn't *block* while waiting for work - the `await` here ensures that this is
+implemented using a continuation-based model.
+
+### Summary
+
+This is just a *very brief introduction* to what you can do with protobuf-net and gRPC using protobuf-net.Grpc; if you
+want to play with it, please feel free to do so. Log issues, make suggestions, etc. Have fun.
+
+And if this could save you a ton of time, you're always welcome to [![Buy me a coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/marcgravell)
