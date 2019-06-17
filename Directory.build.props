@@ -16,7 +16,6 @@
     <PackageReleaseNotes>https://mgravell.github.io/protobuf-net/releasenotes#$(VersionPrefix)</PackageReleaseNotes>
     
     <PackageTags>binary;serialization;protobuf;grpc</PackageTags>
-    
     <DebugSymbols>true</DebugSymbols>
     <DebugType>embedded</DebugType>
     <DefaultLanguage>en-US</DefaultLanguage>
@@ -24,6 +23,8 @@
     <IsTestProject>$(MSBuildProjectName.Contains('Test'))</IsTestProject>
     <Nullable>enable</Nullable>
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
+
+    <PBGRPCLibVersion>0.0.3-alpha.10</PBGRPCLibVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

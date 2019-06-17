@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29006.145
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared_CS", "Shared_CS\Shared_CS.csproj", "{A99F5E1E-B3F5-4340-8CAB-DE7179BDBCC6}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client_CS", "Client_CS\Client_CS.csproj", "{7BE4BD55-772A-46E3-9C7B-223BB2404C8B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Server_CS", "Server_CS\Server_CS.csproj", "{DCE24589-3D95-4040-96DB-92C67050EDAE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A99F5E1E-B3F5-4340-8CAB-DE7179BDBCC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A99F5E1E-B3F5-4340-8CAB-DE7179BDBCC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A99F5E1E-B3F5-4340-8CAB-DE7179BDBCC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A99F5E1E-B3F5-4340-8CAB-DE7179BDBCC6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BE4BD55-772A-46E3-9C7B-223BB2404C8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BE4BD55-772A-46E3-9C7B-223BB2404C8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BE4BD55-772A-46E3-9C7B-223BB2404C8B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BE4BD55-772A-46E3-9C7B-223BB2404C8B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCE24589-3D95-4040-96DB-92C67050EDAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCE24589-3D95-4040-96DB-92C67050EDAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCE24589-3D95-4040-96DB-92C67050EDAE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCE24589-3D95-4040-96DB-92C67050EDAE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {550855DA-5054-4EDB-9914-3043966224CD}
+	EndGlobalSection
+EndGlobal

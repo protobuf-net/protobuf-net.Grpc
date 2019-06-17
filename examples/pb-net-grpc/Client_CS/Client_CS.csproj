@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
     <ProjectReference Include="..\Shared_CS\Shared_CS.csproj" />
   </ItemGroup>
 
