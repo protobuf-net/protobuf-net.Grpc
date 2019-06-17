@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
+    <PackageReference Include="TaskBuilder.fs" Version="2.1.0" />
   </ItemGroup>
 
 </Project>

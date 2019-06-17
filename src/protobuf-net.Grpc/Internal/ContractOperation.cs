@@ -51,7 +51,7 @@ namespace ProtoBuf.Grpc.Internal
             {
                 serviceName = contractType.Name;
                 if (contractType.IsInterface && serviceName.StartsWith('I')) serviceName = serviceName.Substring(1); // IFoo => Foo
-                serviceName = contractType.Namespace + serviceName; // Whatever.Foo
+                serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
                 serviceName = serviceName.Replace('+', '.'); // nested types
             }
             return !string.IsNullOrWhiteSpace(serviceName);

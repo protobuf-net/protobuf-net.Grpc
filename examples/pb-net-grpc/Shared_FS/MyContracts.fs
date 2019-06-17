@@ -19,5 +19,4 @@ type MultiplyResult() =
 [<ServiceContract(Name = "Hyper.Calculator")>]
 type ICalculator =
     abstract MultiplyAsync : request : MultiplyRequest -> ValueTask<MultiplyResult>
-    abstract Multiply : request : MultiplyRequest -> MultiplyResult
 
