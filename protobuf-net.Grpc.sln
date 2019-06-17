@@ -15,9 +15,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dotnet-grpc", "dotnet-grpc"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "pb-net-grpc", "pb-net-grpc", "{7F457A71-E0C6-4DB1-B692-56541CAEDB5A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client_CS", "examples\pb-net-grpc\Client_CS\Client_CS.csproj", "{49DCEE29-B223-4FC1-8C8D-CD127A9AA8AE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client_CS", "examples\pb-net-grpc\Client_CS\Client_CS.csproj", "{49DCEE29-B223-4FC1-8C8D-CD127A9AA8AE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server_CS", "examples\pb-net-grpc\Server_CS\Server_CS.csproj", "{A2BEE4C0-241B-4959-92ED-D2FD743088BE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Server_CS", "examples\pb-net-grpc\Server_CS\Server_CS.csproj", "{A2BEE4C0-241B-4959-92ED-D2FD743088BE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB6F-6111-4604-8EDF-6A59F8B12D7E}"
 	ProjectSection(SolutionItems) = preProject
@@ -26,19 +26,25 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB
 		version.json = version.json
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared_CS", "examples\pb-net-grpc\Shared_CS\Shared_CS.csproj", "{C170A4B4-618A-47AD-B805-ADDBF855F753}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared_CS", "examples\pb-net-grpc\Shared_CS\Shared_CS.csproj", "{C170A4B4-618A-47AD-B805-ADDBF855F753}"
 EndProject
-Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Shared_VB", "examples\pb-net-grpc\Shared_VB\Shared_VB.vbproj", "{1A32027C-600E-4E17-B597-A3F5F6104041}"
+Project("{778DAE3C-4631-46EA-AA77-85C1314464D9}") = "Shared_VB", "examples\pb-net-grpc\Shared_VB\Shared_VB.vbproj", "{1A32027C-600E-4E17-B597-A3F5F6104041}"
 EndProject
-Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "Client_VB", "examples\pb-net-grpc\Client_VB\Client_VB.vbproj", "{62FE32A0-A8C9-4D36-80F5-61D0C676B57A}"
+Project("{778DAE3C-4631-46EA-AA77-85C1314464D9}") = "Client_VB", "examples\pb-net-grpc\Client_VB\Client_VB.vbproj", "{62FE32A0-A8C9-4D36-80F5-61D0C676B57A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0A84599D-2CE9-416E-888F-24652EEAB0B3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.Grpc.Test", "tests\protobuf-net.Grpc.Test\protobuf-net.Grpc.Test.csproj", "{0E369567-844A-4FB6-9B03-0D4491026E1F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.Test", "tests\protobuf-net.Grpc.Test\protobuf-net.Grpc.Test.csproj", "{0E369567-844A-4FB6-9B03-0D4491026E1F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "csharp", "csharp", "{0E7DB0D7-8BA2-428E-A51D-70AD589671D2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "visualbasic", "visualbasic", "{27A4932C-258D-48E6-8997-030407669CA0}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Shared_FS", "examples\pb-net-grpc\Shared_FS\Shared_FS.fsproj", "{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fsharp", "fsharp", "{9081C1B9-4F7B-4855-A782-0246C52D6C17}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Client_FS", "examples\pb-net-grpc\Client_FS\Client_FS.fsproj", "{9DD7E118-A48B-493B-9760-3FB70E57F29A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -89,6 +95,18 @@ Global
 		{0E369567-844A-4FB6-9B03-0D4491026E1F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0E369567-844A-4FB6-9B03-0D4491026E1F}.VS|Any CPU.ActiveCfg = Debug|Any CPU
 		{0E369567-844A-4FB6-9B03-0D4491026E1F}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A}.VS|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -106,6 +124,9 @@ Global
 		{0E369567-844A-4FB6-9B03-0D4491026E1F} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
 		{0E7DB0D7-8BA2-428E-A51D-70AD589671D2} = {7F457A71-E0C6-4DB1-B692-56541CAEDB5A}
 		{27A4932C-258D-48E6-8997-030407669CA0} = {7F457A71-E0C6-4DB1-B692-56541CAEDB5A}
+		{2800EA3A-F862-4B4A-8886-AF224C3B7DE0} = {9081C1B9-4F7B-4855-A782-0246C52D6C17}
+		{9081C1B9-4F7B-4855-A782-0246C52D6C17} = {7F457A71-E0C6-4DB1-B692-56541CAEDB5A}
+		{9DD7E118-A48B-493B-9760-3FB70E57F29A} = {9081C1B9-4F7B-4855-A782-0246C52D6C17}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA14B07C-CA29-430D-A600-F37A050636D3}
