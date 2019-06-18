@@ -11,16 +11,14 @@ namespace ProtoBuf.Grpc.Internal
         private readonly string _fullName;
 
         public FullyNamedMethod(
-           string operationName,
            MethodType type,
            string serviceName,
-           string? methodName = null,
-           Marshaller<TRequest>? requestMarshaller = null,
-           Marshaller<TResponse>? responseMarshaller = null)
+           string operationName,
+           string? methodName = null)
            : base(type, serviceName, methodName ?? operationName,
 #pragma warning disable CS0618
-                 requestMarshaller ?? MarshallerCache<TRequest>.Instance,
-                 responseMarshaller ?? MarshallerCache<TResponse>.Instance)
+                 MarshallerCache<TRequest>.Instance,
+                 MarshallerCache<TResponse>.Instance)
 #pragma warning restore CS0618
         {
             _fullName = serviceName + "/" + operationName;

@@ -12,7 +12,7 @@ namespace ProtoBuf.Grpc.Internal
     {
         [Obsolete(Reshape.WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        public static Marshaller<T> Instance { get; } = typeof(T) == typeof(Empty)
+        public static readonly Marshaller<T> Instance = typeof(T) == typeof(Empty)
             ? (Marshaller<T>)(object)Empty.Marshaller : new Marshaller<T>(Serialize, Deserialize);
 
         private static readonly RuntimeTypeModel _model = RuntimeTypeModel.Default;

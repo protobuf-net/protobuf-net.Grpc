@@ -143,29 +143,29 @@ namespace ProtoBuf.Grpc.Server
                 return lambda.Compile();
             }
 
-#pragma warning disable CS8625
+#pragma warning disable CS8625, CS0618
             switch (methodType)
             {
                 case MethodType.Unary:
                     context.AddUnaryMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(operationName, methodType, serviceName, method.Name), metadata, As<UnaryServerMethod<TService, TRequest, TResponse>>());
+                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<UnaryServerMethod<TService, TRequest, TResponse>>());
                     break;
                 case MethodType.ClientStreaming:
                     context.AddClientStreamingMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(operationName, methodType, serviceName, method.Name), metadata, As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
+                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
                     break;
                 case MethodType.ServerStreaming:
                     context.AddServerStreamingMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(operationName, methodType, serviceName, method.Name), metadata, As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
+                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
                     break;
                 case MethodType.DuplexStreaming:
                     context.AddDuplexStreamingMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(operationName, methodType, serviceName, method.Name), metadata, As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
+                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
                     break;
                 default:
                     throw new NotSupportedException(methodType.ToString());
             }
-#pragma warning restore CS8625
+#pragma warning restore CS8625, CS0618
         }
 
         static Expression ToTaskT(Expression expression)

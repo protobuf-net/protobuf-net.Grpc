@@ -9,7 +9,7 @@ namespace Server_CS
         ValueTask<MultiplyResult> ICalculator.MultiplyAsync(MultiplyRequest request)
         {
             var result = new MultiplyResult { Result = request.X * request.Y };
-            return new ValueTask<MultiplyResult>();
+            return new ValueTask<MultiplyResult>(result);
         }
     }
 }

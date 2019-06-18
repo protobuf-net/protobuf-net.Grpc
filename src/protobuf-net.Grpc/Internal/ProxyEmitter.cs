@@ -156,15 +156,16 @@ namespace ProtoBuf.Grpc.Internal
                         // public static readonly Method<from, to> s_{i}
                         var field = type.DefineField("s_op_" + fieldIndex++, typeof(Method<,>).MakeGenericType(fromTo),
                             FieldAttributes.Static | FieldAttributes.Public | FieldAttributes.InitOnly);
-                        // = new FullyNamedMethod<from, to>(opName, methodType, serviceName, method.Name);
-                        cctor.Emit(OpCodes.Ldstr, op.Name); // opName
+                        // = new Method<from, to>(methodType, serviceName, opName, requestMarshaller, responseMarshaller);
                         Ldc_I4(cctor, (int)op.MethodType); // methodType
                         cctor.Emit(OpCodes.Ldstr, serviceName); // serviceName
-                        cctor.Emit(OpCodes.Ldnull); // methodName: leave null (uses opName)
-                        cctor.Emit(OpCodes.Ldnull); // requestMarshaller: always null
-                        cctor.Emit(OpCodes.Ldnull); // responseMarshaller: always null
-                        cctor.Emit(OpCodes.Newobj, typeof(FullyNamedMethod<,>).MakeGenericType(fromTo)
-                            .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single()); // new FullyNamedMethod
+                        cctor.Emit(OpCodes.Ldstr, op.Name); // opName
+#pragma warning disable CS0618
+                        cctor.Emit(OpCodes.Ldsfld, typeof(MarshallerCache<>).MakeGenericType(op.From).GetField(nameof(MarshallerCache<string>.Instance))); // requestMarshaller
+                        cctor.Emit(OpCodes.Ldsfld, typeof(MarshallerCache<>).MakeGenericType(op.To).GetField(nameof(MarshallerCache<string>.Instance))); // responseMarshaller
+#pragma warning restore CS0618
+                        cctor.Emit(OpCodes.Newobj, typeof(Method<,>).MakeGenericType(fromTo)
+                            .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single()); // new Method
                         cctor.Emit(OpCodes.Stsfld, field);
 
                         // implement the method
