@@ -32,7 +32,11 @@ namespace ProtoBuf.Grpc.Internal
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task<Empty> EmptyTask(Task task)
         {
+#if TASK_COMPLETED
             if (task.IsCompletedSuccessfully) return Empty.InstanceTask;
+#else
+            if (task.Status == TaskStatus.RanToCompletion) return Empty.InstanceTask;
+#endif
 
             return Awaited(task);
 

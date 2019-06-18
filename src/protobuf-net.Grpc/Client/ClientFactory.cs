@@ -1,12 +1,15 @@
 ﻿using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Reflection.Emit;
+
+#if GRPCSERVER
+using Grpc.Net.Client;
+using Microsoft.Extensions.Logging;
+#endif
 
 namespace ProtoBuf.Grpc.Client
 {
@@ -18,9 +21,10 @@ namespace ProtoBuf.Grpc.Client
             get => AppContext.TryGetSwitch(Switch_AllowUnencryptedHttp2, out var enabled) ? enabled : false;
             set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, true);
         }
-
+#if GRPCSERVER
         public static TService Create<TService>(HttpClient httpClient, ILoggerFactory? loggerFactory = null)
             where TService : class => ProxyCache<TService>.Create(httpClient, loggerFactory);
+#endif
         public static TService Create<TService>(Channel channel)
             where TService : class => ProxyCache<TService>.Create(channel);
         public static TService Create<TService>(CallInvoker callInvoker)
@@ -29,19 +33,24 @@ namespace ProtoBuf.Grpc.Client
         internal readonly struct ProxyCache<TService> where TService : class
         {
             private static readonly ProxyCache<TService> s_factory = ProxyEmitter.CreateFactory<TService>();
-
+#if GRPCSERVER
             public static TService Create(HttpClient httpClient, ILoggerFactory? loggerFactory) => s_factory._httpClient(httpClient, loggerFactory);
+#endif
             public static TService Create(CallInvoker callInvoker) => s_factory._callInvoker(callInvoker);
             public static TService Create(Channel channel) => s_factory._channel(channel);
 
+#if GRPCSERVER
             private readonly Func<HttpClient, ILoggerFactory?, TService> _httpClient;
+#endif
             private readonly Func<CallInvoker, TService> _callInvoker;
             private readonly Func<Channel, TService> _channel;
             // public readonly Func<ClientBaseConfiguration, TService> ClientBaseConfiguration;
 
             public ProxyCache(Type type)
             {
+#if GRPCSERVER
                 if (!FindFactory(type, out _httpClient!)) _httpClient = (a, b) => throw new NotSupportedException();
+#endif
                 if (!FindFactory(type, out _callInvoker!)) _callInvoker = a => throw new NotSupportedException();
                 if (!FindFactory(type, out _channel!)) _channel = a => throw new NotSupportedException();
                 // if (!FindFactory(type, out ClientBaseConfiguration!)) ClientBaseConfiguration = a => throw new NotSupportedException();
@@ -293,13 +302,19 @@ namespace ProtoBuf.Grpc.Client
                     cctor.Emit(OpCodes.Ret); // end the type initializer (after creating all the field types)
 
                     // write a factory method
+#if GRPCSERVER
                     WriteFactory(new[] { typeof(HttpClient), typeof(ILoggerFactory) }, typeof(HttpClientCallInvoker), ctorCallInvoker);
+#endif
                     WriteFactory(new[] { typeof(CallInvoker) }, null, ctorCallInvoker);
                     WriteFactory(new[] { typeof(Channel) }, null, ctorChannel);
                     // WriteFactory(new[] { typeof(ClientBaseConfiguration) }, null, ctorClientBaseConfig);
 
                     // return the factory
+#if NETSTANDARD2_0
+                    return new ProxyCache<TService>(type.AsType());
+#else
                     return new ProxyCache<TService>(type.CreateType());
+#endif
 
                     void WriteFactory(Type[] signature, Type? via, ConstructorBuilder? ctor)
                     {

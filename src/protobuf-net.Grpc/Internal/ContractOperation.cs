@@ -50,7 +50,7 @@ namespace ProtoBuf.Grpc.Internal
             if (string.IsNullOrWhiteSpace(serviceName))
             {
                 serviceName = contractType.Name;
-                if (contractType.IsInterface && serviceName.StartsWith('I')) serviceName = serviceName.Substring(1); // IFoo => Foo
+                if (contractType.IsInterface && serviceName.StartsWith("I")) serviceName = serviceName.Substring(1); // IFoo => Foo
                 serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
                 serviceName = serviceName.Replace('+', '.'); // nested types
             }
@@ -345,7 +345,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static ISet<Type> ExpandInterfaces(Type type)
         {
-            var set = type.GetInterfaces().ToHashSet();
+            var set = new HashSet<Type>(type.GetInterfaces());
             if (type.IsInterface) set.Add(type);
             return set;
         }
