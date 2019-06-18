@@ -6,4 +6,5 @@ open System.Threading.Tasks
 type MyCalculator() =
     interface ICalculator with 
         member this.MultiplyAsync(request : MultiplyRequest) =
-            new ValueTask<MultiplyResult>(new MultiplyResult( Result = request.X * request.Y ))
+            let result = new MultiplyResult( Result = request.X * request.Y )
+            new ValueTask<MultiplyResult>(result)
