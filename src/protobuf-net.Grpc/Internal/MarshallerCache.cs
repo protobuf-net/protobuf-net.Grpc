@@ -21,9 +21,9 @@ namespace ProtoBuf.Grpc.Internal
         {
 #if PLAT_NOSPAN
             using (var ms = new MemoryStream(payload))
-            using (var reader = ProtoReader.Create(out var state, ms, _model))
+            using (var reader = ProtoReader.Create(ms, _model))
             {
-                return (T)_model.Deserialize(reader, ref state, null, typeof(T));
+                return (T)_model.Deserialize(reader, null, typeof(T));
             }
 #else
             using (var reader = ProtoReader.Create(out var state, payload, _model))
