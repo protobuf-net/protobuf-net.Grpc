@@ -249,6 +249,27 @@ As you would expect, `IAsyncEnumerable<T>` works similarly at the server, exposi
 arrive. In both cases, the thread doesn't *block* while waiting for work - the `await` here ensures that this is
 implemented using a continuation-based model.
 
+### Did you mention that it works on .NET Framework too?
+
+Yes; see [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native); this provies `ChannelClientFactory` which works similarly to `HttpClientFactory` above,
+except instead of taking an `HttpClient`, it takes a `Channel` (the regular wrapper around the unmanaged gRPC API that `Grpc.Core` uses):
+
+``` c#
+var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
+try
+{
+    var calculator = ChannelClientFactory.Create<ICalculator>(channel);
+    await Test(calculator);
+}
+finally
+{
+    await channel.ShutdownAsync();
+}
+```
+
+
+At the moment the *server* isn't implemented for this API, but that's on the list of things to do.
+
 ### Summary
 
 This is just a *very brief introduction* to what you can do with protobuf-net and gRPC using protobuf-net.Grpc; if you
