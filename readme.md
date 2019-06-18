@@ -251,8 +251,7 @@ implemented using a continuation-based model.
 
 ### Did you mention that it works on .NET Framework too?
 
-Yes; see [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native); this provies `ChannelClientFactory` which works similarly to `HttpClientFactory` above,
-except instead of taking an `HttpClient`, it takes a `Channel` (the regular wrapper around the unmanaged gRPC API that `Grpc.Core` uses):
+Yes; see [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native); to create a client, we start off from via a `Channel` (the regular wrapper around the unmanaged gRPC API that `Grpc.Core` uses):
 
 ``` c#
 var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
