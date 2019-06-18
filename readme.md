@@ -267,8 +267,28 @@ finally
 }
 ```
 
+You can also implement servers in exactly the same way as above, but hosting is provided by `Grpc.Core` via the native `Server` type:
 
-At the moment the *server* isn't implemented for this API, but that's on the list of things to do.
+``` c#
+static async Task Main()
+{
+    const int port = 10042;
+    Server server = new Server
+    {
+        Services = { new MyServer() },
+        Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
+    };
+    server.Start();
+
+    Console.WriteLine("server listening on port " + port);
+    Console.ReadKey();
+
+    await server.ShutdownAsync();
+}
+```
+
+It is the server's `.Services` collection that acts as the extension point here; by passing in the instance of our server (`MyServer`), the library registers the
+services just like it would have done within ASP.NET Core, but now using the native gRPC libraries.
 
 ### Summary
 

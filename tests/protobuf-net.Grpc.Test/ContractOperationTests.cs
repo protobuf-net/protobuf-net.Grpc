@@ -58,7 +58,7 @@ namespace protobuf_net.Grpc.Test
         [Fact]
         public void ServerSignatureCount()
         {
-            Assert.Equal(38, ServicesExtensions.GeneralPurposeSignatureCount());
+            Assert.Equal(38, ServerInvokerLookup.GeneralPurposeSignatureCount());
         }
 
         [Fact]

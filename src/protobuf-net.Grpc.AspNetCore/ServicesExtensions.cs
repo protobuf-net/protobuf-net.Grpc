@@ -6,11 +6,8 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.ServiceModel;
-using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Server
 {
@@ -20,8 +17,6 @@ namespace ProtoBuf.Grpc.Server
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
         }
-
-        internal static int GeneralPurposeSignatureCount() => _invokers.Keys.Count(x => x.Item2 == ContextKind.CallContext || x.Item2 == ContextKind.NoContext);
 
         private sealed class CodeFirstServiceMethodProvider<TService> : IServiceMethodProvider<TService> where TService : class
         {
@@ -56,8 +51,8 @@ namespace ProtoBuf.Grpc.Server
                 int count = 0;
                 foreach (var op in ContractOperation.FindOperations(serviceContract, isPublicContract))
                 {
-                    if (_invokers.TryGetValue((op.MethodType, op.Context, op.Result, op.Void), out var invoker)
-                        && AddMethod(op.From, op.To, op.Method, op.MethodType, invoker))
+                    if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
+                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
                     {
                         // yay!
                         count++;
@@ -69,7 +64,7 @@ namespace ProtoBuf.Grpc.Server
                 }
                 if (count != 0) _logger.Log(LogLevel.Information, "{0} implementing service {1} (via '{2}') with {3} operation(s)", typeof(TService), serviceName, serviceContract.Name, count);
 
-                bool AddMethod(Type @in, Type @out, MethodInfo m, MethodType t, Func<MethodInfo, ParameterExpression[], Expression>? invoker = null)
+                bool AddMethod(Type @in, Type @out, string on, MethodInfo m, MethodType t, Func<MethodInfo, ParameterExpression[], Expression>? invoker)
                 {
                     try
                     {
@@ -82,11 +77,12 @@ namespace ProtoBuf.Grpc.Server
 
                         if (argsBuffer == null)
                         {
-                            argsBuffer = new object?[] { serviceName, null, null, context, _logger, null };
+                            argsBuffer = new object?[] { serviceName, null, null, null, context, _logger, null };
                         }
-                        argsBuffer[1] = m;
-                        argsBuffer[2] = t;
-                        argsBuffer[5] = invoker;
+                        argsBuffer[1] = on;
+                        argsBuffer[2] = m;
+                        argsBuffer[3] = t;
+                        argsBuffer[6] = invoker;
 
                         s_addMethod.MakeGenericMethod(typesBuffer).Invoke(null, argsBuffer);
                         return true;
@@ -105,21 +101,13 @@ namespace ProtoBuf.Grpc.Server
            nameof(AddMethod), BindingFlags.Static | BindingFlags.NonPublic)!;
 
         private static void AddMethod<TService, TRequest, TResponse>(
-            string serviceName, MethodInfo method, MethodType methodType,
+            string serviceName, string operationName, MethodInfo method, MethodType methodType,
             ServiceMethodProviderContext<TService> context, ILogger logger,
-            Func<MethodInfo, ParameterExpression[], Expression>? invoker = null)
+            Func<MethodInfo, ParameterExpression[], Expression>? invoker)
             where TService : class
             where TRequest : class
             where TResponse : class
         {
-            var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
-            var operationName = oca?.Name;
-            if (string.IsNullOrWhiteSpace(operationName))
-            {
-                operationName = method.Name;
-                if (operationName.EndsWith("Async")) operationName = operationName.Substring(0, operationName.Length - 5);
-            }
-
             var metadata = new List<object>();
             // Add type metadata first so it has a lower priority
             metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
@@ -144,23 +132,20 @@ namespace ProtoBuf.Grpc.Server
             }
 
 #pragma warning disable CS8625, CS0618
+            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, MarshallerCache<TRequest>.Instance, MarshallerCache<TResponse>.Instance);
             switch (methodType)
             {
                 case MethodType.Unary:
-                    context.AddUnaryMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<UnaryServerMethod<TService, TRequest, TResponse>>());
+                    context.AddUnaryMethod(grpcMethod, metadata, As<UnaryServerMethod<TService, TRequest, TResponse>>());
                     break;
                 case MethodType.ClientStreaming:
-                    context.AddClientStreamingMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
+                    context.AddClientStreamingMethod(grpcMethod, metadata, As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
                     break;
                 case MethodType.ServerStreaming:
-                    context.AddServerStreamingMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
+                    context.AddServerStreamingMethod(grpcMethod, metadata, As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
                     break;
                 case MethodType.DuplexStreaming:
-                    context.AddDuplexStreamingMethod(
-                        new FullyNamedMethod<TRequest, TResponse>(methodType, serviceName, operationName, method.Name), metadata, As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
+                    context.AddDuplexStreamingMethod(grpcMethod, metadata, As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
                     break;
                 default:
                     throw new NotSupportedException(methodType.ToString());
@@ -168,120 +153,5 @@ namespace ProtoBuf.Grpc.Server
 #pragma warning restore CS8625, CS0618
         }
 
-        static Expression ToTaskT(Expression expression)
-        {
-            var type = expression.Type;
-            if (type == typeof(void))
-            {
-                // no result from the call; add in Empty.Instance instead
-                var field = Expression.Field(null, ProxyEmitter.s_Empty_Instance);
-                return Expression.Block(expression, field);
-            }
-#pragma warning disable CS0618
-            if (type == typeof(ValueTask))
-                return Expression.Call(typeof(Reshape), nameof(Reshape.EmptyValueTask), null, expression);
-            if (type == typeof(Task))
-                return Expression.Call(typeof(Reshape), nameof(Reshape.EmptyTask), null, expression);
-#pragma warning restore CS0618
-
-            if (type.IsGenericType)
-            {
-                if (type.GetGenericTypeDefinition() == typeof(Task<>))
-                    return expression;
-                if (type.GetGenericTypeDefinition() == typeof(ValueTask<>))
-                    return Expression.Call(expression, nameof(ValueTask<int>.AsTask), null);
-            }
-            return Expression.Call(typeof(Task), nameof(Task.FromResult), new Type[] { expression.Type }, expression);
-        }
-
-        internal static readonly ConstructorInfo s_CallContext_FromServerContext = typeof(CallContext).GetConstructor(new[] { typeof(ServerCallContext) })!;
-        static Expression ToCallContext(Expression context) => Expression.New(s_CallContext_FromServerContext, context);
-#pragma warning disable CS0618
-        static Expression AsAsyncEnumerable(ParameterExpression value, ParameterExpression context)
-            => Expression.Call(typeof(Reshape), nameof(Reshape.AsAsyncEnumerable),
-                typeArguments: value.Type.GetGenericArguments(),
-                arguments: new Expression[] { value, Expression.Property(context, nameof(ServerCallContext.CancellationToken)) });
-
-        static Expression WriteTo(Expression value, ParameterExpression writer, ParameterExpression context)
-            => Expression.Call(typeof(Reshape), nameof(Reshape.WriteTo),
-                typeArguments: value.Type.GetGenericArguments(),
-                arguments: new Expression[] { value, writer, Expression.Property(context, nameof(ServerCallContext.CancellationToken)) });
-#pragma warning restore CS0618
-
-        private static readonly Dictionary<(MethodType Method, ContextKind Context, ResultKind Result, VoidKind Void), Func<MethodInfo, ParameterExpression[], Expression>?> _invokers
-            = new Dictionary<(MethodType, ContextKind, ResultKind, VoidKind), Func<MethodInfo, ParameterExpression[], Expression>?>
-        {
-                // GRPC-style server methods are direct match; no mapping required
-                // => service.{method}(args)
-                { (MethodType.Unary, ContextKind.ServerCallContext, ResultKind.Task, VoidKind.None), null },
-                { (MethodType.ServerStreaming, ContextKind.ServerCallContext, ResultKind.Task, VoidKind.None), null },
-                { (MethodType.ClientStreaming, ContextKind.ServerCallContext, ResultKind.Task, VoidKind.None), null },
-                { (MethodType.DuplexStreaming, ContextKind.ServerCallContext, ResultKind.Task, VoidKind.None), null },
-
-                // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
-                // => service.{method}(request, [new CallContext(serverCallContext)])
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1], ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1], ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1], ToCallContext(args[2]))) },
-
-                
-                // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
-                // => service.{method}(request, [new CallContext(serverCallContext)]) return Empty.Instance;
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1], ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1], ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, args[1], ToCallContext(args[2]))) },
-
-                // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
-                // => service.{method}([new CallContext(serverCallContext)])
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[2]))) },
-
-                
-                // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
-                // => service.{method}([new CallContext(serverCallContext)]) return Empty.Instance;
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Both), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Both), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Both), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Both), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Both), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Both), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[2]))) },
-
-                // Client Streaming: Task<TResponse> Foo(TService service, IAsyncStreamReader<TRequest> stream, ServerCallContext serverCallContext);
-                // => service.{method}(reader.AsAsyncEnumerable(serverCallContext.CancellationToken), [new CallContext(serverCallContext)])
-                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]))) },
-                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]))) },
-
-                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]), ToCallContext(args[2]))) },
-                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]), ToCallContext(args[2]))) },
-
-                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]))) },
-                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]))) },
-
-                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]), ToCallContext(args[2]))) },
-                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[2]), ToCallContext(args[2]))) },
-
-                // Server Streaming: Task Foo(TService service, TRequest request, IServerStreamWriter<TResponse> stream, ServerCallContext serverCallContext);
-                // => service.{method}(request, [new CallContext(serverCallContext)]).WriteTo(stream, serverCallContext.CancellationToken)
-                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, args[1]), args[2], args[3])},
-                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, args[1], ToCallContext(args[3])), args[2], args[3])},
-
-                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, VoidKind.Request), (method, args) => WriteTo(Expression.Call(args[0], method), args[2], args[3])},
-                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, VoidKind.Request), (method, args) => WriteTo(Expression.Call(args[0], method, ToCallContext(args[3])), args[2], args[3])},
-
-                // Duplex: Task Foo(TService service, IAsyncStreamReader<TRequest> input, IServerStreamWriter<TResponse> output, ServerCallContext serverCallContext);
-                // => service.{method}(input.AsAsyncEnumerable(serverCallContext.CancellationToken), [new CallContext(serverCallContext)]).WriteTo(output, serverCallContext.CancellationToken)
-                {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3])), args[2], args[3]) },
-                {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3]), ToCallContext(args[3])), args[2], args[3]) },
-        };
     }
 }
