@@ -1,10 +1,8 @@
-﻿#if GRPCSERVER
-using Grpc.AspNetCore.Server.Model;
+﻿using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
@@ -176,7 +174,7 @@ namespace ProtoBuf.Grpc.Server
             if (type == typeof(void))
             {
                 // no result from the call; add in Empty.Instance instead
-                var field = Expression.Field(null, ClientFactory.s_Empty_Instance);
+                var field = Expression.Field(null, ProxyEmitter.s_Empty_Instance);
                 return Expression.Block(expression, field);
             }
 #pragma warning disable CS0618
@@ -287,4 +285,3 @@ namespace ProtoBuf.Grpc.Server
         };
     }
 }
-#endif

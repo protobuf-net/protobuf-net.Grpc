@@ -1,25 +1,27 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.0;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>netcoreapp3.0;netstandard2.0;net461</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc</RootNamespace>
     <Version>0.1-preview1</Version>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Grpc.Core.Api" Version="1.21.0" />
-    <PackageReference Include="Grpc.Core" Version="1.21.0" />
     <PackageReference Include="protobuf-net" Version="3.0.0-alpha.43" />
   </ItemGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
-    <DefineConstants>$(DefineConstants);GRPCSERVER</DefineConstants>
-  </PropertyGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.0.0-preview6.19303.8" />
   </ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
+    <DefineConstants>$(DefineConstants);PLAT_NOSPAN</DefineConstants>
+  </PropertyGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Grpc.AspNetCore.Server" Version="0.1.21-pre1" />
     <PackageReference Include="Grpc.Net.Client" Version="0.1.21-pre1" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Server\" />
   </ItemGroup>
 </Project>

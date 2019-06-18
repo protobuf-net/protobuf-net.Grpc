@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using Grpc.Core;
 using System.ServiceModel;
-using System.Buffers;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Diagnostics;
 
 namespace ProtoBuf.Grpc.Internal
 {

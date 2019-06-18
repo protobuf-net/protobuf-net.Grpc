@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore.Server" Version="0.1.21-pre1" />
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
-    <!--<ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />-->
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" />
+    
     <ProjectReference Include="..\Shared_VB\Shared_VB.vbproj" />
   </ItemGroup>
 </Project>

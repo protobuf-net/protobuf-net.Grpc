@@ -14,8 +14,10 @@ namespace ProtoBuf.Grpc.Internal
            Marshaller<TRequest>? requestMarshaller = null,
            Marshaller<TResponse>? responseMarshaller = null)
            : base(type, serviceName, methodName ?? operationName,
+#pragma warning disable CS0618
                  requestMarshaller ?? MarshallerCache<TRequest>.Instance,
                  responseMarshaller ?? MarshallerCache<TResponse>.Instance)
+#pragma warning restore CS0618
         {
             _fullName = serviceName + "/" + operationName;
         }

@@ -14,14 +14,14 @@ namespace Client_CS
     {
         static async Task Main()
         {
-            ClientFactory.AllowUnencryptedHttp2 = true;
+            HttpClientFactory.AllowUnencryptedHttp2 = true;
             using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
             {
-                var calculator = ClientFactory.Create<ICalculator>(http);
+                var calculator = HttpClientFactory.Create<ICalculator>(http);
                 var result = await calculator.MultiplyAsync(new MultiplyRequest { X = 12, Y = 4 });
                 Console.WriteLine(result.Result); // 48
 
-                var clock = ClientFactory.Create<ITimeService>(http);
+                var clock = HttpClientFactory.Create<ITimeService>(http);
                 var cancel = new CancellationTokenSource(TimeSpan.FromMinutes(1));
                 var options = new CallOptions(cancellationToken: cancel.Token);
 

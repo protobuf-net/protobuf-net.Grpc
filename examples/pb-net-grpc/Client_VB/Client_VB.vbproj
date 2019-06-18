@@ -6,7 +6,9 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.HttpClient" Version="$(PBGRPCLibVersion)" />
+    
     <ProjectReference Include="..\Shared_VB\Shared_VB.vbproj" />
   </ItemGroup>
 </Project>
