@@ -33,35 +33,36 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
-        private static void LoadDefault<T>(ILGenerator il) where T : struct
-        {
-            var local = il.DeclareLocal(typeof(T));
-            Ldloca(il, local);
-            il.Emit(OpCodes.Initobj, typeof(T));
-            Ldloc(il, local);
-        }
+        //private static void LoadDefault<T>(ILGenerator il) where T : struct
+        //{
+        //    var local = il.DeclareLocal(typeof(T));
+        //    Ldloca(il, local);
+        //    il.Emit(OpCodes.Initobj, typeof(T));
+        //    Ldloc(il, local);
+        //}
 
-        private static void Ldloc(ILGenerator il, LocalBuilder local)
-        {
-            switch (local.LocalIndex)
-            {
-                case 0: il.Emit(OpCodes.Ldloc_0); break;
-                case 1: il.Emit(OpCodes.Ldloc_1); break;
-                case 2: il.Emit(OpCodes.Ldloc_2); break;
-                case 3: il.Emit(OpCodes.Ldloc_3); break;
-                case int i when (i >= 0 & i <= 255): il.Emit(OpCodes.Ldloc_S, (byte)i); break;
-                default: il.Emit(OpCodes.Ldloc, local); break;
-            }
-        }
+        //private static void Ldloc(ILGenerator il, LocalBuilder local)
+        //{
+        //    switch (local.LocalIndex)
+        //    {
+        //        case 0: il.Emit(OpCodes.Ldloc_0); break;
+        //        case 1: il.Emit(OpCodes.Ldloc_1); break;
+        //        case 2: il.Emit(OpCodes.Ldloc_2); break;
+        //        case 3: il.Emit(OpCodes.Ldloc_3); break;
+        //        case int i when (i >= 0 & i <= 255): il.Emit(OpCodes.Ldloc_S, (byte)i); break;
+        //        default: il.Emit(OpCodes.Ldloc, local); break;
+        //    }
+        //}
 
-        private static void Ldloca(ILGenerator il, LocalBuilder local)
-        {
-            switch (local.LocalIndex)
-            {
-                case int i when (i >= 0 & i <= 255): il.Emit(OpCodes.Ldloca_S, (byte)i); break;
-                default: il.Emit(OpCodes.Ldloca, local); break;
-            }
-        }
+        //private static void Ldloca(ILGenerator il, LocalBuilder local)
+        //{
+        //    switch (local.LocalIndex)
+        //    {
+        //        case int i when (i >= 0 & i <= 255): il.Emit(OpCodes.Ldloca_S, (byte)i); break;
+        //        default: il.Emit(OpCodes.Ldloca, local); break;
+        //    }
+        //}
+
         private static void Ldarga(ILGenerator il, ushort index)
         {
             if (index <= 255)
@@ -73,18 +74,18 @@ namespace ProtoBuf.Grpc.Internal
                 il.Emit(OpCodes.Ldarga, index);
             }
         }
-        private static void Ldarg(ILGenerator il, ushort index)
-        {
-            switch (index)
-            {
-                case 0: il.Emit(OpCodes.Ldarg_0); break;
-                case 1: il.Emit(OpCodes.Ldarg_1); break;
-                case 2: il.Emit(OpCodes.Ldarg_2); break;
-                case 3: il.Emit(OpCodes.Ldarg_3); break;
-                case ushort x when x <= 255: il.Emit(OpCodes.Ldarg_S, (byte)x); break;
-                default: il.Emit(OpCodes.Ldarg, index); break;
-            }
-        }
+        //private static void Ldarg(ILGenerator il, ushort index)
+        //{
+        //    switch (index)
+        //    {
+        //        case 0: il.Emit(OpCodes.Ldarg_0); break;
+        //        case 1: il.Emit(OpCodes.Ldarg_1); break;
+        //        case 2: il.Emit(OpCodes.Ldarg_2); break;
+        //        case 3: il.Emit(OpCodes.Ldarg_3); break;
+        //        case ushort x when x <= 255: il.Emit(OpCodes.Ldarg_S, (byte)x); break;
+        //        default: il.Emit(OpCodes.Ldarg, index); break;
+        //    }
+        //}
 
         static int _typeIndex;
         internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType)

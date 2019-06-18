@@ -26,9 +26,9 @@ namespace PlayServer
     }
 }
 
-public class MyServer : ICalculator
+internal  class MyServer : ICalculator
 {
-    public Task<MultiplyResult> Multiply(MultiplyRequest request, ServerCallContext context)
+    public Task<MultiplyResult> Multiply(MultiplyRequest request, ServerCallContext _)
         => ((ICalculator)this).MultiplyAsync(request).AsTask();
 
     ValueTask<MultiplyResult> ICalculator.MultiplyAsync(MultiplyRequest request)

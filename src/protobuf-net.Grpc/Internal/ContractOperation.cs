@@ -208,7 +208,9 @@ namespace ProtoBuf.Grpc.Internal
             {
                 opName = method.Name;
                 if (opName.EndsWith("Async"))
+#pragma warning disable IDE0057 // not on all frameworks
                     opName = opName.Substring(0, opName.Length - 5);
+#pragma warning restore IDE0057
             }
             if (string.IsNullOrWhiteSpace(opName)) return false;
 
@@ -231,7 +233,8 @@ namespace ProtoBuf.Grpc.Internal
                     default: throw new IndexOutOfRangeException(nameof(index));
                 }
             }
-            Type GetDataType((Type type, TypeCategory category) key, bool req)
+
+            static Type GetDataType((Type type, TypeCategory category) key, bool req)
             {
                 var type = key.type;
                 switch (key.category)

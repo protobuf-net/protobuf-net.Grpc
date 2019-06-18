@@ -9,7 +9,9 @@ Public Class Startup
         services.AddCodeFirstGrpc()
     End Sub
 
+#Disable Warning IDE0060 ' Remove unused parameter
     Public Sub Configure(app As IApplicationBuilder, env As IWebHostEnvironment)
+#Enable Warning IDE0060 ' Remove unused parameter
         app.UseRouting()
 
         app.UseEndpoints(

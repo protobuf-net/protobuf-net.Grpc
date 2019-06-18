@@ -10,7 +10,7 @@ namespace ProtoBuf.Grpc.Internal
 {
     internal static class ServerInvokerLookup
     {
-        internal static int GeneralPurposeSignatureCount() => _invokers.Keys.Count(x => x.Item2 == ContextKind.CallContext || x.Item2 == ContextKind.NoContext);
+        internal static int GeneralPurposeSignatureCount() => _invokers.Keys.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext);
 
         static Expression ToTaskT(Expression expression)
         {

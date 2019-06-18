@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
-
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

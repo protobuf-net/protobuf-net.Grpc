@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
     <RootNamespace>Client_VB</RootNamespace>
     <TargetFramework>netcoreapp3.0</TargetFramework>

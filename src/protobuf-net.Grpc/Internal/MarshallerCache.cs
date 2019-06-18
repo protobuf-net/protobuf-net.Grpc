@@ -6,10 +6,16 @@ using System.IO;
 
 namespace ProtoBuf.Grpc.Internal
 {
+    /// <summary>
+    /// Provides a protobuf-net implementation of a per-type marshaller
+    /// </summary>
     [Obsolete(Reshape.WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
     public static class MarshallerCache<T>
     {
+        /// <summary>
+        /// Provides a protobuf-net implementation of a per-type marshaller
+        /// </summary>
         [Obsolete(Reshape.WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static readonly Marshaller<T> Instance = typeof(T) == typeof(Empty)

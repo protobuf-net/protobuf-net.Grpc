@@ -11,8 +11,14 @@ using System.Reflection;
 
 namespace ProtoBuf.Grpc.Server
 {
+    /// <summary>
+    /// Provides extension methods to the IServiceCollection API
+    /// </summary>
     public static class ServicesExtensions
     {
+        /// <summary>
+        /// Registers a provider that can recognize and handle code-first services
+        /// </summary>
         public static void AddCodeFirstGrpc(this IServiceCollection services)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));

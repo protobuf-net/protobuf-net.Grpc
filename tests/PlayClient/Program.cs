@@ -42,11 +42,9 @@ namespace PlayClient
         static async Task ViaHttpClient()
         {
             HttpClientExtensions.AllowUnencryptedHttp2 = true;
-            using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
-            {
-                var calculator = http.CreateGrpcService<ICalculator>();
-                await Test(calculator);
-            }
+            using var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") };
+            var calculator = http.CreateGrpcService<ICalculator>();
+            await Test(calculator);
         }
 #endif
     }

@@ -7,12 +7,18 @@ using System.Threading;
 using System.Threading.Tasks;
 namespace ProtoBuf.Grpc.Internal
 {
+    /// <summary>
+    /// Provides APIs to shim between the traditional gRPC API and an idiomatic .NET API
+    /// </summary>
     [Obsolete(WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
     public static class Reshape
     {
         internal const string WarningMessage = "This API is intended for use by runtime-generated code; all methods can be changed without notice - it is only guaranteed to work with the internally generated code";
 
+        /// <summary>
+        /// Provides a task that is equivalent to a void operation
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task<Empty> EmptyValueTask(ValueTask task)
@@ -20,14 +26,16 @@ namespace ProtoBuf.Grpc.Internal
             if (task.IsCompletedSuccessfully) return Empty.InstanceTask;
 
             return Awaited(task);
-
-            async Task<Empty> Awaited(ValueTask t)
+            static async Task<Empty> Awaited(ValueTask t)
             {
                 await t;
                 return Empty.Instance;
             }
         }
 
+        /// <summary>
+        /// Provides a task that is equivalent to a void operation
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task<Empty> EmptyTask(Task task)
@@ -39,8 +47,7 @@ namespace ProtoBuf.Grpc.Internal
 #endif
 
             return Awaited(task);
-
-            async Task<Empty> Awaited(Task t)
+            static async Task<Empty> Awaited(Task t)
             {
                 await t;
                 return Empty.Instance;
@@ -105,6 +112,9 @@ namespace ProtoBuf.Grpc.Internal
         }
         */
 
+        /// <summary>
+        /// Interprets a stream-reader as an asynchronous enumerable sequence
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static async IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IAsyncStreamReader<T> reader, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -118,19 +128,23 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
+        /// <summary>
+        /// Consumes an asynchronous enumerable sequence and writes it to a server stream-writer
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static async Task WriteTo<T>(this IAsyncEnumerable<T> reader, IServerStreamWriter<T> writer, CancellationToken cancellationToken)
         {
-            await using (var iter = reader.GetAsyncEnumerator(cancellationToken))
+            await using var iter = reader.GetAsyncEnumerator(cancellationToken);
+            while (await iter.MoveNextAsync())
             {
-                while (await iter.MoveNextAsync())
-                {
-                    await writer.WriteAsync(iter.Current);
-                }
+                await writer.WriteAsync(iter.Current);
             }
         }
 
+        /// <summary>
+        /// Performs a gRPC blocking unary call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static TResponse UnarySync<TRequest, TResponse>(
@@ -143,6 +157,9 @@ namespace ProtoBuf.Grpc.Internal
             return invoker.BlockingUnaryCall(method, host, context.Client, request);
         }
 
+        /// <summary>
+        /// Performs a gRPC blocking unary call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static void UnarySyncVoid<TRequest, TResponse>(
@@ -155,6 +172,9 @@ namespace ProtoBuf.Grpc.Internal
             invoker.BlockingUnaryCall(method, host, context.Client, request);
         }
 
+        /// <summary>
+        /// Performs a gRPC asynchronous unary call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task<TResponse> UnaryTaskAsync<TRequest, TResponse>(
@@ -164,6 +184,9 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
             => UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare());
 
+        /// <summary>
+        /// Performs a gRPC asynchronous unary call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static ValueTask<TResponse> UnaryValueTaskAsync<TRequest, TResponse>(
@@ -173,6 +196,9 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
             => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare()));
 
+        /// <summary>
+        /// Performs a gRPC asynchronous unary call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static ValueTask UnaryValueTaskAsyncVoid<TRequest, TResponse>(
@@ -198,6 +224,9 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
+        /// <summary>
+        /// Performs a gRPC server-streaming call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static IAsyncEnumerable<TResponse> ServerStreamingAsync<TRequest, TResponse>(
@@ -209,27 +238,28 @@ namespace ProtoBuf.Grpc.Internal
 
         private static async IAsyncEnumerable<TResponse> ServerStreamingAsyncImpl<TRequest, TResponse>(
             AsyncServerStreamingCall<TResponse> call, MetadataContext? metadata,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken _)
         {
             using (call)
             {
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
 
-                using (var seq = call.ResponseStream)
+                using var seq = call.ResponseStream;
+                while (await seq.MoveNext(default))
                 {
-                    while (await seq.MoveNext(default))
-                    {
-                        yield return seq.Current;
-                    }
-                    if (metadata != null)
-                    {
-                        metadata.Trailers = call.GetTrailers();
-                        metadata.Status = call.GetStatus();
-                    }
+                    yield return seq.Current;
+                }
+                if (metadata != null)
+                {
+                    metadata.Trailers = call.GetTrailers();
+                    metadata.Status = call.GetStatus();
                 }
             }
         }
 
+        /// <summary>
+        /// Performs a gRPC client-streaming call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task<TResponse> ClientStreamingTaskAsync<TRequest, TResponse>(
@@ -239,6 +269,9 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
             => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request);
 
+        /// <summary>
+        /// Performs a gRPC client-streaming call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static ValueTask<TResponse> ClientStreamingValueTaskAsync<TRequest, TResponse>(
@@ -248,6 +281,9 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
             => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request));
 
+        /// <summary>
+        /// Performs a gRPC client-streaming call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static ValueTask ClientStreamingValueTaskAsyncVoid<TRequest, TResponse>(
@@ -286,6 +322,9 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
+        /// <summary>
+        /// Performs a gRPC duplex call
+        /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static IAsyncEnumerable<TResponse> DuplexAsync<TRequest, TResponse>(
@@ -306,19 +345,17 @@ namespace ProtoBuf.Grpc.Internal
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
 
-                using (var seq = call.ResponseStream)
+                using var seq = call.ResponseStream;
+                while (await seq.MoveNext(default))
                 {
-                    while (await seq.MoveNext(default))
-                    {
-                        yield return seq.Current;
-                    }
-                    await sendAll; // observe any problems from sending
+                    yield return seq.Current;
+                }
+                await sendAll; // observe any problems from sending
 
-                    if (metadata != null)
-                    {
-                        metadata.Trailers = call.GetTrailers();
-                        metadata.Status = call.GetStatus();
-                    }
+                if (metadata != null)
+                {
+                    metadata.Trailers = call.GetTrailers();
+                    metadata.Status = call.GetStatus();
                 }
             }
         }

@@ -1,16 +1,20 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Internal;
 using System;
-using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.ServiceModel;
 using static Grpc.Core.Server;
 
 namespace ProtoBuf.Grpc.Server
 {
+    /// <summary>
+    /// Provides extension methods to the ServiceDefinitionCollection API
+    /// </summary>
     public static class ServiceDefinitionCollectionExtensions
     {
+        /// <summary>
+        /// Adds a code-first service to the available services
+        /// </summary>
         public static int Add<TService>(this ServiceDefinitionCollection services, TService service)
         {
             int count = 0;

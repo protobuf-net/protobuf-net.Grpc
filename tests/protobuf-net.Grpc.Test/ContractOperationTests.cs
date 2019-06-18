@@ -1,6 +1,5 @@
 using Grpc.Core;
 using ProtoBuf.Grpc;
-using ProtoBuf.Grpc.Server;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
@@ -184,12 +183,12 @@ namespace protobuf_net.Grpc.Test
             {
                 _output.WriteLine(grp.Key.ToString());
                 _output.WriteLine("");
-                foreach(var item in grp.OrderBy(x => x.Signature))
-                    _output.WriteLine(item.Signature);
+                foreach(var (kind, signature) in grp.OrderBy(x => x.Signature))
+                    _output.WriteLine(signature);
                 _output.WriteLine("");
             }
 
-            string Sanitize(Type type)
+            static string Sanitize(Type type)
             {
                 if (type == typeof(HelloRequest)) return "TRequest";
                 if (type == typeof(HelloReply)) return "TReply";
