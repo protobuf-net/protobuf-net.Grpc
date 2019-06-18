@@ -1,6 +1,6 @@
 using Grpc.Core;
 using ProtoBuf.Grpc;
-using ProtoBuf.Grpc.AspNetCore;
+using ProtoBuf.Grpc.Server;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
