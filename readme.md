@@ -206,10 +206,10 @@ need to twist it's arm a little; then we can very easily create a client to our 
 ``` c#
 static async Task Main()
 {
-    HttpClientFactory.AllowUnencryptedHttp2 = true;
+    HttpClientExtensions.AllowUnencryptedHttp2 = true;
     using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
     {
-        var calculator = HttpClientFactory.Create<ICalculator>(http);
+        var calculator = http.CreateGrpcService<ICalculator>();
         var result = await calculator.MultiplyAsync(new MultiplyRequest { X = 12, Y = 4 });
         Console.WriteLine(result.Result);
     }
@@ -225,7 +225,7 @@ If we use `dotnet run`, unsurprisingly we see:
 So let's do something more exciting and consume our time service for, say, a minute:
 
 ``` c#
-var clock = HttpClientFactory.Create<ITimeService>(http);
+var clock = http.CreateGrpcService<ITimeService>();
 var cancel = new CancellationTokenSource(TimeSpan.FromMinutes(1));
 var options = new CallOptions(cancellationToken: cancel.Token);
 await foreach(var time in clock.SubscribeAsync(new CallContext(options)))
@@ -258,7 +258,7 @@ except instead of taking an `HttpClient`, it takes a `Channel` (the regular wrap
 var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
 try
 {
-    var calculator = ChannelClientFactory.Create<ICalculator>(channel);
+    var calculator = channel.CreateGrpcService<ICalculator>();
     await Test(calculator);
 }
 finally

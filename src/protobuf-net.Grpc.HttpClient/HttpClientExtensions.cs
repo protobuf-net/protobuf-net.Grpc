@@ -7,7 +7,7 @@ using System.Net.Http;
 
 namespace ProtoBuf.Grpc.Client
 {
-    public static class HttpClientFactory
+    public static class HttpClientExtensions
     {
         private const string Switch_AllowUnencryptedHttp2 = "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport";
         public static bool AllowUnencryptedHttp2
@@ -16,10 +16,10 @@ namespace ProtoBuf.Grpc.Client
             set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, true);
         }
 
-        public static TService Create<TService>(HttpClient client, ILoggerFactory? logger = null)
+        public static TService CreateGrpcService<TService>(this HttpClient client, ILoggerFactory? logger = null)
             where TService : class
 #pragma warning disable CS0618
-            => ClientFactory<SimpleClientBase, TService>.Create<CallInvoker>(new HttpClientCallInvoker(client, logger));
+            => ClientFactory<SimpleClientBase, TService, CallInvoker>.Create(new HttpClientCallInvoker(client, logger));
 #pragma warning restore CS0618
     }
 }

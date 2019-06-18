@@ -22,7 +22,7 @@ namespace PlayClient
             var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
             try
             {
-                var calculator = ChannelClientFactory.Create<ICalculator>(channel);
+                var calculator = channel.CreateGrpcService<ICalculator>();
                 await Test(calculator);
             }
             finally
@@ -41,10 +41,10 @@ namespace PlayClient
 #if HTTPCLIENT
         static async Task ViaHttpClient()
         {
-            HttpClientFactory.AllowUnencryptedHttp2 = true;
+            HttpClientExtensions.AllowUnencryptedHttp2 = true;
             using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
             {
-                var calculator = HttpClientFactory.Create<ICalculator>(http);
+                var calculator = http.CreateGrpcService<ICalculator>();
                 await Test(calculator);
             }
         }

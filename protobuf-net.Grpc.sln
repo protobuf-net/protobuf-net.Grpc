@@ -23,6 +23,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB
 	ProjectSection(SolutionItems) = preProject
 		Directory.build.props = Directory.build.props
 		global.json = global.json
+		projects.md = projects.md
 		readme.md = readme.md
 		version.json = version.json
 	EndProjectSection
