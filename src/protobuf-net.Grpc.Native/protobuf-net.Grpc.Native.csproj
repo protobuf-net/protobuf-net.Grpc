@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
-    <RootNamespace>ProtoBuf.Grpc.Client</RootNamespace>
+    <RootNamespace>ProtoBuf.Grpc</RootNamespace>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>

@@ -6,13 +6,13 @@
 
 - Google released gRPC, a cross-platform RPC stack over HTTP/2 using protobuf serialization
 - included in the Google bits is [`Grpc.Core`](https://github.com/grpc/grpc), Google's gRPC bindings for .NET; it has kinks:
- - the "protoc" codegen tool only offers C# (for .NET) and is proto3 only
- - contract-first only
- - the actual HTTP/2 bits are in an unmanaged binary
+  - the "protoc" codegen tool only offers C# (for .NET) and is proto3 only
+  - contract-first only
+  - the actual HTTP/2 bits are in an unmanaged binary
 - Micrsoft are working on [`Grpc.Net`](https://github.com/grpc/grpc-dotnet)
- - it uses the same core types - so new or existing code based on `Grpc.Core` can work fine
- - it can use the "Kestrel" HTTP/2 server bindings, and the new `HttpClient` HTTP/2 client bindings
- - but it still has the other limitations from `Grpc.Core`
+  - it uses the same core types - so new or existing code based on `Grpc.Core` can work fine
+  - it can use the "Kestrel" HTTP/2 server bindings, and the new `HttpClient` HTTP/2 client bindings
+  - but it still has the other limitations from `Grpc.Core`
 
 ## So what is `protobuf-net.Grpc`?
 
@@ -24,6 +24,8 @@ them together to give you:
 - code-first or contract-first
 - the "protogen" codegen tool is proto2 and proto3, and offers C# and VB
 - and if you have code-first support, you can use any .NET language (tested: C#, VB, F#)
+
+Additionally, it even works with the standard (unmanaged) `Grpc.Core` implementation if you are limited to .NET Framework (.NET Framework 4.6.1 or .NET Standard 2.0).
 
 ## I'm interested in code-first; how do I get started?
 
@@ -135,7 +137,7 @@ introduction of `.google.protobuf.Timestamp`). It is recommended to use `DataFor
 
 ### 2: implement the server
 
-1. Create an ASP.NET Core Web Application targeting `netcoreapp3.0`, and add package references to [`Grpc.AspNetCore.Server`](https://www.nuget.org/packages/grpc.aspnetcore.server)
+1. Create an ASP.NET Core Web Application targeting `netcoreapp3.0`, and add package references to [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore)
 and [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc/) - and a project/package to your data/service contracts if necessary. Note that the gRPC tooling can run alongside other services/sites that your ASP.NET application is providing.
 2. in `CreateHostBuilder`, make sure you are using `WebHost`, and enable listening on `HttpProtocols.Http2`; see [`Program.cs`](https://github.com/mgravell/protobuf-net.Grpc/blob/master/examples/pb-net-grpc/Server_CS/Program.cs)
 3. in `ConfigureServices`, call `services.AddGrpc()` and `services.AddCodeFirstGrpc()`; see [`Startup.cs`](https://github.com/mgravell/protobuf-net.Grpc/blob/master/examples/pb-net-grpc/Server_CS/Startup.cs)
@@ -198,16 +200,16 @@ Now listening on: http://localhost:10042
 ### 2: implement the client
 
 OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET Core console application targeting `netcoreapp3.0`,
-and add a package reference to `protobuf-net.Grpc` like we did earlier. Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
+and add a package reference to [`protobuf-net.Grpc.HttpClient`](https://www.nuget.org/packages/protobuf-net.Grpc.HttpClient). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
 need to twist it's arm a little; then we can very easily create a client to our services at our base address; let's start by doing some maths:
 
 ``` c#
 static async Task Main()
 {
-    ClientFactory.AllowUnencryptedHttp2 = true;
+    HttpClientFactory.AllowUnencryptedHttp2 = true;
     using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
     {
-        var calculator = ClientFactory.Create<ICalculator>(http);
+        var calculator = HttpClientFactory.Create<ICalculator>(http);
         var result = await calculator.MultiplyAsync(new MultiplyRequest { X = 12, Y = 4 });
         Console.WriteLine(result.Result);
     }
@@ -223,7 +225,7 @@ If we use `dotnet run`, unsurprisingly we see:
 So let's do something more exciting and consume our time service for, say, a minute:
 
 ``` c#
-var clock = ClientFactory.Create<ITimeService>(http);
+var clock = HttpClientFactory.Create<ITimeService>(http);
 var cancel = new CancellationTokenSource(TimeSpan.FromMinutes(1));
 var options = new CallOptions(cancellationToken: cancel.Token);
 await foreach(var time in clock.SubscribeAsync(new CallContext(options)))
