@@ -9,7 +9,7 @@
   - the "protoc" codegen tool only offers C# (for .NET) and is proto3 only
   - contract-first only
   - the actual HTTP/2 bits are in an unmanaged binary
-- Micrsoft are working on [`Grpc.Net`](https://github.com/grpc/grpc-dotnet)
+- Microsoft are working on [`Grpc.Net`](https://github.com/grpc/grpc-dotnet)
   - it uses the same core types - so new or existing code based on `Grpc.Core` can work fine
   - it can use the "Kestrel" HTTP/2 server bindings, and the new `HttpClient` HTTP/2 client bindings
   - but it still has the other limitations from `Grpc.Core`
