@@ -17,7 +17,9 @@ public interface IMyAmazingService {
 then either implementing that interface for a server:
 
 ``` c#
-public class MyServer : IAmazingService {...}
+public class MyServer : IAmazingService {
+	// ...
+}
 ```
 
 or asking the system for a client:
