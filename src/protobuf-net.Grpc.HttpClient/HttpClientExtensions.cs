@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Net.Http;
+using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Client
 {

@@ -1,9 +1,11 @@
 ﻿using Grpc.Core;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
+using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -88,6 +90,8 @@ namespace ProtoBuf.Grpc.Internal
         //}
 
         static int _typeIndex;
+        private static readonly MethodInfo s_marshallerFactoryGenericMethodDef
+            = typeof(MarshallerFactory).GetMethod(nameof(MarshallerFactory.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
         internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binder)
            where TService : class
         {
@@ -124,9 +128,24 @@ namespace ProtoBuf.Grpc.Internal
                     type.DefineMethodOverride(toString, baseToString);
                 }
 
-                var cctor = type.DefineTypeInitializer().GetILGenerator();
+                const string InitMethodName = "Init";
+                var cctor = type.DefineMethod(InitMethodName, MethodAttributes.Static | MethodAttributes.Public).GetILGenerator();
 
                 var ops = ContractOperation.FindOperations(binder.Binder, typeof(TService));
+
+                int marshallerIndex = 0;
+                Dictionary<Type, (FieldBuilder Field, string Name, object Instance)> marshallers = new Dictionary<Type, (FieldBuilder, string, object)>();
+                FieldBuilder Marshaller(Type forType)
+                {
+                    if (marshallers.TryGetValue(forType, out var val)) return val.Field;
+
+                    var instance = s_marshallerFactoryGenericMethodDef.MakeGenericMethod(forType).Invoke(binder.MarshallerFactory, Array.Empty<object>())!;
+                    var name = "_m" + marshallerIndex++;
+                    var field = type.DefineField(name, typeof(Marshaller<>).MakeGenericType(forType), FieldAttributes.Static | FieldAttributes.Private); // **not** readonly, we need to set it afterwards!
+                    marshallers.Add(forType, (field, name, instance));
+                    return field;
+
+                }
 
                 int fieldIndex = 0;
                 foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
@@ -154,17 +173,15 @@ namespace ProtoBuf.Grpc.Internal
                         }
 
                         Type[] fromTo = new Type[] { op.From, op.To };
-                        // public static readonly Method<from, to> s_{i}
+                        // private static Method<from, to> s_{i}
                         var field = type.DefineField("s_op_" + fieldIndex++, typeof(Method<,>).MakeGenericType(fromTo),
-                            FieldAttributes.Static | FieldAttributes.Public | FieldAttributes.InitOnly);
+                            FieldAttributes.Static | FieldAttributes.Private);
                         // = new Method<from, to>(methodType, serviceName, opName, requestMarshaller, responseMarshaller);
                         Ldc_I4(cctor, (int)op.MethodType); // methodType
                         cctor.Emit(OpCodes.Ldstr, serviceName); // serviceName
                         cctor.Emit(OpCodes.Ldstr, op.Name); // opName
-#pragma warning disable CS0618
-                        cctor.Emit(OpCodes.Ldsfld, typeof(DefaultMarshaller<>).MakeGenericType(op.From).GetField(nameof(DefaultMarshaller<string>.Instance))); // requestMarshaller
-                        cctor.Emit(OpCodes.Ldsfld, typeof(DefaultMarshaller<>).MakeGenericType(op.To).GetField(nameof(DefaultMarshaller<string>.Instance))); // responseMarshaller
-#pragma warning restore CS0618
+                        cctor.Emit(OpCodes.Ldsfld, Marshaller(op.From)); // requestMarshaller
+                        cctor.Emit(OpCodes.Ldsfld, Marshaller(op.To)); // responseMarshaller
                         cctor.Emit(OpCodes.Newobj, typeof(Method<,>).MakeGenericType(fromTo)
                             .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single()); // new Method
                         cctor.Emit(OpCodes.Stsfld, field);
@@ -229,6 +246,13 @@ namespace ProtoBuf.Grpc.Internal
 #else
                 var finalType = type.CreateType();
 #endif
+                // assign the marshallers and invoke the init
+                foreach((var field, var name, var instance) in marshallers.Values)
+                {
+                    finalType.GetField(name, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.SetValue(null, instance);
+                }
+                finalType.GetMethod(InitMethodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.Invoke(null, Array.Empty<object>());
+
                 // return the factory
                 var p = Expression.Parameter(typeof(TChannel), "channel");
                 return Expression.Lambda<Func<TChannel, TService>>(
@@ -250,7 +274,7 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
         }
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Empty
         internal static readonly FieldInfo
             s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
             s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!;

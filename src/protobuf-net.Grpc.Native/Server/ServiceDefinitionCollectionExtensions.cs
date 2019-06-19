@@ -4,6 +4,7 @@ using System;
 using System.Linq.Expressions;
 using System.Reflection;
 using static Grpc.Core.Server;
+using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Server
 {

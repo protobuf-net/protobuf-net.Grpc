@@ -21,7 +21,7 @@ namespace ProtoBuf.Grpc.Internal
                 var field = Expression.Field(null, ProxyEmitter.s_Empty_Instance);
                 return Expression.Block(expression, field);
             }
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Reshape
             if (type == typeof(ValueTask))
                 return Expression.Call(typeof(Reshape), nameof(Reshape.EmptyValueTask), null, expression);
             if (type == typeof(Task))
@@ -40,7 +40,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static readonly ConstructorInfo s_CallContext_FromServerContext = typeof(CallContext).GetConstructor(new[] { typeof(ServerCallContext) })!;
         static Expression ToCallContext(Expression context) => Expression.New(s_CallContext_FromServerContext, context);
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Reshape
         static Expression AsAsyncEnumerable(Expression value, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.AsAsyncEnumerable),
                 typeArguments: value.Type.GetGenericArguments(),

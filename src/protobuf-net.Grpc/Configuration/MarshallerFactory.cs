@@ -5,17 +5,17 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
-namespace ProtoBuf.Grpc
+namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
     /// Provides per-type serialization services
     /// </summary>
-    public class MarshallerFactory
+    public abstract class MarshallerFactory
     {
         /// <summary>
         /// Uses the default protobuf-net serializer
         /// </summary>
-        public static MarshallerFactory Default { get; } = new MarshallerFactory();
+        public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default);
 
         /// <summary>
         /// Create a new instance
@@ -25,9 +25,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Create a typed marshaller (this value is cached and reused automatically)
         /// </summary>
-#pragma warning disable CS0618
-        protected virtual Marshaller<T> CreateMarshaller<T>() => DefaultMarshaller<T>.Instance;
-#pragma warning restore CS0618
+        protected abstract Marshaller<T> CreateMarshaller<T>();
 
         /// <summary>
         /// Indicates whether a type should be considered as a serializable data type
@@ -36,7 +34,7 @@ namespace ProtoBuf.Grpc
 
         private readonly ConcurrentDictionary<Type, object> _marshallers = new ConcurrentDictionary<Type, object>
         {
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Empty
             [typeof(Empty)] = Empty.Marshaller
 #pragma warning restore CS0618
         };

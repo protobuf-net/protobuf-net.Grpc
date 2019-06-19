@@ -2,8 +2,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using ProtoBuf.Grpc.Configuration;
 
-namespace ProtoBuf.Grpc
+namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
     /// Provides services for creating service clients (proxies)

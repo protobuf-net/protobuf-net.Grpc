@@ -1,5 +1,6 @@
 using Grpc.Core;
 using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
@@ -81,7 +82,7 @@ namespace protobuf_net.Grpc.Test
 
             Assert.Empty(expected);
         }
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Empty
         [Theory]
         [InlineData(nameof(IAllOptions.Client_AsyncUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Grpc, (int)VoidKind.None)]
         [InlineData(nameof(IAllOptions.Client_BlockingUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Sync, (int)VoidKind.None)]

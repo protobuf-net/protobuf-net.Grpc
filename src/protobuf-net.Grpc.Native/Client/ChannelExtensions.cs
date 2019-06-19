@@ -1,5 +1,5 @@
 ﻿using Grpc.Core;
-using ProtoBuf.Grpc.Internal;
+using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Client
 {

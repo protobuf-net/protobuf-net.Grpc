@@ -1,6 +1,4 @@
-﻿using Grpc.Core;
-
-namespace ProtoBuf.Grpc
+﻿namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
     /// Describes rules for binding to gRPC services

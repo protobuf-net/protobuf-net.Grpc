@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
+using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Server
 {

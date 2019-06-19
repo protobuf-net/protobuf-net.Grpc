@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using Grpc.Core;
-using System.ServiceModel;
+using ProtoBuf.Grpc.Configuration;
 using System.Threading.Tasks;
 using System.Linq;
 
@@ -213,7 +213,7 @@ namespace ProtoBuf.Grpc.Internal
                     case TypeCategory.Void:
                     case TypeCategory.UntypedTask:
                     case TypeCategory.UntypedValueTask:
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Empty
                         return typeof(Empty);
 #pragma warning restore CS0618
                     case TypeCategory.TypedTask:
@@ -257,7 +257,7 @@ namespace ProtoBuf.Grpc.Internal
             if (name == null || !s_reshaper.TryGetValue(name, out var method)) return null;
             return method.MakeGenericMethod(From, To);
         }
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Reshape
         static readonly Dictionary<string, MethodInfo> s_reshaper =
 
             (from method in typeof(Reshape).GetMethods(BindingFlags.Public | BindingFlags.Static)
