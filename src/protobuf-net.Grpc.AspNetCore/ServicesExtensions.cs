@@ -22,6 +22,7 @@ namespace ProtoBuf.Grpc.Server
         /// </summary>
         public static void AddCodeFirstGrpc(this IServiceCollection services)
         {
+            services.AddGrpc();
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
         }
 

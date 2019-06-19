@@ -5,7 +5,6 @@ Imports ProtoBuf.Grpc.Server
 
 Public Class Startup
     Public Sub ConfigureServices(services As IServiceCollection)
-        services.AddGrpc()
         services.AddCodeFirstGrpc()
     End Sub
 
