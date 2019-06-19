@@ -28,8 +28,8 @@ or asking the system for a client:
 var client = http.CreateGrpcService<IAmazingService>();
 ```
 
-Obviously you need to tell it the uri etc - see [Getting Started](https://mgravell.github.io/protobuf-net.Grpc/gettingstarted). Usually the configuration is convention-based, but
-if you prefer: there are [various configuration options](https://mgravell.github.io/protobuf-net.Grpc/configuration).
+Obviously you need to tell it the uri etc - see [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted). Usually the configuration is convention-based, but
+if you prefer: there are [various configuration options](https://protobuf-net.github.io/protobuf-net.Grpc/configuration).
 
 ## Getting hold of it
 
@@ -39,7 +39,7 @@ Everything is available as pre-built packages on nuget; in particular, you proba
 - [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore) for servers using ASP.NET Core 3
 - [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native) for clients and servers using the native `Grpc.Core` API
 
-[Usage examples are available in C#, VB and F#](https://github.com/mgravell/protobuf-net.Grpc/tree/master/examples/pb-net-grpc).
+[Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/master/examples/pb-net-grpc).
 
 ## That's sounds awesome!
 
