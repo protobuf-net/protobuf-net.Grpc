@@ -34,6 +34,7 @@ This would be equivalent to the service in .proto:
 ``` proto
 service MyAmazingService {
     rpc Search (SearchRequest) returns (SearchResponse) {}
+	// ...
 }
 ```
 
