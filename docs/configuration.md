@@ -43,3 +43,26 @@ and should be stored and re-used between requests; this can then be supplied to 
 ## 5 How bindings happen
 
 There are currently no controllable options for bindings.
+
+If you're wondering why I dind't say how to configure TLS, authentication, etc: that's because it *isn't a concern of `protobuf-net.Grpc`*. All the
+expected options are available - they're just not something that this library sees or controls; rather, you'd do that at the server in whatever way
+is normal for that server. For clients, authentication can be specified via `CallOptions` (the standard `Grpc.Core.Api` type). `protobuf-net.Grpc` *unifies*
+the `CallOptions` and `ServerCallContext` types into a single value-type: `CallContext`. It is common to include an optional `CallContext` parameter
+on your methods for this purpose, i.e.
+
+``` c#
+[ServiceContract]
+public interface IMyAmazingService {
+    ValueTask<SearchResponse> SearchAsync(SearchRequest request, CallContext context = default);
+    // ...
+}
+```
+
+The client can now provide this additional detail by passing in a `CallContext` with the `CallOptions` that describe the needs. `CallContext` is implicitly
+convertible from `CallOptions`, so you don't need to do the intermediate step:
+
+``` c#
+var client = http.CreateGrpcService<IMyAmazingService>();
+var options = new CallOptions(...); // your gRPC options here including auth if needed
+var result = await client.Search(request, options);
+```

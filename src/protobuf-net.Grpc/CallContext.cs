@@ -72,6 +72,11 @@ namespace ProtoBuf.Grpc
             _metadataContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? null : new MetadataContext();
         }
 
+        /// <summary>
+        /// Creates a call-context that represents a client operation
+        /// </summary>
+        public static implicit operator CallContext(in CallOptions options) => new CallContext(in options, CallContextFlags.None);
+
         private readonly MetadataContext? _metadataContext;
 
         /// <summary>
