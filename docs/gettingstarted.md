@@ -39,7 +39,7 @@ Also: make sure that you are *actually using* the preview runtime, via "global.j
 ``` json
 {
   "sdk": {
-    "version": "3.0.100-preview7-012341"
+    "version": "3.0.100-preview7"
   }
 }
 ```

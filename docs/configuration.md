@@ -28,7 +28,7 @@ By default, the library uses protobuf-net's default model (`RuntimeTypeModel.Def
 create a `ProtoBufMarshallerFactory`, specifying the model you wish to use. However, you don't need to use protobuf-net *at all*; you can also implement
 a custom `MarshallerFactory` from scratch. The *easiest* way to do this is to override the `Serialize<T>` and `Deserialize<T>` methods, but if you need
 to do something more sophisticated, you can override `CreateMarshaller<T>`. You will also need to override `CanSerialize`, which is used to determine
-whether a type can be serialized.
+whether a type can be serialized. Note: you should ensure that your payload is protobuf - otherwise your service won't be usable by other clients.
 
 ## 4 Creating clients and servers
 
