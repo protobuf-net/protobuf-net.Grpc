@@ -17,7 +17,7 @@ public interface IMyAmazingService {
 then either implementing that interface for a server:
 
 ``` c#
-public class MyServer : IAmazingService {
+public class MyServer : IMyAmazingService {
     // ...
 }
 ```
@@ -25,7 +25,16 @@ public class MyServer : IAmazingService {
 or asking the system for a client:
 
 ``` c#
-var client = http.CreateGrpcService<IAmazingService>();
+var client = http.CreateGrpcService<IMyAmazingService>();
+var results = await client.SearchAsync(request);
+```
+
+This would be equivalent to the service in .proto:
+
+``` proto
+service MyAmazingService {
+    rpc Search (SearchRequest) returns (SearchResponse) {}
+}
 ```
 
 Obviously you need to tell it the uri etc - see [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted). Usually the configuration is convention-based, but
