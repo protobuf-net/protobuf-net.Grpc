@@ -13,7 +13,7 @@
     <RepositoryUrl>https://github.com/mgravell/protobuf-net.Grpc</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <Product>protobuf-net.Grpc ($(TargetFramework))</Product>
-    <PackageReleaseNotes>https://mgravell.github.io/protobuf-net/releasenotes#$(VersionPrefix)</PackageReleaseNotes>
+    <PackageReleaseNotes>https://mgravell.github.io/protobuf-net.Grpc/releasenotes#$(VersionPrefix)</PackageReleaseNotes>
     
     <PackageTags>grpc</PackageTags>
     <DebugSymbols>true</DebugSymbols>
