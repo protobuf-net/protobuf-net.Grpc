@@ -52,7 +52,8 @@ a separate library, make sure you target `netcoreapp3.0`.
 As for what they look like: think "WCF". Data contracts are classes marked with either `[ProtoContract]` or `[DataContract]`, with individual members
 annotated with either `[ProtoMember]` or `[DataMember]`. The `[Proto*]` options are protobuf-net specific and offer fine-grained
 control - and require a package-reference to [`protobuf-net`](https://www.nuget.org/packages/protobuf-net/); the `[Data*]` options are part
-of the BCL and avoid needing an external reference (if you care), but may need [`System.ServiceModel.Primitives`](https://www.nuget.org/packages/System.ServiceModel.Primitives/) . **Key point**: protobuf
+of the BCL and avoid needing an external reference (if you care), but may need
+[`System.ServiceModel.Primitives`](https://www.nuget.org/packages/System.ServiceModel.Primitives/) . **Key point**: protobuf
 uses integer tokens to identify members (not names), so you need to tell the library how to map them (positive integers, unique per type:
 
 ``` c#
