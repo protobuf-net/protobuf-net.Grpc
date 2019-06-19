@@ -23,7 +23,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB
 	ProjectSection(SolutionItems) = preProject
 		Directory.build.props = Directory.build.props
 		global.json = global.json
-		projects.md = projects.md
 		readme.md = readme.md
 		version.json = version.json
 	EndProjectSection
@@ -65,6 +64,15 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "managed", "managed", "{39491A90-84A2-4E13-B867-CFC3D4592084}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "native", "native", "{BE48D1A2-CE10-4AEE-B370-ED8E373B082B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{6065C30D-7C5D-4C54-97B4-F407B56C7A89}"
+	ProjectSection(SolutionItems) = preProject
+		docs\configuration.md = docs\configuration.md
+		docs\gettingstarted.md = docs\gettingstarted.md
+		docs\index.md = docs\index.md
+		docs\projects.md = docs\projects.md
+		docs\releasenotes.md = docs\releasenotes.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

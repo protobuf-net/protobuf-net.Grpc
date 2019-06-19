@@ -19,6 +19,32 @@ namespace ProtoBuf.Grpc.Configuration
         protected ServiceBinder() { }
 
         /// <summary>
+        /// Gets the default name for a potential service-contract
+        /// </summary>
+        protected virtual string GetDefaultName(Type contractType)
+        {
+            var serviceName = contractType.Name;
+            if (contractType.IsInterface && serviceName.StartsWith("I")) serviceName = serviceName.Substring(1); // IFoo => Foo
+            serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
+            serviceName = serviceName.Replace('+', '.'); // nested types
+
+            return serviceName ?? "";
+        }
+
+        /// <summary>
+        /// Gets the default name for a potential operation-contract
+        /// </summary>
+        protected virtual string GetDefaultName(MethodInfo method)
+        {
+            var opName = method.Name;
+            if (opName.EndsWith("Async"))
+#pragma warning disable IDE0057 // not on all frameworks
+            opName = opName.Substring(0, opName.Length - 5);
+#pragma warning restore IDE0057
+            return opName ?? "";
+        }
+
+        /// <summary>
         /// Indicates whether an interface should be considered a service-contract (and if so: by what name)
         /// </summary>
         public virtual bool IsServiceContract(Type contractType, out string name)
@@ -31,13 +57,8 @@ namespace ProtoBuf.Grpc.Configuration
             }
             var serviceName = sca?.Name;
             if (string.IsNullOrWhiteSpace(serviceName))
-            {
-                serviceName = contractType.Name;
-                if (contractType.IsInterface && serviceName.StartsWith("I")) serviceName = serviceName.Substring(1); // IFoo => Foo
-                serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
-                serviceName = serviceName.Replace('+', '.'); // nested types
-            }
-            name = serviceName ?? "";
+                serviceName = GetDefaultName(contractType);
+            name = serviceName;
             return !string.IsNullOrWhiteSpace(name);
         }
 
@@ -49,15 +70,9 @@ namespace ProtoBuf.Grpc.Configuration
             var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
             string? opName = oca?.Name;
             if (string.IsNullOrWhiteSpace(opName))
-            {
-                opName = method.Name;
-                if (opName.EndsWith("Async"))
-#pragma warning disable IDE0057 // not on all frameworks
-                    opName = opName.Substring(0, opName.Length - 5);
-#pragma warning restore IDE0057
-            }
+                opName = GetDefaultName(method);
             name = opName;
-            return !string.IsNullOrWhiteSpace(opName);
+            return !string.IsNullOrWhiteSpace(name);
         }
     }
 }

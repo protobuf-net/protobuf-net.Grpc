@@ -1,5 +1,4 @@
-﻿using Grpc.Core;
-using ProtoBuf.Meta;
+﻿using ProtoBuf.Meta;
 using System;
 using System.IO;
 
@@ -11,18 +10,21 @@ namespace ProtoBuf.Grpc.Configuration
     public class ProtoBufMarshallerFactory : MarshallerFactory
     {
         private readonly RuntimeTypeModel _model;
-        public ProtoBufMarshallerFactory(RuntimeTypeModel model)
+        public static MarshallerFactory Create(RuntimeTypeModel model)
+        {
+            if (model == null || model == RuntimeTypeModel.Default) return Default;
+            return new ProtoBufMarshallerFactory(model);
+        }
+
+        internal ProtoBufMarshallerFactory(RuntimeTypeModel model)
         {
             _model = model;
         }
 
-        protected override Marshaller<T> CreateMarshaller<T>()
-            => new Marshaller<T>(Serialize<T>, Deserialize<T>);
-
         protected override bool CanSerialize(Type type)
             => _model.CanSerialize(type);
 
-        private T Deserialize<T>(byte[] payload)
+        protected override T Deserialize<T>(byte[] payload)
         {
 #if PLAT_NOSPAN
             using (var ms = new MemoryStream(payload))
@@ -38,7 +40,7 @@ namespace ProtoBuf.Grpc.Configuration
 #endif
         }
 
-        private byte[] Serialize<T>(T value)
+        protected override byte[] Serialize<T>(T value)
         {
             using (var ms = new MemoryStream())
             {

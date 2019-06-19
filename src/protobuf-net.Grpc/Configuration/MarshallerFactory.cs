@@ -23,14 +23,27 @@ namespace ProtoBuf.Grpc.Configuration
         protected MarshallerFactory() {}
 
         /// <summary>
+        /// Deserializes an object from a payload
+        /// </summary>
+        protected virtual T Deserialize<T>(byte[] payload)
+            => throw new NotImplementedException("You must override either CreateMarshaller or both Serialize/Deserialize");
+
+        /// <summary>
+        /// Serializes an object to a payload
+        /// </summary>
+        protected virtual byte[] Serialize<T>(T value)
+            => throw new NotImplementedException("You must override either CreateMarshaller or both Serialize/Deserialize");
+
+        /// <summary>
         /// Create a typed marshaller (this value is cached and reused automatically)
         /// </summary>
-        protected abstract Marshaller<T> CreateMarshaller<T>();
+        protected virtual Marshaller<T> CreateMarshaller<T>()
+            => new Marshaller<T>(Serialize<T>, Deserialize<T>);
 
         /// <summary>
         /// Indicates whether a type should be considered as a serializable data type
         /// </summary>
-        protected virtual bool CanSerialize(Type type) => RuntimeTypeModel.Default.CanSerialize(type);
+        protected abstract bool CanSerialize(Type type);
 
         private readonly ConcurrentDictionary<Type, object> _marshallers = new ConcurrentDictionary<Type, object>
         {

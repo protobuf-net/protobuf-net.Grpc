@@ -1,3 +1,5 @@
+# Package/Project Layout
+
 protobuf-net.Grpc is split over several projects:
 
 ## `protobuf-net.Grpc`
