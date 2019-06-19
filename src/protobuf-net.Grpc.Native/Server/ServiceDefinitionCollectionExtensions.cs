@@ -54,7 +54,7 @@ namespace ProtoBuf.Grpc.Server
 
                     if (argsBuffer == null)
                     {
-                        argsBuffer = new object?[] { serviceName, null, null, null, binder, service, null };
+                        argsBuffer = new object?[] { serviceName, null, null, null, binder, service, null, binderConfiguration!.MarshallerFactory };
                     }
                     argsBuffer[1] = on;
                     argsBuffer[2] = m;
@@ -78,7 +78,7 @@ namespace ProtoBuf.Grpc.Server
         private static void AddMethod<TService, TRequest, TResponse>(
             string serviceName, string operationName, MethodInfo method, MethodType methodType,
             ServerServiceDefinition.Builder binder, TService service,
-            Func<MethodInfo, Expression[], Expression>? invoker)
+            Func<MethodInfo, Expression[], Expression>? invoker, MarshallerFactory marshallerFactory)
             where TService : class
             where TRequest : class
             where TResponse : class
@@ -103,8 +103,8 @@ namespace ProtoBuf.Grpc.Server
                 return lambda.Compile();
             }
 
-#pragma warning disable CS8625, CS0618
-            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, DefaultMarshaller<TRequest>.Instance, DefaultMarshaller<TResponse>.Instance);
+            
+            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerFactory.GetMarshaller<TRequest>(), marshallerFactory.GetMarshaller<TResponse>());
             switch (methodType)
             {
                 case MethodType.Unary:
@@ -122,7 +122,6 @@ namespace ProtoBuf.Grpc.Server
                 default:
                     throw new NotSupportedException(methodType.ToString());
             }
-#pragma warning restore CS8625, CS0618
         }
 
     }

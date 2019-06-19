@@ -12,16 +12,14 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public static BinderConfiguration Default { get; } = new BinderConfiguration(MarshallerFactory.Default, ServiceBinder.Default);
 
-        private readonly MarshallerFactory _marshallerFactory;
 
         private BinderConfiguration(MarshallerFactory marshallerFactory, ServiceBinder binder)
         {
-            _marshallerFactory = marshallerFactory;
+            MarshallerFactory = marshallerFactory;
             Binder = binder;
         }
         internal ServiceBinder Binder { get; private set; }
-
-        internal Marshaller<T> GetMarshaller<T>() => _marshallerFactory.GetMarshaller<T>();
+        internal MarshallerFactory MarshallerFactory { get; }
 
         /// <summary>
         /// Create a new binding configuration
@@ -31,7 +29,7 @@ namespace ProtoBuf.Grpc
             if (marshallerFactory == null) marshallerFactory = MarshallerFactory.Default;
             if (binder == null) binder = ServiceBinder.Default;
 
-            if (marshallerFactory == Default._marshallerFactory && binder == Default.Binder) return Default;
+            if (marshallerFactory == Default.MarshallerFactory && binder == Default.Binder) return Default;
             return new BinderConfiguration(marshallerFactory, binder);
         }
     }

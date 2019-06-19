@@ -18,7 +18,10 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(Reshape.WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        public static readonly Marshaller<T> Instance = new Marshaller<T>(Serialize, Deserialize);
+        public static readonly Marshaller<T> Instance =
+#pragma warning disable CS0618
+            typeof(T) == typeof(Empty) ? (Marshaller<T>)(object)Empty.Marshaller : new Marshaller<T>(Serialize, Deserialize);
+#pragma warning restore CS0618
 
         private static readonly RuntimeTypeModel _model = RuntimeTypeModel.Default;
 

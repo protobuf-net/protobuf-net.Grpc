@@ -23,9 +23,11 @@ namespace ProtoBuf.Grpc
         protected MarshallerFactory() {}
 
         /// <summary>
-        /// Create a typed marshaller
+        /// Create a typed marshaller (this value is cached and reused automatically)
         /// </summary>
+#pragma warning disable CS0618
         protected virtual Marshaller<T> CreateMarshaller<T>() => DefaultMarshaller<T>.Instance;
+#pragma warning restore CS0618
 
         /// <summary>
         /// Indicates whether a type should be considered as a serializable data type
