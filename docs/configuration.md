@@ -64,5 +64,5 @@ convertible from `CallOptions`, so you don't need to do the intermediate step:
 ``` c#
 var client = http.CreateGrpcService<IMyAmazingService>();
 var options = new CallOptions(...); // your gRPC options here including auth if needed
-var result = await client.Search(request, options);
+var result = await client.SearchAsync(request, options);
 ```
