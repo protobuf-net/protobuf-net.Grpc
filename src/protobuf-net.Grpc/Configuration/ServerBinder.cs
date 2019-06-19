@@ -21,6 +21,13 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
+        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService? service = null)
+            where TService : class
+            => Bind(state, typeof(TService), binderConfiguration, service);
+
+        /// <summary>
+        /// Initiate a bind operation, causing all service methods to be crawled for the provided type
+        /// </summary>
         public int Bind(object state, Type serviceType, BinderConfiguration? binderConfiguration = null, object? service = null)
         {
             if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
@@ -108,7 +115,9 @@ namespace ProtoBuf.Grpc.Configuration
             /// <summary>
             /// Create a delegate that will invoke this method against a constant instance of the service
             /// </summary>
-            public TDelegate As<TService, TDelegate>(TService service) where TDelegate : Delegate
+            public TDelegate As<TService, TDelegate>(TService service)
+                where TDelegate : Delegate
+                where TService : class
             {
                 if (_invoker == null)
                 {

@@ -44,9 +44,10 @@ namespace ProtoBuf.Grpc.Server
         /// Adds a code-first service to the available services
         /// </summary>
         public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service, BinderConfiguration? binderConfiguration = null)
+            where TService : class
         {
             var builder = ServerServiceDefinition.CreateBuilder();
-            int count = Binder.Instance.Bind(builder, typeof(TService), binderConfiguration, service);
+            int count = Binder.Instance.Bind<TService>(builder, binderConfiguration, service);
             services.Add(builder.Build());
             return count;
         }

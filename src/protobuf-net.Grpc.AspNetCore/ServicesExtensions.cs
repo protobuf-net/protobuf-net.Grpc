@@ -33,9 +33,7 @@ namespace ProtoBuf.Grpc.Server
                 _logger = loggerFactory.CreateLogger<Binder<TService>>();
             }
             public void OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
-            {
-                Bind(context, typeof(TService), _binderConfiguration);
-            }
+                => Bind<TService>(context, _binderConfiguration);
 
             protected override void OnServiceBound(string serviceName, Type serviceContract, int operationCount)
             {
