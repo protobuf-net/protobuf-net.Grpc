@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
-using System;
 using System.Collections.Generic;
 
 namespace ProtoBuf.Grpc.Server
@@ -20,31 +19,31 @@ namespace ProtoBuf.Grpc.Server
         public static void AddCodeFirstGrpc(this IServiceCollection services)
         {
             services.AddGrpc();
-            services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(Binder<>)));
+            services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
         }
 
-        private sealed class Binder<TService> : ServerBinder, IServiceMethodProvider<TService> where TService : class
+        private sealed class CodeFirstServiceMethodProvider<TService> : IServiceMethodProvider<TService> where TService : class
         {
-            private readonly ILogger<Binder<TService>> _logger;
+            private readonly ILogger<CodeFirstServiceMethodProvider<TService>> _logger;
             private readonly BinderConfiguration? _binderConfiguration;
-            public Binder(ILoggerFactory loggerFactory, BinderConfiguration? binderConfiguration = null)
+            public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory, BinderConfiguration? binderConfiguration = null)
             {
                 _binderConfiguration = binderConfiguration;
-                _logger = loggerFactory.CreateLogger<Binder<TService>>();
+                _logger = loggerFactory.CreateLogger<CodeFirstServiceMethodProvider<TService>>();
             }
+
             void IServiceMethodProvider<TService>.OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
-                => Bind<TService>(context, _binderConfiguration);
-
-            protected override void OnServiceBound(object state, string serviceName, Type serviceContract, int operationCount)
             {
-                base.OnServiceBound(state, serviceName, serviceContract, operationCount);
-                if (operationCount != 0) _logger.Log(LogLevel.Information, "{0} implementing service {1} (via '{2}') with {3} operation(s)",
-                    typeof(TService), serviceName, serviceContract.Name, operationCount);
+                int count = Binder.Instance.Bind<TService>(context, _binderConfiguration);
+                if (count != 0) _logger.Log(LogLevel.Information, "RPC services being provided by {0}: {1}", typeof(TService), count);
             }
+        }
+        private sealed class Binder : ServerBinder
+        {
+            private Binder() { }
+            public static readonly Binder Instance = new Binder();
 
-#pragma warning disable CS0693 // in reality this will always be the same as the outer TService, so: suppress
             protected override bool OnBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub stub, TService? service)
-#pragma warning restore CS0693
                 where TService : class
                 where TRequest : class
                 where TResponse : class

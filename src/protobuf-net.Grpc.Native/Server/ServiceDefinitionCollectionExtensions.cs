@@ -9,6 +9,18 @@ namespace ProtoBuf.Grpc.Server
     /// </summary>
     public static class ServiceDefinitionCollectionExtensions
     {
+        /// <summary>
+        /// Adds a code-first service to the available services
+        /// </summary>
+        public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service, BinderConfiguration? binderConfiguration = null)
+            where TService : class
+        {
+            var builder = ServerServiceDefinition.CreateBuilder();
+            int count = Binder.Instance.Bind<TService>(builder, binderConfiguration, service);
+            services.Add(builder.Build());
+            return count;
+        }
+
         private class Binder : ServerBinder
         {
             private Binder() { }
@@ -39,17 +51,6 @@ namespace ProtoBuf.Grpc.Server
                 }
                 return true;
             }
-        }
-        /// <summary>
-        /// Adds a code-first service to the available services
-        /// </summary>
-        public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service, BinderConfiguration? binderConfiguration = null)
-            where TService : class
-        {
-            var builder = ServerServiceDefinition.CreateBuilder();
-            int count = Binder.Instance.Bind<TService>(builder, binderConfiguration, service);
-            services.Add(builder.Build());
-            return count;
         }
     }
 }
