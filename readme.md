@@ -266,7 +266,7 @@ finally
 }
 ```
 
-You can also implement servers in exactly the same way as above, but hosting is provided by `Grpc.Core` via the native `Server` type:
+You can also implement servers just like we did for ASP.NET - we create a class that implements the service-contract interface, but hosting is provided by `Grpc.Core` via the native `Server` type:
 
 ``` c#
 static async Task Main()
@@ -274,9 +274,9 @@ static async Task Main()
     const int port = 10042;
     Server server = new Server
     {
-        Services = { new MyServer() },
         Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
     };
+    server.Services.AddCodeFirst(new MyServer());
     server.Start();
 
     Console.WriteLine("server listening on port " + port);

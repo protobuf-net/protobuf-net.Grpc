@@ -13,9 +13,9 @@ namespace PlayServer
             const int port = 10042;
             Server server = new Server
             {
-                Services = { new MyServer() },
                 Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
             };
+            server.Services.AddCodeFirst(new MyServer());
             server.Start();
 
             Console.WriteLine("server listening on port " + port);

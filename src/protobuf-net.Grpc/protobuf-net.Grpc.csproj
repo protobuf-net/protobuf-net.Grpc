@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Grpc.Core.Api" Version="1.21.0" />
+    <PackageReference Include="System.Threading.Channels" Version="4.5.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.0.0-preview6.19303.8" />
@@ -17,6 +18,6 @@
     <PackageReference Include="protobuf-net" Version="3.0.0-alpha.43" />
   </ItemGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
-    <DefineConstants>$(DefineConstants);PLAT_NOSPAN</DefineConstants>
+    <DefineConstants>$(DefineConstants);PLAT_NOSPAN;PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
   </PropertyGroup>
 </Project>
