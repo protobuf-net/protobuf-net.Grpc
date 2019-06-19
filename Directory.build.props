@@ -24,7 +24,7 @@
     <Nullable>enable</Nullable>
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
 
-    <ExampleRefs>nuget</ExampleRefs> <!-- local or nuget-->
+    <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>0.0.3-alpha.36</PBGRPCLibVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">

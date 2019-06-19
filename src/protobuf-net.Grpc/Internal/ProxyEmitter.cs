@@ -88,7 +88,7 @@ namespace ProtoBuf.Grpc.Internal
         //}
 
         static int _typeIndex;
-        internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType)
+        internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binder)
            where TService : class
         {
             if (baseType == null) throw new ArgumentNullException(nameof(baseType));
@@ -118,7 +118,7 @@ namespace ProtoBuf.Grpc.Internal
                     var toString = type.DefineMethod(nameof(ToString), baseToString.Attributes, baseToString.CallingConvention,
                     typeof(string), Type.EmptyTypes);
                     var il = toString.GetILGenerator();
-                    ContractOperation.TryGetServiceName(typeof(TService), out var primaryServiceName);
+                    if (!binder.Binder.IsServiceContract(typeof(TService), out var primaryServiceName)) primaryServiceName = typeof(TService).Name;
                     il.Emit(OpCodes.Ldstr, primaryServiceName + " / " + typeof(TChannel).Name);
                     il.Emit(OpCodes.Ret);
                     type.DefineMethodOverride(toString, baseToString);
@@ -126,12 +126,12 @@ namespace ProtoBuf.Grpc.Internal
 
                 var cctor = type.DefineTypeInitializer().GetILGenerator();
 
-                var ops = ContractOperation.FindOperations(typeof(TService));
+                var ops = ContractOperation.FindOperations(binder.Binder, typeof(TService));
 
                 int fieldIndex = 0;
                 foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
                 {
-                    ContractOperation.TryGetServiceName(iType, out var serviceName);
+                    bool isService = binder.Binder.IsServiceContract(iType, out var serviceName);
 
                     // : TService
                     type.AddInterfaceImplementation(iType);
@@ -147,7 +147,7 @@ namespace ProtoBuf.Grpc.Internal
                         type.DefineMethodOverride(impl, iMethod);
 
                         var il = impl.GetILGenerator();
-                        if (!ContractOperation.TryIdentifySignature(iMethod, out var op))
+                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binder.Binder, out var op)))
                         {
                             il.ThrowException(typeof(NotSupportedException));
                             continue;
@@ -162,8 +162,8 @@ namespace ProtoBuf.Grpc.Internal
                         cctor.Emit(OpCodes.Ldstr, serviceName); // serviceName
                         cctor.Emit(OpCodes.Ldstr, op.Name); // opName
 #pragma warning disable CS0618
-                        cctor.Emit(OpCodes.Ldsfld, typeof(MarshallerCache<>).MakeGenericType(op.From).GetField(nameof(MarshallerCache<string>.Instance))); // requestMarshaller
-                        cctor.Emit(OpCodes.Ldsfld, typeof(MarshallerCache<>).MakeGenericType(op.To).GetField(nameof(MarshallerCache<string>.Instance))); // responseMarshaller
+                        cctor.Emit(OpCodes.Ldsfld, typeof(DefaultMarshaller<>).MakeGenericType(op.From).GetField(nameof(DefaultMarshaller<string>.Instance))); // requestMarshaller
+                        cctor.Emit(OpCodes.Ldsfld, typeof(DefaultMarshaller<>).MakeGenericType(op.To).GetField(nameof(DefaultMarshaller<string>.Instance))); // responseMarshaller
 #pragma warning restore CS0618
                         cctor.Emit(OpCodes.Newobj, typeof(Method<,>).MakeGenericType(fromTo)
                             .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single()); // new Method

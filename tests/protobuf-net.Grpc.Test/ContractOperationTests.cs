@@ -142,7 +142,7 @@ namespace protobuf_net.Grpc.Test
         {
             var method = typeof(IAllOptions).GetMethod(name);
             Assert.NotNull(method);
-            if (!ContractOperation.TryIdentifySignature(method!, out var operation))
+            if (!ContractOperation.TryIdentifySignature(method!, BinderConfiguration.Default.Binder, out var operation))
             {
                 var sig = ContractOperation.GetSignature(method!);
                 Assert.True(false, sig.ToString());
@@ -162,9 +162,10 @@ namespace protobuf_net.Grpc.Test
         {
             var list = new List<(MethodType Kind, string Signature)>();
             var sb = new StringBuilder();
+            var binder = BinderConfiguration.Default.Binder;
             foreach (var method in typeof(IAllOptions).GetMethods())
             {
-                if (ContractOperation.TryIdentifySignature(method, out var operation))
+                if (ContractOperation.TryIdentifySignature(method, binder, out var operation))
                 {
                     sb.Clear();
                     sb.Append(Sanitize(method.ReturnType)).Append(" Foo(");

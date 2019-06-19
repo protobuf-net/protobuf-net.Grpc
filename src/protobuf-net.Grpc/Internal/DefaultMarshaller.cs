@@ -11,15 +11,14 @@ namespace ProtoBuf.Grpc.Internal
     /// </summary>
     [Obsolete(Reshape.WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-    public static class MarshallerCache<T>
+    public static class DefaultMarshaller<T>
     {
         /// <summary>
         /// Provides a protobuf-net implementation of a per-type marshaller
         /// </summary>
         [Obsolete(Reshape.WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        public static readonly Marshaller<T> Instance = typeof(T) == typeof(Empty)
-            ? (Marshaller<T>)(object)Empty.Marshaller : new Marshaller<T>(Serialize, Deserialize);
+        public static readonly Marshaller<T> Instance = new Marshaller<T>(Serialize, Deserialize);
 
         private static readonly RuntimeTypeModel _model = RuntimeTypeModel.Default;
 

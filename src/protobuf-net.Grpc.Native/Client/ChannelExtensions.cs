@@ -11,10 +11,8 @@ namespace ProtoBuf.Grpc.Client
         /// <summary>
         /// Creates a code-first service backed by a Channel instance
         /// </summary>
-        public static TService CreateGrpcService<TService>(this Channel client)
+        public static TService CreateGrpcService<TService>(this Channel client, ClientFactory? clientFactory = null)
             where TService : class
-        #pragma warning disable CS0618
-                    => ClientFactory<ClientBase, TService, Channel>.Create(client);
-        #pragma warning restore CS0618
+                    => (clientFactory ?? ClientFactory.Default).CreateClient<ClientBase, TService, Channel>(client);
     }
 }

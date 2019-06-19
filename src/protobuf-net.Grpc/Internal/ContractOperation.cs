@@ -36,27 +36,8 @@ namespace ProtoBuf.Grpc.Internal
             Void = @void;
         }
 
-        public static bool TryGetServiceName(Type contractType, out string? serviceName, bool demandAttribute = false)
-        {
-            var sca = (ServiceContractAttribute?)Attribute.GetCustomAttribute(contractType, typeof(ServiceContractAttribute), inherit: true);
-            if (demandAttribute && sca == null)
-            {
-                serviceName = null;
-                return false;
-            }
-            serviceName = sca?.Name;
-            if (string.IsNullOrWhiteSpace(serviceName))
-            {
-                serviceName = contractType.Name;
-                if (contractType.IsInterface && serviceName.StartsWith("I")) serviceName = serviceName.Substring(1); // IFoo => Foo
-                serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
-                serviceName = serviceName.Replace('+', '.'); // nested types
-            }
-            return !string.IsNullOrWhiteSpace(serviceName);
-        }
-
-        public static bool TryIdentifySignature(MethodInfo method, out ContractOperation operation)
-            => TryGetPattern(method, false, out operation);
+        public static bool TryIdentifySignature(MethodInfo method, ServiceBinder binder, out ContractOperation operation)
+            => TryGetPattern(method, binder, out operation);
 
         internal enum TypeCategory
         {
@@ -192,7 +173,7 @@ namespace ProtoBuf.Grpc.Internal
             signature.Ret = GetCategory(returnType);
             return signature;
         }
-        private static bool TryGetPattern(MethodInfo method, bool demandAttribute, out ContractOperation operation)
+        private static bool TryGetPattern(MethodInfo method, ServiceBinder binder, out ContractOperation operation)
         {
             operation = default;
 
@@ -200,19 +181,7 @@ namespace ProtoBuf.Grpc.Internal
 
             if ((method.Attributes & (MethodAttributes.SpecialName)) != 0) return false; // some kind of accessor etc
 
-            var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
-            if (demandAttribute && oca == null) return false;
-
-            string? opName = oca?.Name;
-            if (string.IsNullOrWhiteSpace(opName))
-            {
-                opName = method.Name;
-                if (opName.EndsWith("Async"))
-#pragma warning disable IDE0057 // not on all frameworks
-                    opName = opName.Substring(0, opName.Length - 5);
-#pragma warning restore IDE0057
-            }
-            if (string.IsNullOrWhiteSpace(opName)) return false;
+            if (!binder.IsOperationContract(method, out var opName)) return false;
 
             var args = method.GetParameters();
             if (args.Length > 3) return false; // too many parameters
@@ -269,13 +238,13 @@ namespace ProtoBuf.Grpc.Internal
             operation = new ContractOperation(opName, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
         }
-        public static List<ContractOperation> FindOperations(Type contractType, bool demandAttribute = false)
+        public static List<ContractOperation> FindOperations(ServiceBinder binder, Type contractType)
         {
             var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             var ops = new List<ContractOperation>(all.Length);
             foreach (var method in all)
             {
-                if (TryGetPattern(method, demandAttribute, out var op))
+                if (TryGetPattern(method, binder, out var op))
                     ops.Add(op);
             }
             return ops;

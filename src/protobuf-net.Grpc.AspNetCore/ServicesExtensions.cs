@@ -27,9 +27,10 @@ namespace ProtoBuf.Grpc.Server
         private sealed class CodeFirstServiceMethodProvider<TService> : IServiceMethodProvider<TService> where TService : class
         {
             private readonly ILogger<CodeFirstServiceMethodProvider<TService>> _logger;
-
-            public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory)
+            private readonly BinderConfiguration _binderConfiguration;
+            public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory, BinderConfiguration? binderConfiguration = null)
             {
+                _binderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
                 _logger = loggerFactory.CreateLogger<CodeFirstServiceMethodProvider<TService>>();
             }
             public void OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
@@ -48,14 +49,14 @@ namespace ProtoBuf.Grpc.Server
             
             private void AddMethodsForService(ServiceMethodProviderContext<TService> context, Type serviceContract)
             {
-                bool isPublicContract = typeof(TService) == serviceContract;
-                if (!ContractOperation.TryGetServiceName(serviceContract, out var serviceName, !isPublicContract)) return;
+                var binder = _binderConfiguration.Binder;
+                if (!binder.IsServiceContract(serviceContract, out var serviceName)) return;
                 _logger.Log(LogLevel.Trace, "pb-net processing {0}/{1} as {2}", typeof(TService).Name, serviceContract.Name, serviceName);
                 object?[]? argsBuffer = null;
                 Type[] typesBuffer = Array.Empty<Type>();
 
                 int count = 0;
-                foreach (var op in ContractOperation.FindOperations(serviceContract, isPublicContract))
+                foreach (var op in ContractOperation.FindOperations(binder, serviceContract))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
                         && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
@@ -138,7 +139,7 @@ namespace ProtoBuf.Grpc.Server
             }
 
 #pragma warning disable CS8625, CS0618
-            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, MarshallerCache<TRequest>.Instance, MarshallerCache<TResponse>.Instance);
+            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, DefaultMarshaller<TRequest>.Instance, DefaultMarshaller<TResponse>.Instance);
             switch (methodType)
             {
                 case MethodType.Unary:

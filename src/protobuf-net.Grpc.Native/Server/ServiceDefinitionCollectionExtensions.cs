@@ -15,18 +15,20 @@ namespace ProtoBuf.Grpc.Server
         /// <summary>
         /// Adds a code-first service to the available services
         /// </summary>
-        public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service)
+        public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service, BinderConfiguration? binderConfiguration = null)
         {
             int count = 0;
             var binder = ServerServiceDefinition.CreateBuilder();
             object?[]? argsBuffer = null;
             Type[] typesBuffer = Array.Empty<Type>();
             string? serviceName;
+            if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
+            var binderObj = binderConfiguration.Binder;
             foreach (var serviceContract in ContractOperation.ExpandInterfaces(typeof(TService)))
             {
-                if (!ContractOperation.TryGetServiceName(serviceContract, out serviceName, true)) continue;
+                if (!binderObj.IsServiceContract(serviceContract, out serviceName)) continue;
 
-                foreach (var op in ContractOperation.FindOperations(serviceContract))
+                foreach (var op in ContractOperation.FindOperations(binderObj, serviceContract))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
                         && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
@@ -102,7 +104,7 @@ namespace ProtoBuf.Grpc.Server
             }
 
 #pragma warning disable CS8625, CS0618
-            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, MarshallerCache<TRequest>.Instance, MarshallerCache<TResponse>.Instance);
+            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, DefaultMarshaller<TRequest>.Instance, DefaultMarshaller<TResponse>.Instance);
             switch (methodType)
             {
                 case MethodType.Unary:
