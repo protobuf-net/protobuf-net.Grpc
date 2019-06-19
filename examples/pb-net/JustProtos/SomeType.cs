@@ -1,4 +1,7 @@
 ﻿using Google.Protobuf.Reflection;
+using Hyper;
+using MegaCorp;
+using System;
 
 namespace JustProtos
 {
@@ -6,7 +9,11 @@ namespace JustProtos
     {
         void Foo()
         {
-            DescriptorProto
+            Type[] types = {
+                typeof(DescriptorProto),
+                typeof(TimeResult),
+                typeof(MultiplyRequest),
+            };
         }
     }
 }
