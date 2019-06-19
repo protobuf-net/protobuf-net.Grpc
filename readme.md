@@ -41,6 +41,8 @@ Everything is available as pre-built packages on nuget; in particular, you proba
 
 [Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/master/examples/pb-net-grpc).
 
-## That's sounds awesome!
+## Anything else?
 
-Glad you think so! Have fun, and if this could save you a ton of time, you're always welcome to [![Buy me a coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/marcgravell)
+`protobuf-net.Grpc` is created and maintained by [Marc Gravell](https://github.com/mgravell) ([@marcgravell](https://twitter.com/marcgravell)), the author of `protobuf-net`.
+
+I look forward to your feedback, and if this could save you a ton of time, you're always welcome to [![Buy me a coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/marcgravell)
