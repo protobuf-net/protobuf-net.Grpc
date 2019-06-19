@@ -1,10 +1,6 @@
 ﻿using Grpc.Core;
-using ProtoBuf.Grpc.Internal;
-using System;
-using System.Linq.Expressions;
-using System.Reflection;
-using static Grpc.Core.Server;
 using ProtoBuf.Grpc.Configuration;
+using static Grpc.Core.Server;
 
 namespace ProtoBuf.Grpc.Server
 {

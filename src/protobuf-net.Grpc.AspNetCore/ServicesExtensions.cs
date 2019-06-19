@@ -3,12 +3,9 @@ using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using ProtoBuf.Grpc.Internal;
+using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
-using System.Linq.Expressions;
-using System.Reflection;
-using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Server
 {
