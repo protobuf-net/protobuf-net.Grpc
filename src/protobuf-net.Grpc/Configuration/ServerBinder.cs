@@ -92,17 +92,17 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected readonly struct MethodStub
         {
-            private readonly Func<MethodInfo, Expression[], Expression>? invoker;
-            private readonly MethodInfo method;
+            private readonly Func<MethodInfo, Expression[], Expression>? _invoker;
+
             /// <summary>
             /// The runtime method being considered
             /// </summary>
-            public readonly MethodInfo Method => method;
+            public MethodInfo Method { get; }
 
             internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method)
             {
-                this.invoker = invoker;
-                this.method = method;
+                _invoker = invoker;
+                Method = method;
             }
 
             /// <summary>
@@ -110,10 +110,10 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             public TDelegate As<TService, TDelegate>(TService service) where TDelegate : Delegate
             {
-                if (invoker == null)
+                if (_invoker == null)
                 {
                     // basic - direct call
-                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), null, method);
+                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), service, Method);
                 }
                 var finalSignature = typeof(TDelegate).GetMethod("Invoke")!;
 
@@ -122,7 +122,7 @@ namespace ProtoBuf.Grpc.Configuration
                 var lambdaParameters = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
                 mapArgs[0] = Expression.Constant(service, typeof(TService));
                 for (int i = 0; i < methodParameters.Length; i++) mapArgs[i + 1] = lambdaParameters[i];
-                var body = invoker?.Invoke(method, mapArgs);
+                var body = _invoker?.Invoke(Method, mapArgs);
                 var lambda = Expression.Lambda<TDelegate>(body, lambdaParameters);
 
                 return lambda.Compile();
@@ -133,16 +133,16 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             public TDelegate As<TDelegate>() where TDelegate : Delegate
             {
-                if (invoker == null)
+                if (_invoker == null)
                 {
                     // basic - direct call
-                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), null, method);
+                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), null, Method);
                 }
                 var finalSignature = typeof(TDelegate).GetMethod("Invoke")!;
 
                 var methodParameters = finalSignature.GetParameters();
                 var lambdaParameters = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
-                var body = invoker?.Invoke(method, lambdaParameters);
+                var body = _invoker?.Invoke(Method, lambdaParameters);
                 var lambda = Expression.Lambda<TDelegate>(body, lambdaParameters);
                 return lambda.Compile();
             }
