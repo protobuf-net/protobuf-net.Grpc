@@ -10,7 +10,7 @@ Usage is as simple as declaring an interface for your service-contract:
 [ServiceContract]
 public interface IMyAmazingService {
     ValueTask<SearchResponse> SearchAsync(SearchRequest request);
-	// ...
+    // ...
 }
 ```
 
@@ -18,7 +18,7 @@ then either implementing that interface for a server:
 
 ``` c#
 public class MyServer : IAmazingService {
-	// ...
+    // ...
 }
 ```
 
