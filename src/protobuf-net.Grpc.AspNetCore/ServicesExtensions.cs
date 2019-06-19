@@ -43,7 +43,7 @@ namespace ProtoBuf.Grpc.Server
             private Binder() { }
             public static readonly Binder Instance = new Binder();
 
-            protected override bool OnBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub stub, TService? service)
+            protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
                 where TRequest : class
                 where TResponse : class
@@ -58,16 +58,16 @@ namespace ProtoBuf.Grpc.Server
                 switch (method.Type)
                 {
                     case MethodType.Unary:
-                        context.AddUnaryMethod(method, metadata, stub.As<UnaryServerMethod<TService, TRequest, TResponse>>());
+                        context.AddUnaryMethod(method, metadata, stub.CreateDelegate<UnaryServerMethod<TService, TRequest, TResponse>>());
                         break;
                     case MethodType.ClientStreaming:
-                        context.AddClientStreamingMethod(method, metadata, stub.As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
+                        context.AddClientStreamingMethod(method, metadata, stub.CreateDelegate<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
                         break;
                     case MethodType.ServerStreaming:
-                        context.AddServerStreamingMethod(method, metadata, stub.As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
+                        context.AddServerStreamingMethod(method, metadata, stub.CreateDelegate<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
                         break;
                     case MethodType.DuplexStreaming:
-                        context.AddDuplexStreamingMethod(method, metadata, stub.As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
+                        context.AddDuplexStreamingMethod(method, metadata, stub.CreateDelegate<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
                         break;
                     default:
                         return false;

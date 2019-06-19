@@ -26,7 +26,7 @@ namespace ProtoBuf.Grpc.Server
             private Binder() { }
             public static readonly Binder Instance = new Binder();
 
-            protected override bool OnBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub stub, TService? service)
+            protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
                 where TRequest : class
                 where TResponse : class
@@ -35,16 +35,16 @@ namespace ProtoBuf.Grpc.Server
                 switch (method.Type)
                 {
                     case MethodType.Unary:
-                        builder.AddMethod(method, stub.As<TService, UnaryServerMethod<TRequest, TResponse>>(service!));
+                        builder.AddMethod(method, stub.CreateDelegate<UnaryServerMethod<TRequest, TResponse>>());
                         break;
                     case MethodType.ClientStreaming:
-                        builder.AddMethod(method, stub.As<TService, ClientStreamingServerMethod<TRequest, TResponse>>(service!));
+                        builder.AddMethod(method, stub.CreateDelegate<ClientStreamingServerMethod<TRequest, TResponse>>());
                         break;
                     case MethodType.ServerStreaming:
-                        builder.AddMethod(method, stub.As<TService, ServerStreamingServerMethod<TRequest, TResponse>>(service!));
+                        builder.AddMethod(method, stub.CreateDelegate<ServerStreamingServerMethod<TRequest, TResponse>>());
                         break;
                     case MethodType.DuplexStreaming:
-                        builder.AddMethod(method, stub.As<TService, DuplexStreamingServerMethod<TRequest, TResponse>>(service!));
+                        builder.AddMethod(method, stub.CreateDelegate<DuplexStreamingServerMethod<TRequest, TResponse>>());
                         break;
                     default:
                         return false;

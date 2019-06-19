@@ -97,8 +97,10 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Provides utilities associated with the method being considered
         /// </summary>
-        protected readonly struct MethodStub
+        protected readonly struct MethodStub<TService>
+            where TService : class
         {
+            private readonly TService? _service;
             private readonly Func<MethodInfo, Expression[], Expression>? _invoker;
 
             /// <summary>
@@ -106,53 +108,45 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             public MethodInfo Method { get; }
 
-            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method)
+            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method, TService? service)
             {
                 _invoker = invoker;
+                _service = service;
                 Method = method;
             }
 
             /// <summary>
             /// Create a delegate that will invoke this method against a constant instance of the service
             /// </summary>
-            public TDelegate As<TService, TDelegate>(TService service)
+            public TDelegate CreateDelegate<TDelegate>()
                 where TDelegate : Delegate
-                where TService : class
             {
                 if (_invoker == null)
                 {
                     // basic - direct call
-                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), service, Method);
+                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
                 }
                 var finalSignature = typeof(TDelegate).GetMethod("Invoke")!;
-
                 var methodParameters = finalSignature.GetParameters();
-                Expression[] mapArgs = new Expression[methodParameters.Length + 1];
-                var lambdaParameters = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
-                mapArgs[0] = Expression.Constant(service, typeof(TService));
-                for (int i = 0; i < methodParameters.Length; i++) mapArgs[i + 1] = lambdaParameters[i];
-                var body = _invoker?.Invoke(Method, mapArgs);
-                var lambda = Expression.Lambda<TDelegate>(body, lambdaParameters);
+                var lambdaArgs = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
 
-                return lambda.Compile();
-            }
-
-            /// <summary>
-            /// Create a delegate that will invoke this method against an instance of the service that is provided as the first argument
-            /// </summary>
-            public TDelegate As<TDelegate>() where TDelegate : Delegate
-            {
-                if (_invoker == null)
+                Expression[] mapArgs;
+                if (_service == null)
+                {   // if no service object, then the service is part of the signature, i.e. (svc, req) => svc.Blah();
+                    mapArgs = lambdaArgs;
+                }
+                else
                 {
-                    // basic - direct call
-                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), null, Method);
+                    // if there *is* a service object, then that is *not* part of the signature, i.e. (req) => svc.Blah(req)
+                    // where the svc instance comes in separately
+                    mapArgs = new Expression[lambdaArgs.Length + 1];
+                    mapArgs[0] = Expression.Constant(_service, typeof(TService));
+                    for (int i = 0; i < methodParameters.Length; i++) mapArgs[i + 1] = lambdaArgs[i];
                 }
-                var finalSignature = typeof(TDelegate).GetMethod("Invoke")!;
+                
+                var body = _invoker.Invoke(Method, mapArgs);
+                var lambda = Expression.Lambda<TDelegate>(body, lambdaArgs);
 
-                var methodParameters = finalSignature.GetParameters();
-                var lambdaParameters = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
-                var body = _invoker?.Invoke(Method, lambdaParameters);
-                var lambda = Expression.Lambda<TDelegate>(body, lambdaParameters);
                 return lambda.Compile();
             }
         }
@@ -166,15 +160,15 @@ namespace ProtoBuf.Grpc.Configuration
             where TResponse : class
         {
             var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerFactory.GetMarshaller<TRequest>(), marshallerFactory.GetMarshaller<TResponse>());
-            var stub = new MethodStub(invoker, method);
-            return OnBind<TService, TRequest, TResponse>(state, grpcMethod, stub, service);
+            var stub = new MethodStub<TService>(invoker, method, service);
+            return TryBind<TService, TRequest, TResponse>(state, grpcMethod, stub);
 
         }
 
         /// <summary>
         /// The implementing binder should bind the method to the bind-state
         /// </summary>
-        protected abstract bool OnBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub stub, TService? service)
+        protected abstract bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
             where TService : class
             where TRequest : class
             where TResponse : class;
