@@ -2,9 +2,12 @@
 
 `protobuf-net.Grpc` adds code-first support for services over gRPC using either the native `Grpc.Core` API, or the fully-managed `Grpc.Net.Client` / `Grpc.AspNetCore.Server` API.
 
+It should work on all .NET languages that can generate something *even remotely like* a regular .NET type model; [examples are available in C#, VB and F#](https://github.com/mgravell/protobuf-net.Grpc/tree/master/examples/pb-net-grpc).
+
 Usage is as simple as declaring an interface for your service-contract:
 
 ``` c#
+[ServiceContract]
 public interface IMyAmazingService {
     ValueTask<SearchResponse> SearchAsync(SearchRequest request);
 	// ...
@@ -14,7 +17,6 @@ public interface IMyAmazingService {
 then either implementing that interface for a server:
 
 ``` c#
-[ServiceContract]
 public class MyServer : IAmazingService {...}
 ```
 
