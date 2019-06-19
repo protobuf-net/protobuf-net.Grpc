@@ -32,12 +32,12 @@ namespace ProtoBuf.Grpc.Server
                 _binderConfiguration = binderConfiguration;
                 _logger = loggerFactory.CreateLogger<Binder<TService>>();
             }
-            public void OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
+            void IServiceMethodProvider<TService>.OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
                 => Bind<TService>(context, _binderConfiguration);
 
-            protected override void OnServiceBound(string serviceName, Type serviceContract, int operationCount)
+            protected override void OnServiceBound(object state, string serviceName, Type serviceContract, int operationCount)
             {
-                base.OnServiceBound(serviceName, serviceContract, operationCount);
+                base.OnServiceBound(state, serviceName, serviceContract, operationCount);
                 if (operationCount != 0) _logger.Log(LogLevel.Information, "{0} implementing service {1} (via '{2}') with {3} operation(s)",
                     typeof(TService), serviceName, serviceContract.Name, operationCount);
             }

@@ -52,7 +52,7 @@ namespace ProtoBuf.Grpc.Configuration
                         svcOpCount++;
                     }
                 }
-                OnServiceBound(serviceName, serviceContract, svcOpCount);
+                OnServiceBound(state, serviceName, serviceContract, svcOpCount);
             }
             return totalCount;
 
@@ -89,7 +89,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Reports the number of operations available for a service
         /// </summary>
-        protected virtual void OnServiceBound(string serviceName, Type serviceContract, int operationCount) { }
+        protected virtual void OnServiceBound(object state, string serviceName, Type serviceContract, int operationCount) { }
 
         private static readonly MethodInfo s_addMethod = typeof(ServerBinder).GetMethod(
             nameof(AddMethod), BindingFlags.Instance | BindingFlags.NonPublic)!;
