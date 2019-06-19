@@ -18,7 +18,7 @@ it, and b: specify the name.
 
 ## 2 Operation Contracts
 
-By default, the library considers all methods it can feasibly handle (optionally using `[OperationContract]` to for the name). If you want to change this,
+By default, the library considers all methods it can feasibly handle (optionally using `[OperationContract]` for the name). If you want to change this,
 again implement a custom `ServiceBinder`, and override the `IsOperationContract` method; this lets you a: decide whether to include
 it, and b: specify the name.
 
