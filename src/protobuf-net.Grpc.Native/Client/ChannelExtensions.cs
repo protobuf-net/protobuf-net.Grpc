@@ -13,6 +13,6 @@ namespace ProtoBuf.Grpc.Client
         /// </summary>
         public static TService CreateGrpcService<TService>(this Channel client, ClientFactory? clientFactory = null)
             where TService : class
-                    => (clientFactory ?? ClientFactory.Default).CreateClient<ClientBase, TService, Channel>(client);
+                    => (clientFactory ?? ClientFactory.Default).CreateClient<TService>(new DefaultCallInvoker(client));
     }
 }

@@ -1,10 +1,8 @@
-﻿using Grpc.Core;
-using Grpc.Net.Client;
+﻿using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
-using ProtoBuf.Grpc.Internal;
+using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Net.Http;
-using ProtoBuf.Grpc.Configuration;
 
 namespace ProtoBuf.Grpc.Client
 {
@@ -28,8 +26,6 @@ namespace ProtoBuf.Grpc.Client
         /// </summary>
         public static TService CreateGrpcService<TService>(this HttpClient client, ILoggerFactory? logger = null, ClientFactory? clientFactory = null)
             where TService : class
-#pragma warning disable CS0618
-            => (clientFactory ?? ClientFactory.Default).CreateClient<SimpleClientBase, TService, CallInvoker>(new HttpClientCallInvoker(client, logger));
-#pragma warning restore CS0618
+            => (clientFactory ?? ClientFactory.Default).CreateClient<TService>(new HttpClientCallInvoker(client, logger));
     }
 }

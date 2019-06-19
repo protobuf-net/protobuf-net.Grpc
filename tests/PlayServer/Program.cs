@@ -15,10 +15,10 @@ namespace PlayServer
             {
                 Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
             };
-            server.Services.AddCodeFirst(new MyServer());
+            int opCount = server.Services.AddCodeFirst(new MyServer());
             server.Start();
 
-            Console.WriteLine("server listening on port " + port);
+            Console.WriteLine($"server listening to {opCount} operations on port {port}");
             Console.ReadKey();
 
             await server.ShutdownAsync();

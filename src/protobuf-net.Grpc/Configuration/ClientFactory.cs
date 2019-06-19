@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using ProtoBuf.Grpc.Configuration;
+using Grpc.Core;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -21,6 +22,14 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static ClientFactory Create(BinderConfiguration? binderConfiguration = null)
             => (binderConfiguration == null || binderConfiguration == BinderConfiguration.Default) ? Default : new ConfiguredClientFactory(binderConfiguration);
+
+        /// <summary>
+        /// Create a service-client backed by a CallInvoker
+        /// </summary>
+        public TService CreateClient<TService>(CallInvoker channel) where TService : class
+#pragma warning disable CS0618 // SimpleClientBase
+            => CreateClient<SimpleClientBase, TService, CallInvoker>(channel);
+#pragma warning restore CS0618
 
         internal abstract TService CreateClient<TBase, TService, TChannel>(TChannel channel) where TService : class;
 

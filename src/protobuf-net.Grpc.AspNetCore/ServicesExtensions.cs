@@ -23,141 +23,63 @@ namespace ProtoBuf.Grpc.Server
         public static void AddCodeFirstGrpc(this IServiceCollection services)
         {
             services.AddGrpc();
-            services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
+            services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(Binder<>)));
         }
 
-        private sealed class CodeFirstServiceMethodProvider<TService> : IServiceMethodProvider<TService> where TService : class
+        private sealed class Binder<TService> : ServerBinder, IServiceMethodProvider<TService> where TService : class
         {
-            private readonly ILogger<CodeFirstServiceMethodProvider<TService>> _logger;
-            private readonly BinderConfiguration _binderConfiguration;
-            public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory, BinderConfiguration? binderConfiguration = null)
+            private readonly ILogger<Binder<TService>> _logger;
+            private readonly BinderConfiguration? _binderConfiguration;
+            public Binder(ILoggerFactory loggerFactory, BinderConfiguration? binderConfiguration = null)
             {
-                _binderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
-                _logger = loggerFactory.CreateLogger<CodeFirstServiceMethodProvider<TService>>();
+                _binderConfiguration = binderConfiguration;
+                _logger = loggerFactory.CreateLogger<Binder<TService>>();
             }
             public void OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
             {
-                // ignore any services that are known to be the default handler
-                if (Attribute.IsDefined(typeof(TService), typeof(BindServiceMethodAttribute))) return;
-
-                // we support methods that match suitable signatures, where the method is on an
-                // interface that TService implements, and the interface is marked [ServiceContract]
-                foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
-                {
-                    AddMethodsForService(context, iType);
-                }
+                Bind(context, typeof(TService), _binderConfiguration);
             }
 
-            
-            private void AddMethodsForService(ServiceMethodProviderContext<TService> context, Type serviceContract)
+            protected override void OnServiceBound(string serviceName, Type serviceContract, int operationCount)
             {
-                if (!_binderConfiguration.Binder.IsServiceContract(serviceContract, out var serviceName)) return;
-                _logger.Log(LogLevel.Trace, "pb-net processing {0}/{1} as {2}", typeof(TService).Name, serviceContract.Name, serviceName);
-                object?[]? argsBuffer = null;
-                Type[] typesBuffer = Array.Empty<Type>();
+                base.OnServiceBound(serviceName, serviceContract, operationCount);
+                if (operationCount != 0) _logger.Log(LogLevel.Information, "{0} implementing service {1} (via '{2}') with {3} operation(s)",
+                    typeof(TService), serviceName, serviceContract.Name, operationCount);
+            }
 
-                int count = 0;
-                foreach (var op in ContractOperation.FindOperations(_binderConfiguration, serviceContract))
+#pragma warning disable CS0693 // in reality this will always be the same as the outer TService, so: suppress
+            protected override bool OnBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub stub, TService? service)
+#pragma warning restore CS0693
+                where TService : class
+                where TRequest : class
+                where TResponse : class
+            {
+                var metadata = new List<object>();
+                // Add type metadata first so it has a lower priority
+                metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
+                // Add method metadata last so it has a higher priority
+                metadata.AddRange(stub.Method.GetCustomAttributes(inherit: true));
+                
+                var context = (ServiceMethodProviderContext<TService>)state;
+                switch (method.Type)
                 {
-                    if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
-                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
-                    {
-                        // yay!
-                        count++;
-                    }
-                    else
-                    {
-                        _logger.Log(LogLevel.Warning, "operation cannot be hosted as a server: {0}", op);
-                    }
-                }
-                if (count != 0) _logger.Log(LogLevel.Information, "{0} implementing service {1} (via '{2}') with {3} operation(s)", typeof(TService), serviceName, serviceContract.Name, count);
-
-                bool AddMethod(Type @in, Type @out, string on, MethodInfo m, MethodType t, Func<MethodInfo, ParameterExpression[], Expression>? invoker)
-                {
-                    try
-                    {
-                        if (typesBuffer.Length == 0)
-                        {
-                            typesBuffer = new Type[] { typeof(TService), typeof(void), typeof(void) };
-                        }
-                        typesBuffer[1] = @in;
-                        typesBuffer[2] = @out;
-
-                        if (argsBuffer == null)
-                        {
-                            argsBuffer = new object?[] { serviceName, null, null, null, context, _logger, null, _binderConfiguration.MarshallerFactory };
-                        }
-                        argsBuffer[1] = on;
-                        argsBuffer[2] = m;
-                        argsBuffer[3] = t;
-                        argsBuffer[6] = invoker;
-
-                        s_addMethod.MakeGenericMethod(typesBuffer).Invoke(null, argsBuffer);
-                        return true;
-                    }
-                    catch (Exception fail)
-                    {
-                        if (fail is TargetInvocationException tie) fail = tie.InnerException!;
-                        _logger.Log(LogLevel.Error, "Failure processing {0}: {1}", m.Name, fail.Message);
+                    case MethodType.Unary:
+                        context.AddUnaryMethod(method, metadata, stub.As<UnaryServerMethod<TService, TRequest, TResponse>>());
+                        break;
+                    case MethodType.ClientStreaming:
+                        context.AddClientStreamingMethod(method, metadata, stub.As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
+                        break;
+                    case MethodType.ServerStreaming:
+                        context.AddServerStreamingMethod(method, metadata, stub.As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
+                        break;
+                    case MethodType.DuplexStreaming:
+                        context.AddDuplexStreamingMethod(method, metadata, stub.As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
+                        break;
+                    default:
                         return false;
-                    }
                 }
+                return true;
             }
         }
-
-        private static readonly MethodInfo s_addMethod = typeof(ServicesExtensions).GetMethod(
-           nameof(AddMethod), BindingFlags.Static | BindingFlags.NonPublic)!;
-
-        private static void AddMethod<TService, TRequest, TResponse>(
-            string serviceName, string operationName, MethodInfo method, MethodType methodType,
-            ServiceMethodProviderContext<TService> context, ILogger logger,
-            Func<MethodInfo, ParameterExpression[], Expression>? invoker, MarshallerFactory marshallerFactory)
-            where TService : class
-            where TRequest : class
-            where TResponse : class
-        {
-            var metadata = new List<object>();
-            // Add type metadata first so it has a lower priority
-            metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
-            // Add method metadata last so it has a higher priority
-            metadata.AddRange(method.GetCustomAttributes(inherit: true));
-
-            TDelegate As<TDelegate>() where TDelegate : Delegate
-            {
-                if (invoker == null)
-                {
-                    // basic - direct call
-                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), null, method);
-                }
-                var finalSignature = typeof(TDelegate).GetMethod("Invoke")!;
-
-                var methodParameters = finalSignature.GetParameters();
-                var lambdaParameters = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
-                var body = invoker?.Invoke(method, lambdaParameters);
-                var lambda = Expression.Lambda<TDelegate>(body, lambdaParameters);
-                logger.Log(LogLevel.Trace, "mapped {0} via {1}", operationName, lambda);
-                return lambda.Compile();
-            }
-
-            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerFactory.GetMarshaller<TRequest>(), marshallerFactory.GetMarshaller<TResponse>());
-            switch (methodType)
-            {
-                case MethodType.Unary:
-                    context.AddUnaryMethod(grpcMethod, metadata, As<UnaryServerMethod<TService, TRequest, TResponse>>());
-                    break;
-                case MethodType.ClientStreaming:
-                    context.AddClientStreamingMethod(grpcMethod, metadata, As<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
-                    break;
-                case MethodType.ServerStreaming:
-                    context.AddServerStreamingMethod(grpcMethod, metadata, As<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
-                    break;
-                case MethodType.DuplexStreaming:
-                    context.AddDuplexStreamingMethod(grpcMethod, metadata, As<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
-                    break;
-                default:
-                    throw new NotSupportedException(methodType.ToString());
-            }
-        }
-
     }
 }
