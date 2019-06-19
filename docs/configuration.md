@@ -53,7 +53,8 @@ on your methods for this purpose, i.e.
 ``` c#
 [ServiceContract]
 public interface IMyAmazingService {
-    ValueTask<SearchResponse> SearchAsync(SearchRequest request, CallContext context = default);
+    ValueTask<SearchResponse> SearchAsync(
+	    SearchRequest request, CallContext context = default);
     // ...
 }
 ```
@@ -62,7 +63,10 @@ The client can now provide this additional detail by passing in a `CallContext` 
 convertible from `CallOptions`, so you don't need to do the intermediate step:
 
 ``` c#
+// create a client
 var client = http.CreateGrpcService<IMyAmazingService>();
-var options = new CallOptions(...); // your gRPC options here including auth if needed
+// specify your gRPC options here including auth if needed
+var options = new CallOptions(...);
+// invoke the RPC call
 var result = await client.SearchAsync(request, options);
 ```
