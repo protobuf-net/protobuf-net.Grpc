@@ -14,6 +14,7 @@ public interface IMyAmazingService {
 then either implementing that interface for a server:
 
 ``` c#
+[ServiceContract]
 public class MyServer : IAmazingService {...}
 ```
 
@@ -23,7 +24,8 @@ or asking the system for a client:
 var client = http.CreateGrpcService<IAmazingService>();
 ```
 
-Obviously you need to tell it the uri etc - see [Getting Started](https://mgravell.github.io/protobuf-net.Grpc/gettingstarted)
+Obviously you need to tell it the uri etc - see [Getting Started](https://mgravell.github.io/protobuf-net.Grpc/gettingstarted). Usually the configuration is convention-based, but
+if you prefer: there are [various configuration options](https://mgravell.github.io/protobuf-net.Grpc/configuration).
 
 ## Getting hold of it
 

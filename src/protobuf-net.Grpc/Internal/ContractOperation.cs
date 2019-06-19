@@ -36,9 +36,6 @@ namespace ProtoBuf.Grpc.Internal
             Void = @void;
         }
 
-        public static bool TryIdentifySignature(MethodInfo method, ServiceBinder binder, out ContractOperation operation)
-            => TryGetPattern(method, binder, out operation);
-
         internal enum TypeCategory
         {
             None,
@@ -132,7 +129,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static int GeneralPurposeSignatureCount() => s_signaturePatterns.Values.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext);
 
-        static TypeCategory GetCategory(Type type)
+        static TypeCategory GetCategory(MarshallerFactory factory, Type type)
         {
             if (type == null) return TypeCategory.None;
             if (type == typeof(void)) return TypeCategory.Void;
@@ -157,36 +154,36 @@ namespace ProtoBuf.Grpc.Internal
             }
 
             if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
-            // otherwise, assume data
-            return TypeCategory.Data;
+
+            return factory.CanSerializeType(type) ? TypeCategory.Data : TypeCategory.None;
         }
 
-        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MethodInfo method)
-            => GetSignature(method.GetParameters(), method.ReturnType);
+        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerFactory factory, MethodInfo method)
+            => GetSignature(factory, method.GetParameters(), method.ReturnType);
 
-        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(ParameterInfo[] args, Type returnType)
+        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerFactory factory, ParameterInfo[] args, Type returnType)
         {
             (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
-            if (args.Length >= 1) signature.Arg0 = GetCategory(args[0].ParameterType);
-            if (args.Length >= 2) signature.Arg1 = GetCategory(args[1].ParameterType);
-            if (args.Length >= 3) signature.Arg2 = GetCategory(args[2].ParameterType);
-            signature.Ret = GetCategory(returnType);
+            if (args.Length >= 1) signature.Arg0 = GetCategory(factory, args[0].ParameterType);
+            if (args.Length >= 2) signature.Arg1 = GetCategory(factory, args[1].ParameterType);
+            if (args.Length >= 3) signature.Arg2 = GetCategory(factory, args[2].ParameterType);
+            signature.Ret = GetCategory(factory, returnType);
             return signature;
         }
-        private static bool TryGetPattern(MethodInfo method, ServiceBinder binder, out ContractOperation operation)
+        internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation)
         {
             operation = default;
 
             if (method.IsGenericMethodDefinition) return false; // can't work with <T> methods
 
             if ((method.Attributes & (MethodAttributes.SpecialName)) != 0) return false; // some kind of accessor etc
-
-            if (!binder.IsOperationContract(method, out var opName)) return false;
+            
+            if (!binderConfig.Binder.IsOperationContract(method, out var opName)) return false;
 
             var args = method.GetParameters();
             if (args.Length > 3) return false; // too many parameters
 
-            var signature = GetSignature(args, method.ReturnType);
+            var signature = GetSignature(binderConfig.MarshallerFactory, args, method.ReturnType);
 
             if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
 
@@ -238,13 +235,13 @@ namespace ProtoBuf.Grpc.Internal
             operation = new ContractOperation(opName, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
         }
-        public static List<ContractOperation> FindOperations(ServiceBinder binder, Type contractType)
+        public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType)
         {
             var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             var ops = new List<ContractOperation>(all.Length);
             foreach (var method in all)
             {
-                if (TryGetPattern(method, binder, out var op))
+                if (TryIdentifySignature(method, binderConfig, out var op))
                     ops.Add(op);
             }
             return ops;

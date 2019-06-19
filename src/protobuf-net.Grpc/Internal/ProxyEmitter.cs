@@ -92,7 +92,7 @@ namespace ProtoBuf.Grpc.Internal
         static int _typeIndex;
         private static readonly MethodInfo s_marshallerFactoryGenericMethodDef
             = typeof(MarshallerFactory).GetMethod(nameof(MarshallerFactory.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
-        internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binder)
+        internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binderConfig)
            where TService : class
         {
             if (baseType == null) throw new ArgumentNullException(nameof(baseType));
@@ -122,7 +122,7 @@ namespace ProtoBuf.Grpc.Internal
                     var toString = type.DefineMethod(nameof(ToString), baseToString.Attributes, baseToString.CallingConvention,
                     typeof(string), Type.EmptyTypes);
                     var il = toString.GetILGenerator();
-                    if (!binder.Binder.IsServiceContract(typeof(TService), out var primaryServiceName)) primaryServiceName = typeof(TService).Name;
+                    if (!binderConfig.Binder.IsServiceContract(typeof(TService), out var primaryServiceName)) primaryServiceName = typeof(TService).Name;
                     il.Emit(OpCodes.Ldstr, primaryServiceName + " / " + typeof(TChannel).Name);
                     il.Emit(OpCodes.Ret);
                     type.DefineMethodOverride(toString, baseToString);
@@ -131,7 +131,7 @@ namespace ProtoBuf.Grpc.Internal
                 const string InitMethodName = "Init";
                 var cctor = type.DefineMethod(InitMethodName, MethodAttributes.Static | MethodAttributes.Public).GetILGenerator();
 
-                var ops = ContractOperation.FindOperations(binder.Binder, typeof(TService));
+                var ops = ContractOperation.FindOperations(binderConfig, typeof(TService));
 
                 int marshallerIndex = 0;
                 Dictionary<Type, (FieldBuilder Field, string Name, object Instance)> marshallers = new Dictionary<Type, (FieldBuilder, string, object)>();
@@ -139,7 +139,7 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     if (marshallers.TryGetValue(forType, out var val)) return val.Field;
 
-                    var instance = s_marshallerFactoryGenericMethodDef.MakeGenericMethod(forType).Invoke(binder.MarshallerFactory, Array.Empty<object>())!;
+                    var instance = s_marshallerFactoryGenericMethodDef.MakeGenericMethod(forType).Invoke(binderConfig.MarshallerFactory, Array.Empty<object>())!;
                     var name = "_m" + marshallerIndex++;
                     var field = type.DefineField(name, typeof(Marshaller<>).MakeGenericType(forType), FieldAttributes.Static | FieldAttributes.Private); // **not** readonly, we need to set it afterwards!
                     marshallers.Add(forType, (field, name, instance));
@@ -150,7 +150,7 @@ namespace ProtoBuf.Grpc.Internal
                 int fieldIndex = 0;
                 foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
                 {
-                    bool isService = binder.Binder.IsServiceContract(iType, out var serviceName);
+                    bool isService = binderConfig.Binder.IsServiceContract(iType, out var serviceName);
 
                     // : TService
                     type.AddInterfaceImplementation(iType);
@@ -166,7 +166,7 @@ namespace ProtoBuf.Grpc.Internal
                         type.DefineMethodOverride(impl, iMethod);
 
                         var il = impl.GetILGenerator();
-                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binder.Binder, out var op)))
+                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op)))
                         {
                             il.ThrowException(typeof(NotSupportedException));
                             continue;

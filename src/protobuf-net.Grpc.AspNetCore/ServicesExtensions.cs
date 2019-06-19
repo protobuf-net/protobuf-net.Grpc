@@ -50,14 +50,13 @@ namespace ProtoBuf.Grpc.Server
             
             private void AddMethodsForService(ServiceMethodProviderContext<TService> context, Type serviceContract)
             {
-                var binder = _binderConfiguration.Binder;
-                if (!binder.IsServiceContract(serviceContract, out var serviceName)) return;
+                if (!_binderConfiguration.Binder.IsServiceContract(serviceContract, out var serviceName)) return;
                 _logger.Log(LogLevel.Trace, "pb-net processing {0}/{1} as {2}", typeof(TService).Name, serviceContract.Name, serviceName);
                 object?[]? argsBuffer = null;
                 Type[] typesBuffer = Array.Empty<Type>();
 
                 int count = 0;
-                foreach (var op in ContractOperation.FindOperations(binder, serviceContract))
+                foreach (var op in ContractOperation.FindOperations(_binderConfiguration, serviceContract))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
                         && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))

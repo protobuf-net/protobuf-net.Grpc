@@ -45,6 +45,8 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected abstract bool CanSerialize(Type type);
 
+        internal bool CanSerializeType(Type type) => CanSerialize(type);
+
         private readonly ConcurrentDictionary<Type, object> _marshallers = new ConcurrentDictionary<Type, object>
         {
 #pragma warning disable CS0618 // Empty

@@ -10,6 +10,9 @@ namespace ProtoBuf.Grpc.Configuration
     public class ProtoBufMarshallerFactory : MarshallerFactory
     {
         private readonly RuntimeTypeModel _model;
+        /// <summary>
+        /// Create a new factory using a specific protobuf-net model
+        /// </summary>
         public static MarshallerFactory Create(RuntimeTypeModel model)
         {
             if (model == null || model == RuntimeTypeModel.Default) return Default;
@@ -21,9 +24,15 @@ namespace ProtoBuf.Grpc.Configuration
             _model = model;
         }
 
+        /// <summary>
+        /// Indicates whether a type should be considered as a serializable data type
+        /// </summary>
         protected override bool CanSerialize(Type type)
-            => _model.CanSerialize(type);
+            => _model.CanSerializeContractType(type);
 
+        /// <summary>
+        /// Deserializes an object from a payload
+        /// </summary>
         protected override T Deserialize<T>(byte[] payload)
         {
 #if PLAT_NOSPAN
@@ -39,7 +48,9 @@ namespace ProtoBuf.Grpc.Configuration
             }
 #endif
         }
-
+        /// <summary>
+        /// Serializes an object to a payload
+        /// </summary>
         protected override byte[] Serialize<T>(T value)
         {
             using (var ms = new MemoryStream())

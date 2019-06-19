@@ -24,12 +24,11 @@ namespace ProtoBuf.Grpc.Server
             Type[] typesBuffer = Array.Empty<Type>();
             string? serviceName;
             if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
-            var binderObj = binderConfiguration.Binder;
             foreach (var serviceContract in ContractOperation.ExpandInterfaces(typeof(TService)))
             {
-                if (!binderObj.IsServiceContract(serviceContract, out serviceName)) continue;
+                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
 
-                foreach (var op in ContractOperation.FindOperations(binderObj, serviceContract))
+                foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
                         && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
