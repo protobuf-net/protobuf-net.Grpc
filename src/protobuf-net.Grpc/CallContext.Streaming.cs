@@ -113,9 +113,26 @@ namespace ProtoBuf.Grpc
         }
 
         /// <summary>
+        /// Performs an aggregate operation against each element in the inbound stream
+        /// </summary>
+        public async Task<TValue> ClientStreamingAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
+            Func<TValue, TRequest, CallContext, ValueTask<TValue>> aggregate, TValue seed)
+        {
+            await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    seed = await aggregate(seed, iter.Current, this);
+                }
+            }
+            return seed;
+        }
+
+        /// <summary>
         /// Performs an operation against each element in the inbound stream
         /// </summary>
-        public async Task ClientStreamingAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, TRequest, CallContext, ValueTask> consumer)
+        public async Task ClientStreamingAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source,
+            Func<TServer, TRequest, CallContext, ValueTask> consumer)
         {
             await using (var iter = source.GetAsyncEnumerator(CancellationToken))
             {
@@ -124,6 +141,22 @@ namespace ProtoBuf.Grpc
                     await consumer(server, iter.Current, this);
                 }
             }
+        }
+
+        /// <summary>
+        /// Performs an aggregate operation against each element in the inbound stream
+        /// </summary>
+        public async Task<TValue> ClientStreamingAsync<TServer, TRequest, TValue>(TServer server, IAsyncEnumerable<TRequest> source,
+            Func<TServer, TValue, TRequest, CallContext, ValueTask<TValue>> aggregate, TValue seed)
+        {
+            await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    await aggregate(server, seed, iter.Current, this);
+                }
+            }
+            return seed;
         }
 
         private async IAsyncEnumerable<TResponse> FullDuplexImpl<TResponse>(
