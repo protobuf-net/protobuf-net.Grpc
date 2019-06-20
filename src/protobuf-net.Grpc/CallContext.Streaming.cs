@@ -80,25 +80,52 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<T, CallContext, ValueTask> consumer)
         {
-            var context = this;
-            var consumed = Task.Run(async () => {// note this shares a capture scope
-                await using (var cIter = source.GetAsyncEnumerator(context.CancellationToken))
-                {
-                    while (await cIter.MoveNextAsync())
-                    {
-                        await consumer(cIter.Current, context);
-                    }
-                }
-            }, context.CancellationToken);
-            var produced = producer(context);
-            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-            return Awaited(produced, consumed);
+            return Impl(this, producer, source, consumer);
 
-            static async ValueTask Awaited(ValueTask produced, Task consumed)
+            static ValueTask Impl( // mostly this makes sure I haven't screwed up the capture-flow
+                CallContext context,
+                Func<CallContext, ValueTask> producer,
+                IAsyncEnumerable<T> source,
+                Func<T, CallContext, ValueTask> consumer)
             {
-                await consumed;
+                var consumed = Task.Run(async () =>
+                {   // note this shares a capture scope
+                    await using (var cIter = source.GetAsyncEnumerator(context.CancellationToken))
+                    {
+                        while (await cIter.MoveNextAsync())
+                        {
+                            await consumer(cIter.Current, context);
+                        }
+                    }
+                }, context.CancellationToken);
+                var produced = producer(context);
+                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+                return BothAsync(produced, consumed);
+            }
+        }
+
+        private static async ValueTask BothAsync(ValueTask produced, Task consumed)
+        {
+            try
+            {
                 await produced;
             }
+            catch (Exception producerEx)
+            {
+                try
+                {
+                    await consumed; // make sure we try and await both
+                }
+                catch (Exception consumerEx)
+                {
+                    // so they *both* failed; talk about embarrassing!
+                    throw new AggregateException(producerEx, consumerEx);
+                }
+                throw; // re-throw the exception from the producer
+            }
+            // producer completed cleanly; we can just await the
+            // consumer - if it throws, it throws
+            await consumed;
         }
 
         /// <summary>
@@ -109,16 +136,17 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
         {
-            var context = this;
-            var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
-            var produced = producer(context);
-            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-            return Awaited(produced, consumed);
-
-            static async ValueTask Awaited(ValueTask produced, Task consumed)
+            return Impl(this, producer, source, consumer);
+            static ValueTask Impl( // mostly this makes sure I haven't screwed up the capture-flow
+                CallContext context,
+                Func<CallContext, ValueTask> producer,
+                IAsyncEnumerable<T> source,
+                Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
             {
-                await consumed;
-                await produced;
+                var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
+                var produced = producer(context);
+                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+                return BothAsync(produced, consumed);
             }
         }
 
