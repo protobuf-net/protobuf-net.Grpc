@@ -52,7 +52,7 @@ namespace ProtoBuf.Grpc.Configuration
                         svcOpCount++;
                     }
                 }
-                OnServiceBound(state, serviceName, serviceContract, svcOpCount);
+                OnServiceBound(state, serviceName, serviceType, serviceContract, svcOpCount);
             }
             return totalCount;
 
@@ -69,8 +69,9 @@ namespace ProtoBuf.Grpc.Configuration
 
                     if (argsBuffer == null)
                     {
-                        argsBuffer = new object?[] { serviceName, null, null, null, state, null, binderConfiguration!.MarshallerFactory, service };
+                        argsBuffer = new object?[] { null, null, null, null, state, null, binderConfiguration!.MarshallerFactory, service };
                     }
+                    argsBuffer[0] = serviceName;
                     argsBuffer[1] = on;
                     argsBuffer[2] = m;
                     argsBuffer[3] = t;
@@ -89,7 +90,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Reports the number of operations available for a service
         /// </summary>
-        protected virtual void OnServiceBound(object state, string serviceName, Type serviceContract, int operationCount) { }
+        protected virtual void OnServiceBound(object state, string serviceName, Type serviceType, Type serviceContract, int operationCount) { }
 
         private static readonly MethodInfo s_addMethod = typeof(ServerBinder).GetMethod(
             nameof(AddMethod), BindingFlags.Instance | BindingFlags.NonPublic)!;

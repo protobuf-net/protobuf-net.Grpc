@@ -1,4 +1,6 @@
-﻿using System.Runtime.Serialization;
+﻿using ProtoBuf.Grpc;
+using System.Collections.Generic;
+using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.Threading.Tasks;
 namespace Shared_CS
@@ -30,5 +32,11 @@ namespace Shared_CS
 
         [DataMember(Order = 1)]
         public int Result { get; set; }
+    }
+
+    [ServiceContract]
+    public interface IDuplex
+    {
+        IAsyncEnumerable<MultiplyResult> FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);
     }
 }

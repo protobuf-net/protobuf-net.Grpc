@@ -1,5 +1,7 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
+using System;
+using System.IO;
 using static Grpc.Core.Server;
 
 namespace ProtoBuf.Grpc.Server
@@ -12,20 +14,29 @@ namespace ProtoBuf.Grpc.Server
         /// <summary>
         /// Adds a code-first service to the available services
         /// </summary>
-        public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service, BinderConfiguration? binderConfiguration = null)
+        public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service,
+            BinderConfiguration? binderConfiguration = null,
+            TextWriter? log = null)
             where TService : class
         {
             var builder = ServerServiceDefinition.CreateBuilder();
-            int count = Binder.Instance.Bind<TService>(builder, binderConfiguration, service);
+            int count = Binder.Create(log).Bind<TService>(builder, binderConfiguration, service);
             services.Add(builder.Build());
             return count;
         }
 
         private class Binder : ServerBinder
         {
-            private Binder() { }
-            public static readonly Binder Instance = new Binder();
+            private readonly TextWriter? _log;
+            private Binder(TextWriter? log) => _log = log;
+            private static readonly Binder _default = new Binder(null);
+            public static Binder Create(TextWriter? log) => log == null ? _default : new Binder(log);
 
+            protected override void OnServiceBound(object state, string serviceName, Type serviceType, Type serviceContract, int operationCount)
+            {
+                base.OnServiceBound(state, serviceName, serviceType, serviceContract, operationCount);
+                _log?.WriteLine($"{serviceName} bound to {serviceType.Name} : {serviceContract.Name} with {operationCount} operation(s)");
+            }
             protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
                 where TRequest : class
@@ -49,6 +60,7 @@ namespace ProtoBuf.Grpc.Server
                     default:
                         return false;
                 }
+                _log?.WriteLine($"{method.ServiceName} / {method.Name} ({method.Type}) bound to {stub.Method.DeclaringType.Name}.{stub.Method.Name}");
                 return true;
             }
         }

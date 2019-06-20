@@ -1,9 +1,9 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Internal;
 using System;
-using System.Threading;
-using System.Runtime.CompilerServices;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace ProtoBuf.Grpc
 {
@@ -12,7 +12,7 @@ namespace ProtoBuf.Grpc
     /// directly - for client-specific or server-specific options: use .Client or .Server; note that
     /// whether this is a client or server context depends on the usage. Silent conversions are available.
     /// </summary>
-    public readonly struct CallContext
+    public readonly partial struct CallContext
     {
         /// <summary>
         /// Default context; all default client options; no server context
@@ -55,12 +55,29 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Creates a call-context that represents a server operation
         /// </summary>
-        public CallContext(ServerCallContext server)
+        public CallContext(object server, ServerCallContext context)
         {
-            Server = server;
-            Client = server == null ? default : new CallOptions(server.RequestHeaders, server.Deadline, server.CancellationToken, server.WriteOptions);
+            if (server == null) ThrowNoServerProvided();
+            _server = server;
+            Server = context;
+            Client = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
             _metadataContext = null;
+
+            static void ThrowNoServerProvided() => throw new ArgumentNullException(nameof(server), "A server instance is required and was not provided");
         }
+
+        internal void AssertServer()
+        {
+            if (_server == null) ThrowNoServer();
+            static void ThrowNoServer() => throw new InvalidOperationException("This operation is only valid on a server context");
+        }
+        internal T GetServer<T>() where T : class
+        {
+            return (_server as T) ?? ThrowNoServer();
+            static T ThrowNoServer() => throw new InvalidOperationException("This operation requires a server of type " + typeof(T).Name);
+        }
+
+        private readonly object? _server;
 
         /// <summary>
         /// Creates a call-context that represents a client operation
@@ -70,6 +87,7 @@ namespace ProtoBuf.Grpc
             Client = client;
             Server = default;
             _metadataContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? null : new MetadataContext();
+            _server = null;
         }
 
         /// <summary>
