@@ -92,9 +92,9 @@ namespace ProtoBuf.Grpc
             }, context.CancellationToken);
             var produced = producer(context);
             if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-            return Awaited(consumed, produced);
+            return Awaited(produced, consumed);
 
-            static async ValueTask Awaited(Task consumed, ValueTask produced)
+            static async ValueTask Awaited(ValueTask produced, Task consumed)
             {
                 await consumed;
                 await produced;
@@ -113,9 +113,9 @@ namespace ProtoBuf.Grpc
             var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
             var produced = producer(context);
             if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-            return Awaited(consumed, produced);
+            return Awaited(produced, consumed);
 
-            static async ValueTask Awaited(Task consumed, ValueTask produced)
+            static async ValueTask Awaited(ValueTask produced, Task consumed)
             {
                 await consumed;
                 await produced;
