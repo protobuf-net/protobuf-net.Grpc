@@ -17,7 +17,7 @@ namespace ProtoBuf.Grpc
             Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
             AssertServer();
-            return FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
+            return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
@@ -29,11 +29,12 @@ namespace ProtoBuf.Grpc
             Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
             AssertServer();
-            return FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
+            return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
-        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// Performs a full-duplex operation that will await both the producer and consumer streams,
+        /// performing an operation against each element in the inbound stream
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
@@ -41,11 +42,12 @@ namespace ProtoBuf.Grpc
             Func<TRequest, CallContext, ValueTask> consumer)
         {
             AssertServer();
-            return  FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
+            return  FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
-        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// Performs a full-duplex operation that will await both the producer and consumer streams,
+        /// performing an operation against each element in the inbound stream
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
@@ -53,11 +55,12 @@ namespace ProtoBuf.Grpc
             Func<TRequest, CallContext, ValueTask> consumer)
         {
             AssertServer();
-            return FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
+            return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
-        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// Performs a full-duplex operation that will await both the producer and consumer streams,
+        /// performing an operation against each element in the inbound stream
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
@@ -66,7 +69,7 @@ namespace ProtoBuf.Grpc
             where TServer : class
         {
             TServer server = GetServer<TServer>();
-            return FullDuplexImpl(server, ConsumeAsync(server, source, consumer), producer, CancellationToken);
+            return FullDuplexImpl(server, ConsumeAsWorkerAsync(server, source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
@@ -79,7 +82,7 @@ namespace ProtoBuf.Grpc
             where TServer : class
         {
             TServer server = GetServer<TServer>();
-            return FullDuplexImpl(server, ConsumeAsync(server, source, consumer), producer, CancellationToken);
+            return FullDuplexImpl(server, ConsumeAsWorkerAsync(server, source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
@@ -92,7 +95,35 @@ namespace ProtoBuf.Grpc
             where TServer : class
         {
             TServer server = GetServer<TServer>();
-            return FullDuplexImpl(server, ConsumeAsync(server, source, consumer), producer, CancellationToken);
+            return FullDuplexImpl(server, ConsumeAsWorkerAsync(server, source, consumer), producer, CancellationToken);
+        }
+
+        /// <summary>
+        /// Performs an operation against each element in the inbound stream
+        /// </summary>
+        public async Task ClientStreamingAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
+        {
+            await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    await consumer(iter.Current, this);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Performs an operation against each element in the inbound stream
+        /// </summary>
+        public async Task ClientStreamingAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, TRequest, CallContext, ValueTask> consumer)
+        {
+            await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    await consumer(server, iter.Current, this);
+                }
+            }
         }
 
         private async IAsyncEnumerable<TResponse> FullDuplexImpl<TResponse>(
@@ -155,50 +186,28 @@ namespace ProtoBuf.Grpc
             await consumed;
         }
 
-        private Task ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
+        private Task ConsumeAsWorkerAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
             var ctx = this;
-            return Task.Run(() => consumer(source, ctx));
+            return Task.Run(() => consumer(source, ctx), CancellationToken);
         }
 
-        private Task ConsumeAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
+        private Task ConsumeAsWorkerAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
             var ctx = this;
-            return Task.Run(() => consumer(server, source, ctx));
+            return Task.Run(() => consumer(server, source, ctx), CancellationToken);
         }
 
-        private Task ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
+        private Task ConsumeAsWorkerAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
         {
             var ctx = this;
-            return Task.Run(() => ConsumeAsyncImpl(ctx, source, consumer));
-
-            static async Task ConsumeAsyncImpl(CallContext context, IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
-            {
-                await using (var iter = source.GetAsyncEnumerator(context.CancellationToken))
-                {
-                    while (await iter.MoveNextAsync())
-                    {
-                        await consumer(iter.Current, context);
-                    }
-                }
-            }
+            return Task.Run(() => ctx.ClientStreamingAsync<TRequest>(source, consumer), CancellationToken);
         }
 
-        private Task ConsumeAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, TRequest, CallContext, ValueTask> consumer)
+        private Task ConsumeAsWorkerAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, TRequest, CallContext, ValueTask> consumer)
         {
             var ctx = this;
-            return Task.Run(() => ConsumeAsyncImpl(server, ctx, source, consumer));
-
-            static async Task ConsumeAsyncImpl(TServer server, CallContext context, IAsyncEnumerable<TRequest> source, Func<TServer, TRequest, CallContext, ValueTask> consumer)
-            {
-                await using (var iter = source.GetAsyncEnumerator(context.CancellationToken))
-                {
-                    while (await iter.MoveNextAsync())
-                    {
-                        await consumer(server, iter.Current, context);
-                    }
-                }
-            }
+            return Task.Run(() => ctx.ClientStreamingAsync<TServer, TRequest>(server, source, consumer), CancellationToken);
         }
     }
 }

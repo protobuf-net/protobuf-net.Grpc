@@ -341,7 +341,7 @@ namespace ProtoBuf.Grpc.Internal
             using (call)
             {
                 // we'll run the "send" as a concurrent operation
-                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, cancellationToken));
+                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, cancellationToken), cancellationToken);
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
 
