@@ -16,7 +16,6 @@ namespace ProtoBuf.Grpc
             Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
             Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
-            AssertServer();
             return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
@@ -28,7 +27,6 @@ namespace ProtoBuf.Grpc
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
-            AssertServer();
             return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
@@ -41,7 +39,6 @@ namespace ProtoBuf.Grpc
             Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
             Func<TRequest, CallContext, ValueTask> consumer)
         {
-            AssertServer();
             return  FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
@@ -54,7 +51,6 @@ namespace ProtoBuf.Grpc
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<TRequest, CallContext, ValueTask> consumer)
         {
-            AssertServer();
             return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
         }
 
@@ -62,37 +58,37 @@ namespace ProtoBuf.Grpc
         /// Performs a full-duplex operation that will await both the producer and consumer streams,
         /// performing an operation against each element in the inbound stream
         /// </summary>
-        public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TState, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
-            Func<TServer, CallContext, IAsyncEnumerable<TResponse>> producer,
-            Func<TServer, TRequest, CallContext, ValueTask> consumer)
-            where TServer : class
-            => FullDuplexImpl(GetServer<TServer>(), ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
+            Func<TState, CallContext, IAsyncEnumerable<TResponse>> producer,
+            Func<TState, TRequest, CallContext, ValueTask> consumer)
+            where TState : class
+            => FullDuplexImpl(GetState<TState>(), ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
 
         /// <summary>
         /// Performs a full-duplex operation that will await both the producer and consumer streams
         /// </summary>
-        public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TState, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
-            Func<TServer, CallContext, IAsyncEnumerable<TResponse>> producer,
-            Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
-            where TServer : class
+            Func<TState, CallContext, IAsyncEnumerable<TResponse>> producer,
+            Func<TState, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
+            where TState : class
         {
-            TServer server = GetServer<TServer>();
-            return FullDuplexImpl(server, ConsumeAsWorkerAsync(server, source, consumer), producer, CancellationToken);
+            TState state = GetState<TState>();
+            return FullDuplexImpl(state, ConsumeAsWorkerAsync(state, source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
         /// Performs a full-duplex operation that will await both the producer and consumer streams
         /// </summary>
-        public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TState, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
-            Func<TServer, CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
-            Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
-            where TServer : class
+            Func<TState, CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
+            Func<TState, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
+            where TState : class
         {
-            TServer server = GetServer<TServer>();
-            return FullDuplexImpl(server, ConsumeAsWorkerAsync(server, source, consumer), producer, CancellationToken);
+            TState state = GetState<TState>();
+            return FullDuplexImpl(state, ConsumeAsWorkerAsync(state, source, consumer), producer, CancellationToken);
         }
 
         /// <summary>
@@ -128,16 +124,16 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Performs an operation against each element in the inbound stream
         /// </summary>
-        public async Task ConsumeAsync<TServer, TRequest>(IAsyncEnumerable<TRequest> source,
-            Func<TServer, TRequest, CallContext, ValueTask> consumer)
-            where TServer : class
+        public async Task ConsumeAsync<TState, TRequest>(IAsyncEnumerable<TRequest> source,
+            Func<TState, TRequest, CallContext, ValueTask> consumer)
+            where TState : class
         {
-            var server = GetServer<TServer>();
+            var state = GetState<TState>();
             await using (var iter = source.GetAsyncEnumerator(CancellationToken))
             {
                 while (await iter.MoveNextAsync())
                 {
-                    await consumer(server, iter.Current, this);
+                    await consumer(state, iter.Current, this);
                 }
             }
         }
@@ -145,16 +141,16 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Performs an aggregate operation against each element in the inbound stream
         /// </summary>
-        public async Task<TValue> AggregateAsync<TServer, TRequest, TValue>(IAsyncEnumerable<TRequest> source,
-            Func<TServer, TValue, TRequest, CallContext, ValueTask<TValue>> aggregate, TValue seed)
-            where TServer : class
+        public async Task<TValue> AggregateAsync<TState, TRequest, TValue>(IAsyncEnumerable<TRequest> source,
+            Func<TState, TValue, TRequest, CallContext, ValueTask<TValue>> aggregate, TValue seed)
+            where TState : class
         {
-            var server = GetServer<TServer>();
+            var state = GetState<TState>();
             await using (var iter = source.GetAsyncEnumerator(CancellationToken))
             {
                 while (await iter.MoveNextAsync())
                 {
-                    await aggregate(server, seed, iter.Current, this);
+                    await aggregate(state, seed, iter.Current, this);
                 }
             }
             return seed;
@@ -190,12 +186,12 @@ namespace ProtoBuf.Grpc
             await consumed;
         }
 
-        private async IAsyncEnumerable<TResponse> FullDuplexImpl<TServer, TResponse>(
-            TServer server, Task consumed,
-            Func<TServer, CallContext, IAsyncEnumerable<TResponse>> producer,
+        private async IAsyncEnumerable<TResponse> FullDuplexImpl<TState, TResponse>(
+            TState state, Task consumed,
+            Func<TState, CallContext, IAsyncEnumerable<TResponse>> producer,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            await using (var iter = producer(server, this).GetAsyncEnumerator(cancellationToken))
+            await using (var iter = producer(state, this).GetAsyncEnumerator(cancellationToken))
             {
                 while (await iter.MoveNextAsync())
                 {
@@ -205,12 +201,12 @@ namespace ProtoBuf.Grpc
             await consumed;
         }
 
-        private async IAsyncEnumerable<TResponse> FullDuplexImpl<TServer, TResponse>(
-            TServer server, Task consumed,
-            Func<TServer, CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
+        private async IAsyncEnumerable<TResponse> FullDuplexImpl<TState, TResponse>(
+            TState state, Task consumed,
+            Func<TState, CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            await using (var iter = producer(server, this, this.CancellationToken).GetAsyncEnumerator(cancellationToken))
+            await using (var iter = producer(state, this, this.CancellationToken).GetAsyncEnumerator(cancellationToken))
             {
                 while (await iter.MoveNextAsync())
                 {
@@ -226,10 +222,10 @@ namespace ProtoBuf.Grpc
             return Task.Run(() => consumer(source, ctx), CancellationToken);
         }
 
-        private Task ConsumeAsWorkerAsync<TServer, TRequest>(TServer server, IAsyncEnumerable<TRequest> source, Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
+        private Task ConsumeAsWorkerAsync<TState, TRequest>(TState state, IAsyncEnumerable<TRequest> source, Func<TState, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
         {
             var ctx = this;
-            return Task.Run(() => consumer(server, source, ctx), CancellationToken);
+            return Task.Run(() => consumer(state, source, ctx), CancellationToken);
         }
 
         private Task ConsumeAsWorkerAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
@@ -238,11 +234,11 @@ namespace ProtoBuf.Grpc
             return Task.Run(() => ctx.ConsumeAsync<TRequest>(source, consumer), CancellationToken);
         }
 
-        private Task ConsumeAsWorkerAsync<TServer, TRequest>(IAsyncEnumerable<TRequest> source, Func<TServer, TRequest, CallContext, ValueTask> consumer)
-            where TServer : class
+        private Task ConsumeAsWorkerAsync<TState, TRequest>(IAsyncEnumerable<TRequest> source, Func<TState, TRequest, CallContext, ValueTask> consumer)
+            where TState : class
         {
             var ctx = this;
-            return Task.Run(() => ctx.ConsumeAsync<TServer, TRequest>(source, consumer), CancellationToken);
+            return Task.Run(() => ctx.ConsumeAsync<TState, TRequest>(source, consumer), CancellationToken);
         }
     }
 }

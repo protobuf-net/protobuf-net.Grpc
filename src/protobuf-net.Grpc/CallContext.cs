@@ -58,7 +58,7 @@ namespace ProtoBuf.Grpc
         public CallContext(object server, ServerCallContext context)
         {
             if (server == null) ThrowNoServerProvided();
-            _server = server;
+            State = server;
             Server = context;
             Client = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
             _metadataContext = null;
@@ -66,34 +66,35 @@ namespace ProtoBuf.Grpc
             static void ThrowNoServerProvided() => throw new ArgumentNullException(nameof(server), "A server instance is required and was not provided");
         }
 
-        internal void AssertServer()
+        /// <summary>
+        /// Gets the typed state object that was supplied to this context
+        /// </summary>
+        public T GetState<T>() where T : class
         {
-            if (_server == null) ThrowNoServer();
-            static void ThrowNoServer() => throw new InvalidOperationException("This operation is only valid on a server context");
-        }
-        internal T GetServer<T>() where T : class
-        {
-            return (_server as T) ?? ThrowNoServer();
-            static T ThrowNoServer() => throw new InvalidOperationException("This operation requires a server of type " + typeof(T).Name);
+            return (State as T) ?? ThrowNoState();
+            static T ThrowNoState() => throw new InvalidOperationException("This operation requires a state of type " + typeof(T).Name);
         }
 
-        private readonly object? _server;
+        /// <summary>
+        /// Gets the state object that was supplied to this context
+        /// </summary>
+        public object? State { get; }
 
         /// <summary>
         /// Creates a call-context that represents a client operation
         /// </summary>
-        public CallContext(in CallOptions client, CallContextFlags flags = CallContextFlags.None)
+        public CallContext(in CallOptions client, CallContextFlags flags = CallContextFlags.None, object? state = null)
         {
             Client = client;
             Server = default;
             _metadataContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? null : new MetadataContext();
-            _server = null;
+            State = state;
         }
 
         /// <summary>
         /// Creates a call-context that represents a client operation
         /// </summary>
-        public static implicit operator CallContext(in CallOptions options) => new CallContext(in options, CallContextFlags.None);
+        public static implicit operator CallContext(in CallOptions options) => new CallContext(in options);
 
         private readonly MetadataContext? _metadataContext;
 
