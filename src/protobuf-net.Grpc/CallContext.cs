@@ -22,34 +22,36 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// The options defined on the context; this will be valid for both server and client operations
         /// </summary>
-        public CallOptions Client { get; }
+        public CallOptions CallOptions { get; }
 
         /// <summary>
         /// The server call-context; this will only be valid for server operations
         /// </summary>
-        public ServerCallContext? Server { get; }
+        public ServerCallContext? ServerCallContext { get; }
 
+        // for client: could be a MetadataContext, if needed; otherwise: is the state object
+        // for server: this is always the instance of the service that is processing the call
         private readonly object? _hybridContext;
 
         /// <summary>
         /// The request headers associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public Metadata RequestHeaders => Client.Headers;
+        public Metadata RequestHeaders => CallOptions.Headers;
 
         /// <summary>
         /// The cancellation token associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public CancellationToken CancellationToken => Client.CancellationToken;
+        public CancellationToken CancellationToken => CallOptions.CancellationToken;
         
         /// <summary>
         /// The deadline associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public DateTime? Deadline => Client.Deadline;
+        public DateTime? Deadline => CallOptions.Deadline;
 
         /// <summary>
         /// The write options associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public WriteOptions WriteOptions => Client.WriteOptions;
+        public WriteOptions WriteOptions => CallOptions.WriteOptions;
 
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         internal MetadataContext? Prepare() => MetadataContext?.Reset();
@@ -61,8 +63,8 @@ namespace ProtoBuf.Grpc
         {
             if (server == null) ThrowNoServerProvided();
             _hybridContext = server;
-            Server = context;
-            Client = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
+            ServerCallContext = context;
+            CallOptions = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
 
             static void ThrowNoServerProvided() => throw new ArgumentNullException(nameof(server), "A server instance is required and was not provided");
         }
@@ -87,10 +89,10 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Creates a call-context that represents a client operation
         /// </summary>
-        public CallContext(in CallOptions client, CallContextFlags flags = CallContextFlags.None, object? state = null)
+        public CallContext(in CallOptions callOptions = default, CallContextFlags flags = CallContextFlags.None, object? state = null)
         {
-            Client = client;
-            Server = default;
+            CallOptions = callOptions;
+            ServerCallContext = default;
             _hybridContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? state : new MetadataContext(state);
         }
 
@@ -119,7 +121,7 @@ namespace ProtoBuf.Grpc
         [MethodImpl]
         private T ThrowNoContext<T>()
         {
-            if (Server != null) throw new InvalidOperationException("Response metadata is not available for server contexts");
+            if (ServerCallContext != null) throw new InvalidOperationException("Response metadata is not available for server contexts");
             throw new InvalidOperationException("The CaptureMetadata flag must be specified when creating the CallContext to enable response metadata");
         }
     }

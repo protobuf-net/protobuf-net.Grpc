@@ -12,15 +12,15 @@ namespace ProtoBuf.Grpc
         /// Performs a full-duplex operation that will await both the producer and consumer streams
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
-            IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
+            IAsyncEnumerable<TRequest> source,
             Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer)
-            => FullDuplexImpl<TRequest, TResponse>(this, source, producer, consumer, CancellationToken);
+            => FullDuplexImpl<TRequest, TResponse>(this, producer, source, consumer, CancellationToken);
 
         private static async IAsyncEnumerable<TResponse> FullDuplexImpl<TRequest, TResponse>(
             CallContext context,
-            IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
+            IAsyncEnumerable<TRequest> source,
             Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -40,15 +40,15 @@ namespace ProtoBuf.Grpc
         /// performing a given opreation on each element from the input stream
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
-            IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
+            IAsyncEnumerable<TRequest> source,
             Func<TRequest, CallContext, ValueTask> consumer)
-            => FullDuplexImpl<TRequest, TResponse>(this, source, producer, consumer, CancellationToken);
+            => FullDuplexImpl<TRequest, TResponse>(this, producer, source, consumer, CancellationToken);
 
         private static async IAsyncEnumerable<TResponse> FullDuplexImpl<TRequest, TResponse>(
             CallContext context,
-            IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
+            IAsyncEnumerable<TRequest> source,
             Func<TRequest, CallContext, ValueTask> consumer,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -69,6 +69,57 @@ namespace ProtoBuf.Grpc
                 }
             }
             await consumed;
+        }
+
+        /// <summary>
+        /// Performs a full-duplex operation that will await the producer,
+        /// performing a given opreation on each element from the input stream
+        /// </summary>
+        public ValueTask FullDuplexAsync<T>(
+            Func<CallContext, ValueTask> producer,
+            IAsyncEnumerable<T> source,
+            Func<T, CallContext, ValueTask> consumer)
+        {
+            var context = this;
+            var consumed = Task.Run(async () => {// note this shares a capture scope
+                await using (var cIter = source.GetAsyncEnumerator(context.CancellationToken))
+                {
+                    while (await cIter.MoveNextAsync())
+                    {
+                        await consumer(cIter.Current, context);
+                    }
+                }
+            }, context.CancellationToken);
+            var produced = producer(context);
+            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+            return Awaited(consumed, produced);
+
+            static async ValueTask Awaited(Task consumed, ValueTask produced)
+            {
+                await consumed;
+                await produced;
+            }
+        }
+
+        /// <summary>
+        /// Performs a full-duplex operation that will await the producer and consumer stream
+        /// </summary>
+        public ValueTask FullDuplexAsync<T>(
+            Func<CallContext, ValueTask> producer,
+            IAsyncEnumerable<T> source,
+            Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
+        {
+            var context = this;
+            var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
+            var produced = producer(context);
+            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+            return Awaited(consumed, produced);
+
+            static async ValueTask Awaited(Task consumed, ValueTask produced)
+            {
+                await consumed;
+                await produced;
+            }
         }
 
         /// <summary>

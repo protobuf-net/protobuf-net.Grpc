@@ -39,10 +39,10 @@ internal class MyServer : ICalculator, IDuplex
     }
 
     //IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
-    //    => context.FullDuplexAsync(bar, ProduceAsync, ConsumeAsync);
+    //    => context.FullDuplexAsync(ProduceAsync, bar, ConsumeAsync);
 
-    IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
-        => context.FullDuplexAsync<MultiplyRequest, MultiplyResult>(bar, s_producer, s_consumer);
+    IAsyncEnumerable<MultiplyResult> IDuplex.SomeDuplexApiAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
+        => context.FullDuplexAsync(s_producer, bar, s_consumer);
 
     static readonly Func<CallContext, IAsyncEnumerable<MultiplyResult>> s_producer
         = ctx => ctx.As<MyServer>().ProduceAsync(ctx);
@@ -74,7 +74,7 @@ internal class MyServer : ICalculator, IDuplex
 
     ValueTask ConsumeAsync(MultiplyRequest item, CallContext context)
     {
-        Console.WriteLine($"[rec] {item.X}, {item.Y} from {context.Server?.Peer}");
+        Console.WriteLine($"[rec] {item.X}, {item.Y} from {context.ServerCallContext?.Peer}");
         return default;
     }
 }

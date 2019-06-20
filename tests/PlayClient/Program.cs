@@ -1,4 +1,5 @@
 ﻿using Grpc.Core;
+using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Client;
 using Shared_CS;
 using System;
@@ -30,16 +31,41 @@ namespace PlayClient
 
         static async Task TestDuplex(IDuplex duplex, [CallerMemberName] string? caller = null)
         {
-            Console.WriteLine($"testing duplex ({caller})");
-
-            
-
-            await foreach(var item in duplex.FullDuplexAsync(Rand(10, TimeSpan.FromSeconds(1))))
+            Console.WriteLine($"testing duplex ({caller}) - manual");
+            await foreach(var item in duplex.SomeDuplexApiAsync(Rand(10, TimeSpan.FromSeconds(1))))
             {
                 Console.WriteLine($"[rec] {item.Result}");
             }
+
+            Console.WriteLine($"testing duplex ({caller}) - auto duplex");
+            var channel = System.Threading.Channels.Channel.CreateBounded<MultiplyRequest>(5);
+            var ctx = new CallContext(state: channel.Writer);
+            var result = duplex.SomeDuplexApiAsync(channel.AsAsyncEnumerable(ctx.CancellationToken));
+            await ctx.FullDuplexAsync<MultiplyResult>(s_pumpQueue, result, s_handleResult);
         }
 
+        static readonly Func<CallContext, ValueTask> s_pumpQueue = async ctx =>
+        {
+            var writer = ctx.As<System.Threading.Channels.ChannelWriter<MultiplyRequest>>();
+            try
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    var item = new MultiplyRequest { X = 40 + i, Y = 40 + i };
+                    await writer.WriteAsync(item, ctx.CancellationToken);
+                    Console.WriteLine($"[d:sent] {item.X}, {item.Y}");
+                    await Task.Delay(TimeSpan.FromSeconds(0.5));
+                }
+                writer.Complete();
+                Console.WriteLine("[d:client all done sending!]");
+            } catch(Exception ex) { writer.TryComplete(ex); }
+        };
+
+        static readonly Func<MultiplyResult, CallContext, ValueTask> s_handleResult = (result, ctx) =>
+        {
+            Console.WriteLine($"[d:rec] {result.Result}");
+            return default;
+        };
 
         static async IAsyncEnumerable<MultiplyRequest> Rand(int count, TimeSpan delay, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {

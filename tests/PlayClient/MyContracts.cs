@@ -37,6 +37,6 @@ namespace Shared_CS
     [ServiceContract]
     public interface IDuplex
     {
-        IAsyncEnumerable<MultiplyResult> FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);
+        IAsyncEnumerable<MultiplyResult> SomeDuplexApiAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);
     }
 }

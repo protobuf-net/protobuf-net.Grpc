@@ -154,7 +154,7 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
         {
             context.Prepare();
-            return invoker.BlockingUnaryCall(method, host, context.Client, request);
+            return invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
         }
 
         /// <summary>
@@ -169,7 +169,7 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
         {
             context.Prepare();
-            invoker.BlockingUnaryCall(method, host, context.Client, request);
+            invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
         }
 
         /// <summary>
@@ -182,7 +182,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare());
+            => UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare());
 
         /// <summary>
         /// Performs a gRPC asynchronous unary call
@@ -194,7 +194,7 @@ namespace ProtoBuf.Grpc.Internal
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare()));
+            => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
 
         /// <summary>
         /// Performs a gRPC asynchronous unary call
@@ -206,7 +206,7 @@ namespace ProtoBuf.Grpc.Internal
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare()));
+            => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
 
         private static async Task<TResponse> UnaryTaskAsyncImpl<TRequest, TResponse>(
             AsyncUnaryCall<TResponse> call, MetadataContext? metadata)
@@ -234,7 +234,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => ServerStreamingAsyncImpl<TRequest, TResponse>(invoker.AsyncServerStreamingCall<TRequest, TResponse>(method, host, context.Client, request), context.Prepare(), context.CancellationToken);
+            => ServerStreamingAsyncImpl<TRequest, TResponse>(invoker.AsyncServerStreamingCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare(), context.CancellationToken);
 
         private static async IAsyncEnumerable<TResponse> ServerStreamingAsyncImpl<TRequest, TResponse>(
             AsyncServerStreamingCall<TResponse> call, MetadataContext? metadata,
@@ -267,7 +267,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request);
+            => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request);
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -279,7 +279,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request));
+            => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request));
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -291,7 +291,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request));
+            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request));
 
         private static async Task<TResponse> ClientStreamingTaskAsyncImpl<TRequest, TResponse>(
             AsyncClientStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
@@ -332,7 +332,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.Client), options.Prepare(), options.CancellationToken, request);
+            => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request);
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
             AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
