@@ -8,7 +8,10 @@ namespace ProtoBuf.Grpc
 {
     public readonly partial struct CallContext
     {
-        public IAsyncEnumerable<TResponse> FullDuplex<TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
             Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
@@ -17,7 +20,10 @@ namespace ProtoBuf.Grpc
             return FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
         }
 
-        public IAsyncEnumerable<TResponse> FullDuplex<TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
@@ -26,7 +32,10 @@ namespace ProtoBuf.Grpc
             return FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
         }
 
-        public IAsyncEnumerable<TResponse> FullDuplex<TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
             Func<TRequest, CallContext, ValueTask> consumer)
@@ -35,7 +44,10 @@ namespace ProtoBuf.Grpc
             return  FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
         }
 
-        public IAsyncEnumerable<TResponse> FullDuplex<TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<TRequest, CallContext, ValueTask> consumer)
@@ -44,7 +56,10 @@ namespace ProtoBuf.Grpc
             return FullDuplexImpl(ConsumeAsync(source, consumer), producer, CancellationToken);
         }
 
-        public IAsyncEnumerable<TResponse> FullDuplex<TServer, TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<TServer, CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<TServer, TRequest, CallContext, ValueTask> consumer)
@@ -54,7 +69,10 @@ namespace ProtoBuf.Grpc
             return FullDuplexImpl(server, ConsumeAsync(server, source, consumer), producer, CancellationToken);
         }
 
-        public IAsyncEnumerable<TResponse> FullDuplex<TServer, TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<TServer, CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
@@ -64,7 +82,10 @@ namespace ProtoBuf.Grpc
             return FullDuplexImpl(server, ConsumeAsync(server, source, consumer), producer, CancellationToken);
         }
 
-        public IAsyncEnumerable<TResponse> FullDuplex<TServer, TRequest, TResponse>(
+        /// <summary>
+        /// Performs a full-duplex operation that will await both the producer and consumer streams
+        /// </summary>
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TServer, TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<TServer, CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
             Func<TServer, IAsyncEnumerable<TRequest>, CallContext, Task> consumer)

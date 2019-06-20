@@ -47,7 +47,7 @@ internal class MyServer : ICalculator, IDuplex
         = (svc, req, ctx) => svc.ConsumeAsync(req, ctx);
 
     IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
-        => context.FullDuplex(bar, s_producer, s_consumer);
+        => context.FullDuplexAsync(bar, s_producer, s_consumer);
 
     //async IAsyncEnumerable<MultiplyResult> IDuplex.Foo(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
     //{
