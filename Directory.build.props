@@ -26,6 +26,8 @@
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>0.0.3-alpha.54</PBGRPCLibVersion>
+    <GrpcDotNetVersion>0.1.22-pre1</GrpcDotNetVersion>
+    <GrpcVersion>1.21.0</GrpcVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

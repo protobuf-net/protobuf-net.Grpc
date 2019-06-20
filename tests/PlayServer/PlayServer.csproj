@@ -8,8 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.Core" Version="1.21.0" />
-    <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
     <ProjectReference Include="..\PlayClient\PlayClient.csproj" />
   </ItemGroup>
 </Project>

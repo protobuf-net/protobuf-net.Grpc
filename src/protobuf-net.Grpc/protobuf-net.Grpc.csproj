@@ -7,7 +7,7 @@
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Grpc.Core.Api" Version="1.21.0" />
+    <PackageReference Include="Grpc.Core.Api" Version="$(GrpcVersion)" />
     <PackageReference Include="System.Threading.Channels" Version="4.5.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">

@@ -12,6 +12,6 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
-    <PackageReference Include="Grpc.AspNetCore.Server" Version="0.1.21-pre1" />
+    <PackageReference Include="Grpc.AspNetCore.Server" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>
 </Project>

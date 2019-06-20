@@ -11,8 +11,8 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.8.0" />
-    <PackageReference Include="Grpc" Version="1.21.0" />
-    <PackageReference Include="Grpc.Tools" Version="1.21.0">
+    <PackageReference Include="Grpc" Version="$(GrpcVersion)" />
+    <PackageReference Include="Grpc.Tools" Version="$(GrpcVersion)">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
