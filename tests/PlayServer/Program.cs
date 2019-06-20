@@ -38,40 +38,21 @@ internal class MyServer : ICalculator, IDuplex
         return new ValueTask<MultiplyResult>(new MultiplyResult(request.X * request.Y));
     }
 
-    //IAsyncEnumerable<MultiplyResult> IDuplex.Foo(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
-    //    => context.FullDuplex(bar, ProduceAsync, ConsumeAsync);
+    //IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
+    //    => context.FullDuplexAsync(bar, ProduceAsync, ConsumeAsync);
+
+    IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
+        => context.FullDuplexAsync<MultiplyRequest, MultiplyResult>(bar, s_producer, s_consumer);
 
     static readonly Func<CallContext, IAsyncEnumerable<MultiplyResult>> s_producer
-        = ctx => ctx.As<MyServer>().ProduceAsync(ctx, ctx.CancellationToken);
+        = ctx => ctx.As<MyServer>().ProduceAsync(ctx);
     static readonly Func<MultiplyRequest, CallContext, ValueTask> s_consumer
         = (req, ctx) => ctx.As<MyServer>().ConsumeAsync(req, ctx);
 
-    IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
-        => context.FullDuplexAsync(bar, s_producer, s_consumer);
 
-    //async IAsyncEnumerable<MultiplyResult> IDuplex.Foo(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
-    //{
-    //    bool allGood = false;
-    //    try
-    //    {
-    //        await foreach (var item in context.FullDuplex(bar, s_producer, s_consumer))
-    //        {
-    //            yield return item;
-    //        }
-    //        Console.WriteLine("server completed with success");
-    //        allGood = true;
-    //    }
-    //    finally
-    //    {
-    //        if (!allGood) Console.WriteLine("server completed with fault");
-    //    }
-    //    //catch (Exception ex)
-    //    //{
-    //    //    Console.WriteLine("server completed with fault: " + ex.Message);
-    //    //}
-    //}
 
-    async IAsyncEnumerable<MultiplyResult> ProduceAsync(CallContext context, [EnumeratorCancellation] CancellationToken cancellationToken)
+    private IAsyncEnumerable<MultiplyResult> ProduceAsync(CallContext context) => ProduceAsyncImpl(context.CancellationToken);
+    private async IAsyncEnumerable<MultiplyResult> ProduceAsyncImpl([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         for (int i = 0; i < 4; i++)
         {

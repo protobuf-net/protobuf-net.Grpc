@@ -32,6 +32,8 @@ namespace PlayClient
         {
             Console.WriteLine($"testing duplex ({caller})");
 
+            
+
             await foreach(var item in duplex.FullDuplexAsync(Rand(10, TimeSpan.FromSeconds(1))))
             {
                 Console.WriteLine($"[rec] {item.Result}");
@@ -60,7 +62,7 @@ namespace PlayClient
                 await TestCalculator(calculator);
 
                 var duplex = channel.CreateGrpcService<IDuplex>();
-                await TestDuplex(duplex);                
+                await TestDuplex(duplex);
             }
             finally
             {

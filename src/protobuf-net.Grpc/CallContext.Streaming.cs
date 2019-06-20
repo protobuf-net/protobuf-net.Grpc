@@ -13,45 +13,62 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
-            Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
-            Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
-        {
-            return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
-        }
+            Func<CallContext, IAsyncEnumerable<TResponse>> producer,
+            Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer)
+            => FullDuplexImpl<TRequest, TResponse>(this, source, producer, consumer, CancellationToken);
 
-        /// <summary>
-        /// Performs a full-duplex operation that will await both the producer and consumer streams
-        /// </summary>
-        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
+        private static async IAsyncEnumerable<TResponse> FullDuplexImpl<TRequest, TResponse>(
+            CallContext context,
             IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
-            Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
+            Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
+            var consumed = Task.Run(() => consumer(source, context), cancellationToken); // note this shares a capture scope
+            await using (var iter = producer(context).GetAsyncEnumerator(cancellationToken))
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    yield return iter.Current;
+                }
+            }
+            await consumed;
         }
 
         /// <summary>
         /// Performs a full-duplex operation that will await both the producer and consumer streams,
-        /// performing an operation against each element in the inbound stream
-        /// </summary>
-        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
-            IAsyncEnumerable<TRequest> source,
-            Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
-            Func<TRequest, CallContext, ValueTask> consumer)
-        {
-            return  FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
-        }
-
-        /// <summary>
-        /// Performs a full-duplex operation that will await both the producer and consumer streams,
-        /// performing an operation against each element in the inbound stream
+        /// performing a given opreation on each element from the input stream
         /// </summary>
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             IAsyncEnumerable<TRequest> source,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             Func<TRequest, CallContext, ValueTask> consumer)
+            => FullDuplexImpl<TRequest, TResponse>(this, source, producer, consumer, CancellationToken);
+
+        private static async IAsyncEnumerable<TResponse> FullDuplexImpl<TRequest, TResponse>(
+            CallContext context,
+            IAsyncEnumerable<TRequest> source,
+            Func<CallContext, IAsyncEnumerable<TResponse>> producer,
+            Func<TRequest, CallContext, ValueTask> consumer,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            return FullDuplexImpl(ConsumeAsWorkerAsync(source, consumer), producer, CancellationToken);
+            var consumed = Task.Run(async () => {// note this shares a capture scope
+                await using (var cIter = source.GetAsyncEnumerator(cancellationToken))
+                {
+                    while (await cIter.MoveNextAsync())
+                    {
+                        await consumer(cIter.Current, context);
+                    }
+                }
+            }, cancellationToken);
+            await using (var iter = producer(context).GetAsyncEnumerator(cancellationToken))
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    yield return iter.Current;
+                }
+            }
+            await consumed;
         }
 
         /// <summary>
@@ -67,6 +84,20 @@ namespace ProtoBuf.Grpc
                 }
             }
         }
+
+        ///// <summary>
+        ///// Performs an operation against each element in the inbound stream
+        ///// </summary>
+        //public async Task ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, ValueTask> consumer)
+        //{
+        //    await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+        //    {
+        //        while (await iter.MoveNextAsync())
+        //        {
+        //            await consumer(iter.Current);
+        //        }
+        //    }
+        //}
 
         /// <summary>
         /// Performs an aggregate operation against each element in the inbound stream
@@ -84,47 +115,20 @@ namespace ProtoBuf.Grpc
             return seed;
         }
 
-        private async IAsyncEnumerable<TResponse> FullDuplexImpl<TResponse>(
-            Task consumed,
-            Func<CallContext, IAsyncEnumerable<TResponse>> producer,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            await using (var iter = producer(this).GetAsyncEnumerator(cancellationToken))
-            {
-                while (await iter.MoveNextAsync())
-                {
-                    yield return iter.Current;
-                }
-            }
-            await consumed;
-        }
-
-        private async IAsyncEnumerable<TResponse> FullDuplexImpl<TResponse>(
-            Task consumed,
-            Func<CallContext, CancellationToken, IAsyncEnumerable<TResponse>> producer,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            await using (var iter = producer(this, this.CancellationToken).GetAsyncEnumerator(cancellationToken))
-            {
-                while (await iter.MoveNextAsync())
-                {
-                    yield return iter.Current;
-                }
-            }
-            await consumed;
-        }
-
-        private Task ConsumeAsWorkerAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<IAsyncEnumerable<TRequest>, CallContext, Task> consumer)
-        {
-            var ctx = this;
-            return Task.Run(() => consumer(source, ctx), CancellationToken);
-        }
-
-
-        private Task ConsumeAsWorkerAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
-        {
-            var ctx = this;
-            return Task.Run(() => ctx.ConsumeAsync<TRequest>(source, consumer), CancellationToken);
-        }
+        ///// <summary>
+        ///// Performs an aggregate operation against each element in the inbound stream
+        ///// </summary>
+        //public async Task<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
+        //    Func<TValue, TRequest, ValueTask<TValue>> aggregate, TValue seed)
+        //{
+        //    await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+        //    {
+        //        while (await iter.MoveNextAsync())
+        //        {
+        //            seed = await aggregate(seed, iter.Current);
+        //        }
+        //    }
+        //    return seed;
+        //}
     }
 }
