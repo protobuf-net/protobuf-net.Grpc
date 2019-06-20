@@ -29,8 +29,8 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public ServerCallContext? ServerCallContext { get; }
 
-        // for client: could be a MetadataContext, if needed; otherwise: is the state object
-        // for server: this is always the instance of the service that is processing the call
+        // for client: could be a MetadataContext, if needed; otherwise: is the "state" object
+        // for server: there is never a MetadataContext - and the "state" is always the service instance
         private readonly object? _hybridContext;
 
         /// <summary>

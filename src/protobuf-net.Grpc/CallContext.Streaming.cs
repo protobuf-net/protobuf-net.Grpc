@@ -125,7 +125,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Performs an operation against each element in the inbound stream
         /// </summary>
-        public async Task ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
+        public async ValueTask ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
         {
             await using (var iter = source.GetAsyncEnumerator(CancellationToken))
             {
@@ -139,7 +139,7 @@ namespace ProtoBuf.Grpc
         ///// <summary>
         ///// Performs an operation against each element in the inbound stream
         ///// </summary>
-        //public async Task ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, ValueTask> consumer)
+        //public async ValueTask ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, ValueTask> consumer)
         //{
         //    await using (var iter = source.GetAsyncEnumerator(CancellationToken))
         //    {
@@ -153,7 +153,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Performs an aggregate operation against each element in the inbound stream
         /// </summary>
-        public async Task<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
+        public async ValueTask<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
             Func<TValue, TRequest, CallContext, ValueTask<TValue>> aggregate, TValue seed)
         {
             await using (var iter = source.GetAsyncEnumerator(CancellationToken))
@@ -169,7 +169,7 @@ namespace ProtoBuf.Grpc
         ///// <summary>
         ///// Performs an aggregate operation against each element in the inbound stream
         ///// </summary>
-        //public async Task<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
+        //public async ValueTask<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
         //    Func<TValue, TRequest, ValueTask<TValue>> aggregate, TValue seed)
         //{
         //    await using (var iter = source.GetAsyncEnumerator(CancellationToken))
