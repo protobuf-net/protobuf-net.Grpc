@@ -41,10 +41,10 @@ internal class MyServer : ICalculator, IDuplex
     //IAsyncEnumerable<MultiplyResult> IDuplex.Foo(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
     //    => context.FullDuplex(bar, ProduceAsync, ConsumeAsync);
 
-    static readonly Func<MyServer, CallContext, IAsyncEnumerable<MultiplyResult>> s_producer
-        = (svc, ctx) => svc.ProduceAsync(ctx, ctx.CancellationToken);
-    static readonly Func<MyServer, MultiplyRequest, CallContext, ValueTask> s_consumer
-        = (svc, req, ctx) => svc.ConsumeAsync(req, ctx);
+    static readonly Func<CallContext, IAsyncEnumerable<MultiplyResult>> s_producer
+        = ctx => ctx.As<MyServer>().ProduceAsync(ctx, ctx.CancellationToken);
+    static readonly Func<MultiplyRequest, CallContext, ValueTask> s_consumer
+        = (req, ctx) => ctx.As<MyServer>().ConsumeAsync(req, ctx);
 
     IAsyncEnumerable<MultiplyResult> IDuplex.FullDuplexAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context)
         => context.FullDuplexAsync(bar, s_producer, s_consumer);

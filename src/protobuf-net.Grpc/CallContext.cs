@@ -29,6 +29,8 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public ServerCallContext? Server { get; }
 
+        private readonly object? _hybridContext;
+
         /// <summary>
         /// The request headers associated with the operation; this will be valid for both server and client operations
         /// </summary>
@@ -50,7 +52,7 @@ namespace ProtoBuf.Grpc
         public WriteOptions WriteOptions => Client.WriteOptions;
 
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        internal MetadataContext? Prepare() => _metadataContext?.Reset();
+        internal MetadataContext? Prepare() => MetadataContext?.Reset();
 
         /// <summary>
         /// Creates a call-context that represents a server operation
@@ -58,10 +60,9 @@ namespace ProtoBuf.Grpc
         public CallContext(object server, ServerCallContext context)
         {
             if (server == null) ThrowNoServerProvided();
-            State = server;
+            _hybridContext = server;
             Server = context;
             Client = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
-            _metadataContext = null;
 
             static void ThrowNoServerProvided() => throw new ArgumentNullException(nameof(server), "A server instance is required and was not provided");
         }
@@ -69,7 +70,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Gets the typed state object that was supplied to this context
         /// </summary>
-        public T GetState<T>() where T : class
+        public T As<T>() where T : class
         {
             return (State as T) ?? ThrowNoState();
             static T ThrowNoState() => throw new InvalidOperationException("This operation requires a state of type " + typeof(T).Name);
@@ -78,7 +79,10 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Gets the state object that was supplied to this context
         /// </summary>
-        public object? State { get; }
+        public object? State
+        {
+            get => _hybridContext is MetadataContext mc ? mc.State : _hybridContext;
+        }
 
         /// <summary>
         /// Creates a call-context that represents a client operation
@@ -87,8 +91,7 @@ namespace ProtoBuf.Grpc
         {
             Client = client;
             Server = default;
-            _metadataContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? null : new MetadataContext();
-            State = state;
+            _hybridContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? state : new MetadataContext(state);
         }
 
         /// <summary>
@@ -96,22 +99,22 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public static implicit operator CallContext(in CallOptions options) => new CallContext(in options);
 
-        private readonly MetadataContext? _metadataContext;
+        MetadataContext? MetadataContext => _hybridContext as MetadataContext;
 
         /// <summary>
         /// Get the response-headers from a client operation
         /// </summary>
-        public Metadata ResponseHeaders() => _metadataContext?.Headers ?? ThrowNoContext<Metadata>();
+        public Metadata ResponseHeaders() => MetadataContext?.Headers ?? ThrowNoContext<Metadata>();
 
         /// <summary>
         /// Get the response-trailers from a client operation
         /// </summary>
-        public Metadata ResponseTrailers() => _metadataContext?.Trailers ?? ThrowNoContext<Metadata>();
+        public Metadata ResponseTrailers() => MetadataContext?.Trailers ?? ThrowNoContext<Metadata>();
 
         /// <summary>
         /// Get the response-status from a client operation
         /// </summary>
-        public Status ResponseStatus() => _metadataContext?.Status ?? ThrowNoContext<Status>();
+        public Status ResponseStatus() => MetadataContext?.Status ?? ThrowNoContext<Status>();
 
         [MethodImpl]
         private T ThrowNoContext<T>()

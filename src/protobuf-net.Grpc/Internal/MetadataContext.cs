@@ -6,8 +6,9 @@ namespace ProtoBuf.Grpc.Internal
 {
     internal sealed class MetadataContext
     {
-        internal MetadataContext() { }
+        internal MetadataContext(object? state) => State = state;
 
+        internal object? State { get; }
         private Metadata? _headers, _trailers;
         internal Metadata Headers
         {
