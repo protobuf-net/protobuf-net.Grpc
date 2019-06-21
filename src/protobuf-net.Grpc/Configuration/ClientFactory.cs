@@ -26,11 +26,13 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Create a service-client backed by a CallInvoker
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public TService CreateClient<TService>(CallInvoker channel) where TService : class
 #pragma warning disable CS0618 // SimpleClientBase
             => CreateClient<SimpleClientBase, TService, CallInvoker>(channel);
 #pragma warning restore CS0618
 
+        // TODO: remove this, standardizing on SimpleClient (or LiteClientBase) and CallInvoker?
         internal abstract TService CreateClient<TBase, TService, TChannel>(TChannel channel) where TService : class;
 
 

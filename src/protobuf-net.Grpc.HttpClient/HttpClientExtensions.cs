@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Client
 {
@@ -24,6 +25,7 @@ namespace ProtoBuf.Grpc.Client
         /// <summary>
         /// Creates a code-first service backed by an HttpClient instance
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TService CreateGrpcService<TService>(this HttpClient client, ILoggerFactory? logger = null, ClientFactory? clientFactory = null)
             where TService : class
             => (clientFactory ?? ClientFactory.Default).CreateClient<TService>(new HttpClientCallInvoker(client, logger));

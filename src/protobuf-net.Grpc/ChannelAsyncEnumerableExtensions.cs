@@ -36,12 +36,14 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Consumes a channel as an asynchronous sequence
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this Channel<T> channel, CancellationToken cancellationToken = default)
             => channel.Reader.ReadAllAsync(cancellationToken);
 
         /// <summary>
         /// Consumes a channel as an asynchronous sequence
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this ChannelReader<T> reader, CancellationToken cancellationToken = default)
             => reader.ReadAllAsync(cancellationToken);
 #endif

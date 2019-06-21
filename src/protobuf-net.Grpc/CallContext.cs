@@ -22,12 +22,20 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// The options defined on the context; this will be valid for both server and client operations
         /// </summary>
-        public CallOptions CallOptions { get; }
+        public CallOptions CallOptions
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get;
+        }
 
         /// <summary>
         /// The server call-context; this will only be valid for server operations
         /// </summary>
-        public ServerCallContext? ServerCallContext { get; }
+        public ServerCallContext? ServerCallContext
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get;
+        }
 
         // for client: could be a MetadataContext, if needed; otherwise: is the "state" object
         // for server: there is never a MetadataContext - and the "state" is always the service instance
@@ -36,24 +44,41 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// The request headers associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public Metadata RequestHeaders => CallOptions.Headers;
+        public Metadata RequestHeaders
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => CallOptions.Headers;
+        }
 
         /// <summary>
         /// The cancellation token associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public CancellationToken CancellationToken => CallOptions.CancellationToken;
-        
+        public CancellationToken CancellationToken
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => CallOptions.CancellationToken;
+        }
+
         /// <summary>
         /// The deadline associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public DateTime? Deadline => CallOptions.Deadline;
+        public DateTime? Deadline
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => CallOptions.Deadline;
+        }
 
         /// <summary>
         /// The write options associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public WriteOptions WriteOptions => CallOptions.WriteOptions;
+        public WriteOptions WriteOptions
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => CallOptions.WriteOptions;
+        }
 
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal MetadataContext? Prepare() => MetadataContext?.Reset();
 
         /// <summary>
@@ -72,6 +97,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Gets the typed state object that was supplied to this context
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T As<T>() where T : class
         {
             return (State as T) ?? ThrowNoState();
@@ -83,6 +109,7 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public object? State
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => _hybridContext is MetadataContext mc ? mc.State : _hybridContext;
         }
 
@@ -101,24 +128,31 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public static implicit operator CallContext(in CallOptions options) => new CallContext(in options);
 
-        MetadataContext? MetadataContext => _hybridContext as MetadataContext;
+        MetadataContext? MetadataContext
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _hybridContext as MetadataContext;
+        }
 
         /// <summary>
         /// Get the response-headers from a client operation
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Metadata ResponseHeaders() => MetadataContext?.Headers ?? ThrowNoContext<Metadata>();
 
         /// <summary>
         /// Get the response-trailers from a client operation
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Metadata ResponseTrailers() => MetadataContext?.Trailers ?? ThrowNoContext<Metadata>();
 
         /// <summary>
         /// Get the response-status from a client operation
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status ResponseStatus() => MetadataContext?.Status ?? ThrowNoContext<Status>();
 
-        [MethodImpl]
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private T ThrowNoContext<T>()
         {
             if (ServerCallContext != null) throw new InvalidOperationException("Response metadata is not available for server contexts");

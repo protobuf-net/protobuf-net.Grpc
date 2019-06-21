@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using System;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -14,11 +15,16 @@ namespace ProtoBuf.Grpc.Internal
         /// <summary>
         /// Gets the call-invoker associated with this instance
         /// </summary>
-        protected CallInvoker CallInvoker { get; }
+        protected CallInvoker CallInvoker
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get;
+        }
 
         /// <summary>
         /// Create a new instance  
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected SimpleClientBase(CallInvoker callInvoker) => CallInvoker = callInvoker;
     }
 }

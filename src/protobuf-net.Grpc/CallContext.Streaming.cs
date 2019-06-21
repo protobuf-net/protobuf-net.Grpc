@@ -11,6 +11,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Performs a full-duplex operation that will await both the producer and consumer streams
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             IAsyncEnumerable<TRequest> source,
@@ -39,6 +40,7 @@ namespace ProtoBuf.Grpc
         /// Performs a full-duplex operation that will await both the producer and consumer streams,
         /// performing a given opreation on each element from the input stream
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,
             IAsyncEnumerable<TRequest> source,
@@ -80,28 +82,21 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<T, CallContext, ValueTask> consumer)
         {
-            return Impl(this, producer, source, consumer);
 
-            static ValueTask Impl( // mostly this makes sure I haven't screwed up the capture-flow
-                CallContext context,
-                Func<CallContext, ValueTask> producer,
-                IAsyncEnumerable<T> source,
-                Func<T, CallContext, ValueTask> consumer)
-            {
-                var consumed = Task.Run(async () =>
-                {   // note this shares a capture scope
-                    await using (var cIter = source.GetAsyncEnumerator(context.CancellationToken))
+            var context = this;
+            var consumed = Task.Run(async () =>
+            {   // note this shares a capture scope
+                await using (var cIter = source.GetAsyncEnumerator(context.CancellationToken))
+                {
+                    while (await cIter.MoveNextAsync())
                     {
-                        while (await cIter.MoveNextAsync())
-                        {
-                            await consumer(cIter.Current, context);
-                        }
+                        await consumer(cIter.Current, context);
                     }
-                }, context.CancellationToken);
-                var produced = producer(context);
-                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-                return BothAsync(produced, consumed);
-            }
+                }
+            }, context.CancellationToken);
+            var produced = producer(context);
+            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+            return BothAsync(produced, consumed);
         }
 
         private static async ValueTask BothAsync(ValueTask produced, Task consumed)
@@ -136,18 +131,11 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
         {
-            return Impl(this, producer, source, consumer);
-            static ValueTask Impl( // mostly this makes sure I haven't screwed up the capture-flow
-                CallContext context,
-                Func<CallContext, ValueTask> producer,
-                IAsyncEnumerable<T> source,
-                Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
-            {
-                var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
-                var produced = producer(context);
-                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-                return BothAsync(produced, consumed);
-            }
+            var context = this;
+            var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
+            var produced = producer(context);
+            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+            return BothAsync(produced, consumed);
         }
 
         /// <summary>

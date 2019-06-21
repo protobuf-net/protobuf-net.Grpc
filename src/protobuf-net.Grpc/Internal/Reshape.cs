@@ -21,6 +21,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task<Empty> EmptyValueTask(ValueTask task)
         {
             if (task.IsCompletedSuccessfully) return Empty.InstanceTask;
@@ -38,6 +39,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task<Empty> EmptyTask(Task task)
         {
 #if TASK_COMPLETED
@@ -147,6 +149,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TResponse UnarySync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -162,6 +165,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void UnarySyncVoid<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -177,6 +181,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task<TResponse> UnaryTaskAsync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -189,6 +194,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<TResponse> UnaryValueTaskAsync<TRequest, TResponse>(
             this in CallContext context, CallInvoker invoker,
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -201,6 +207,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask UnaryValueTaskAsyncVoid<TRequest, TResponse>(
             this in CallContext context, CallInvoker invoker,
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -208,6 +215,7 @@ namespace ProtoBuf.Grpc.Internal
             where TResponse : class
             => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static async Task<TResponse> UnaryTaskAsyncImpl<TRequest, TResponse>(
             AsyncUnaryCall<TResponse> call, MetadataContext? metadata)
         {
@@ -229,6 +237,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IAsyncEnumerable<TResponse> ServerStreamingAsync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
@@ -262,6 +271,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task<TResponse> ClientStreamingTaskAsync<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
@@ -274,6 +284,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<TResponse> ClientStreamingValueTaskAsync<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
@@ -286,6 +297,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask ClientStreamingValueTaskAsyncVoid<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
@@ -327,6 +339,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IAsyncEnumerable<TResponse> DuplexAsync<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
