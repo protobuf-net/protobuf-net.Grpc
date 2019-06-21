@@ -16,7 +16,10 @@ namespace ProtoBuf.Grpc.Internal
         /// The singleton instance of this type
         /// </summary>
         public static readonly Empty Instance = new Empty();
-        internal static readonly Task<Empty> InstanceTask = Task.FromResult(Instance);
+        /// <summary>
+        /// The singleton instance of this type, as a task
+        /// </summary>
+        public static readonly Task<Empty> InstanceTask = Task.FromResult(Instance);
         private Empty() { }
         /// <summary>
         /// Represents the value as a string

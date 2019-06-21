@@ -278,7 +278,8 @@ namespace ProtoBuf.Grpc.Internal
 #pragma warning disable CS0618 // Empty
         internal static readonly FieldInfo
             s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
-            s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!;
+            s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!,
+            s_Empty_InstaneTask= typeof(Empty).GetField(nameof(Empty.InstanceTask))!;
 #pragma warning restore CS0618
         internal const string FactoryName = "Create";
     }

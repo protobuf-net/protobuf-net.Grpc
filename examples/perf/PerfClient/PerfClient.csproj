@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="PerfTest.proto" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.8.0" />
+    <PackageReference Include="Grpc" Version="$(GrpcVersion)" />
+    <PackageReference Include="Grpc.Tools" Version="$(GrpcVersion)">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
+    <ProjectReference Include="..\..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="PerfTest.proto" />
+  </ItemGroup>
+
+</Project>

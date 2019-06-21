@@ -18,7 +18,7 @@ namespace ProtoBuf.Grpc.Internal
             if (type == typeof(void))
             {
                 // no result from the call; add in Empty.Instance instead
-                var field = Expression.Field(null, ProxyEmitter.s_Empty_Instance);
+                var field = Expression.Field(null, ProxyEmitter.s_Empty_InstaneTask);
                 return Expression.Block(expression, field);
             }
 #pragma warning disable CS0618 // Reshape
