@@ -53,7 +53,6 @@ namespace ProtoBuf.Grpc.Internal
         {
             foreach (var factory in _factories)
             {
-                Debug.Assert(factory != null);
                 if (factory.CanSerialize(typeof(T)))
                     return factory.CreateMarshaller<T>(); 
             }

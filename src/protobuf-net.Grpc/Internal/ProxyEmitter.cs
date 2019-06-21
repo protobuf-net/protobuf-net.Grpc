@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using ProtoBuf.Grpc.Configuration;
+using System.Diagnostics;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -91,7 +92,7 @@ namespace ProtoBuf.Grpc.Internal
 
         static int _typeIndex;
         private static readonly MethodInfo s_marshallerCacheGenericMethodDef
-            = typeof(MarshallerFactory).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+            = typeof(MarshallerCache).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
         internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binderConfig)
            where TService : class
         {

@@ -69,7 +69,7 @@ namespace ProtoBuf.Grpc.Configuration
 
                     if (argsBuffer == null)
                     {
-                        argsBuffer = new object?[] { null, null, null, null, state, null, binderConfiguration!.MarshallerCache, service };
+                        argsBuffer = new object?[] { null, null, null, null, state, null, binderConfiguration!.MarshallerCache, service == null ? null : Expression.Constant(service, serviceType) };
                     }
                     argsBuffer[0] = serviceName;
                     argsBuffer[1] = on;
@@ -101,7 +101,7 @@ namespace ProtoBuf.Grpc.Configuration
         protected readonly struct MethodStub<TService>
             where TService : class
         {
-            private readonly TService? _service;
+            private readonly ConstantExpression? _service;
             private readonly Func<MethodInfo, Expression[], Expression>? _invoker;
 
             /// <summary>
@@ -109,11 +109,18 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             public MethodInfo Method { get; }
 
-            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method, TService? service)
+            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method, ConstantExpression? service)
             {
                 _invoker = invoker;
                 _service = service;
                 Method = method;
+            }
+
+            public static class ParameterCache<TDelegate> where TDelegate : Delegate
+            {
+                internal static readonly ParameterExpression[] Parameters
+                    = Array.ConvertAll(typeof(TDelegate).GetMethod(nameof(Action.Invoke))!.GetParameters(),
+                        p => Expression.Parameter(p.ParameterType, p.Name));
             }
 
             /// <summary>
@@ -127,9 +134,7 @@ namespace ProtoBuf.Grpc.Configuration
                     // basic - direct call
                     return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
                 }
-                var finalSignature = typeof(TDelegate).GetMethod("Invoke")!;
-                var methodParameters = finalSignature.GetParameters();
-                var lambdaArgs = Array.ConvertAll(methodParameters, p => Expression.Parameter(p.ParameterType, p.Name));
+                var lambdaArgs = ParameterCache<TDelegate>.Parameters;
 
                 Expression[] mapArgs;
                 if (_service == null)
@@ -141,8 +146,8 @@ namespace ProtoBuf.Grpc.Configuration
                     // if there *is* a service object, then that is *not* part of the signature, i.e. (req) => svc.Blah(req)
                     // where the svc instance comes in separately
                     mapArgs = new Expression[lambdaArgs.Length + 1];
-                    mapArgs[0] = Expression.Constant(_service, typeof(TService));
-                    for (int i = 0; i < methodParameters.Length; i++) mapArgs[i + 1] = lambdaArgs[i];
+                    mapArgs[0] = _service;
+                    lambdaArgs.CopyTo(mapArgs, 1);
                 }
                 
                 var body = _invoker.Invoke(Method, mapArgs);
@@ -155,7 +160,8 @@ namespace ProtoBuf.Grpc.Configuration
         private bool AddMethod<TService, TRequest, TResponse>(
             string serviceName, string operationName, MethodInfo method, MethodType methodType,
             object state,
-            Func<MethodInfo, Expression[], Expression>? invoker, MarshallerCache marshallerCache, TService? service)
+            Func<MethodInfo, Expression[], Expression>? invoker, MarshallerCache marshallerCache,
+            ConstantExpression? service)
             where TService : class
             where TRequest : class
             where TResponse : class
