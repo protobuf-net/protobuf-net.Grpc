@@ -90,8 +90,8 @@ namespace ProtoBuf.Grpc.Internal
         //}
 
         static int _typeIndex;
-        private static readonly MethodInfo s_marshallerFactoryGenericMethodDef
-            = typeof(MarshallerFactory).GetMethod(nameof(MarshallerFactory.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+        private static readonly MethodInfo s_marshallerCacheGenericMethodDef
+            = typeof(MarshallerFactory).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
         internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binderConfig)
            where TService : class
         {
@@ -139,7 +139,7 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     if (marshallers.TryGetValue(forType, out var val)) return val.Field;
 
-                    var instance = s_marshallerFactoryGenericMethodDef.MakeGenericMethod(forType).Invoke(binderConfig.MarshallerFactory, Array.Empty<object>())!;
+                    var instance = s_marshallerCacheGenericMethodDef.MakeGenericMethod(forType).Invoke(binderConfig.MarshallerCache, Array.Empty<object>())!;
                     var name = "_m" + marshallerIndex++;
                     var field = type.DefineField(name, typeof(Marshaller<>).MakeGenericType(forType), FieldAttributes.Static | FieldAttributes.Private); // **not** readonly, we need to set it afterwards!
                     marshallers.Add(forType, (field, name, instance));

@@ -146,7 +146,7 @@ namespace protobuf_net.Grpc.Test
             var config = BinderConfiguration.Default;
             if (!ContractOperation.TryIdentifySignature(method!, config, out var operation))
             {
-                var sig = ContractOperation.GetSignature(config.MarshallerFactory, method!);
+                var sig = ContractOperation.GetSignature(config.MarshallerCache, method!);
                 Assert.True(false, sig.ToString());
             }
             Assert.Equal(method, operation.Method);

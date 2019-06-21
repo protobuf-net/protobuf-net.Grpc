@@ -129,7 +129,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static int GeneralPurposeSignatureCount() => s_signaturePatterns.Values.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext);
 
-        static TypeCategory GetCategory(MarshallerFactory factory, Type type)
+        static TypeCategory GetCategory(MarshallerCache marshallerCache, Type type)
         {
             if (type == null) return TypeCategory.None;
             if (type == typeof(void)) return TypeCategory.Void;
@@ -155,19 +155,19 @@ namespace ProtoBuf.Grpc.Internal
 
             if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
 
-            return factory.CanSerializeType(type) ? TypeCategory.Data : TypeCategory.None;
+            return marshallerCache.CanSerializeType(type) ? TypeCategory.Data : TypeCategory.None;
         }
 
-        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerFactory factory, MethodInfo method)
-            => GetSignature(factory, method.GetParameters(), method.ReturnType);
+        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, MethodInfo method)
+            => GetSignature(marshallerCache, method.GetParameters(), method.ReturnType);
 
-        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerFactory factory, ParameterInfo[] args, Type returnType)
+        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, ParameterInfo[] args, Type returnType)
         {
             (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
-            if (args.Length >= 1) signature.Arg0 = GetCategory(factory, args[0].ParameterType);
-            if (args.Length >= 2) signature.Arg1 = GetCategory(factory, args[1].ParameterType);
-            if (args.Length >= 3) signature.Arg2 = GetCategory(factory, args[2].ParameterType);
-            signature.Ret = GetCategory(factory, returnType);
+            if (args.Length >= 1) signature.Arg0 = GetCategory(marshallerCache, args[0].ParameterType);
+            if (args.Length >= 2) signature.Arg1 = GetCategory(marshallerCache, args[1].ParameterType);
+            if (args.Length >= 3) signature.Arg2 = GetCategory(marshallerCache, args[2].ParameterType);
+            signature.Ret = GetCategory(marshallerCache, returnType);
             return signature;
         }
         internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation)
@@ -183,7 +183,7 @@ namespace ProtoBuf.Grpc.Internal
             var args = method.GetParameters();
             if (args.Length > 3) return false; // too many parameters
 
-            var signature = GetSignature(binderConfig.MarshallerFactory, args, method.ReturnType);
+            var signature = GetSignature(binderConfig.MarshallerCache, args, method.ReturnType);
 
             if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
 

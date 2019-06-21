@@ -9,6 +9,11 @@ namespace ProtoBuf.Grpc.Configuration
     /// </summary>
     public class ProtoBufMarshallerFactory : MarshallerFactory
     {
+        /// <summary>
+        /// Uses the default protobuf-net serializer
+        /// </summary>
+        public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default);
+
         private readonly RuntimeTypeModel _model;
         /// <summary>
         /// Create a new factory using a specific protobuf-net model
@@ -27,7 +32,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Indicates whether a type should be considered as a serializable data type
         /// </summary>
-        protected override bool CanSerialize(Type type)
+        protected internal override bool CanSerialize(Type type)
             => _model.CanSerializeContractType(type);
 
         /// <summary>

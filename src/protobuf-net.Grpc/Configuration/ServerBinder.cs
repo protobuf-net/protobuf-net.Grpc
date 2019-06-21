@@ -69,7 +69,7 @@ namespace ProtoBuf.Grpc.Configuration
 
                     if (argsBuffer == null)
                     {
-                        argsBuffer = new object?[] { null, null, null, null, state, null, binderConfiguration!.MarshallerFactory, service };
+                        argsBuffer = new object?[] { null, null, null, null, state, null, binderConfiguration!.MarshallerCache, service };
                     }
                     argsBuffer[0] = serviceName;
                     argsBuffer[1] = on;
@@ -155,12 +155,12 @@ namespace ProtoBuf.Grpc.Configuration
         private bool AddMethod<TService, TRequest, TResponse>(
             string serviceName, string operationName, MethodInfo method, MethodType methodType,
             object state,
-            Func<MethodInfo, Expression[], Expression>? invoker, MarshallerFactory marshallerFactory, TService? service)
+            Func<MethodInfo, Expression[], Expression>? invoker, MarshallerCache marshallerCache, TService? service)
             where TService : class
             where TRequest : class
             where TResponse : class
         {
-            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerFactory.GetMarshaller<TRequest>(), marshallerFactory.GetMarshaller<TResponse>());
+            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerCache.GetMarshaller<TRequest>(), marshallerCache.GetMarshaller<TResponse>());
             var stub = new MethodStub<TService>(invoker, method, service);
             return TryBind<TService, TRequest, TResponse>(state, grpcMethod, stub);
 
