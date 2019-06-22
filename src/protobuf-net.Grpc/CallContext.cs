@@ -128,6 +128,11 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public static implicit operator CallContext(in CallOptions options) => new CallContext(in options);
 
+        /// <summary>
+        /// Creates a call-context that represents a client operation
+        /// </summary>
+        public static implicit operator CallContext(CancellationToken cancellationToken) => new CallContext(new CallOptions(cancellationToken: cancellationToken));
+
         MetadataContext? MetadataContext
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
