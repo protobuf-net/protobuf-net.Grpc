@@ -20,4 +20,7 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
     <DefineConstants>$(DefineConstants);PLAT_NOSPAN;PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net461'">
+    <DefineConstants>$(DefineConstants);PLAT_DESER_ROS</DefineConstants>
+  </PropertyGroup>
 </Project>

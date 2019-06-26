@@ -1,5 +1,6 @@
 ﻿using ProtoBuf.Meta;
 using System;
+using System.Buffers;
 using System.IO;
 using System.Runtime.CompilerServices;
 
@@ -44,6 +45,47 @@ namespace ProtoBuf.Grpc.Configuration
         private bool Has(Options option) => (_options & option) == option;
 
         /// <summary>
+        /// Deserializes an object from a payload
+        /// </summary>
+        protected override global::Grpc.Core.Marshaller<T> CreateMarshaller<T>()
+            => new global::Grpc.Core.Marshaller<T>(ContextualSerialize<T>, ContextualDeserialize<T>);
+
+        private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
+            => context.Complete(Serialize(value));
+
+        private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
+        {
+#if PLAT_DESER_ROS
+            var ros = context.PayloadAsReadOnlySequence();
+#if PLAT_NOSPAN
+            // copy the data out of the ROS into a rented buffer, and deserialize
+            // from that
+            var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
+            try
+            {
+                ros.CopyTo(oversized);
+                return Deserialize<T>(oversized, 0, context.PayloadLength);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(oversized);
+            }
+#else
+            // create a reader directly on the ROS
+            using (var reader = ProtoReader.Create(out var state, ros, _model))
+            {
+                return (T)_model.Deserialize(reader, ref state, null, typeof(T));
+            }
+#endif
+
+#else
+            // only the right-sized byte[] API available to us
+            var arr = context.PayloadAsNewBuffer();
+            return Deserialize<T>(arr, 0, arr.Length);
+#endif
+        }
+
+        /// <summary>
         /// Indicates whether a type should be considered as a serializable data type
         /// </summary>
         protected internal override bool CanSerialize(Type type)
@@ -55,20 +97,25 @@ namespace ProtoBuf.Grpc.Configuration
         /// Deserializes an object from a payload
         /// </summary>
         protected override T Deserialize<T>(byte[] payload)
+            => Deserialize<T>(payload, 0, payload.Length);
+
+        private T Deserialize<T>(byte[] payload, int offset, int count)
         {
 #if PLAT_NOSPAN
-            using (var ms = new MemoryStream(payload))
+            using (var ms = new MemoryStream(payload, offset, count))
             using (var reader = ProtoReader.Create(ms, _model))
             {
                 return (T)_model.Deserialize(reader, null, typeof(T));
             }
 #else
-            using (var reader = ProtoReader.Create(out var state, payload, _model))
+            var range = new ReadOnlyMemory<byte>(payload, offset, count);
+            using (var reader = ProtoReader.Create(out var state, range, _model))
             {
                 return (T)_model.Deserialize(reader, ref state, null, typeof(T));
             }
 #endif
         }
+
         /// <summary>
         /// Serializes an object to a payload
         /// </summary>
