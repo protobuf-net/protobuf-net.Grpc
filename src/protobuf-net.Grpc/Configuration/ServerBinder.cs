@@ -21,8 +21,10 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
+#pragma warning disable CS8625
         public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService service = null)
-            where TService : class                                                            // TService? - but: compiler bug in preview6
+#pragma warning restore CS8625                                                                // TService? - but: compiler bug in preview6
+            where TService : class
             => Bind(state, typeof(TService), binderConfiguration, service);
 
         /// <summary>
@@ -95,6 +97,13 @@ namespace ProtoBuf.Grpc.Configuration
         private static readonly MethodInfo s_addMethod = typeof(ServerBinder).GetMethod(
             nameof(AddMethod), BindingFlags.Instance | BindingFlags.NonPublic)!;
 
+        private static class ParameterCache<TDelegate> where TDelegate : Delegate
+        {
+            internal static readonly ParameterExpression[] Parameters
+                = Array.ConvertAll(typeof(TDelegate).GetMethod(nameof(Action.Invoke))!.GetParameters(),
+                    p => Expression.Parameter(p.ParameterType, p.Name));
+        }
+
         /// <summary>
         /// Provides utilities associated with the method being considered
         /// </summary>
@@ -114,13 +123,6 @@ namespace ProtoBuf.Grpc.Configuration
                 _invoker = invoker;
                 _service = service;
                 Method = method;
-            }
-
-            public static class ParameterCache<TDelegate> where TDelegate : Delegate
-            {
-                internal static readonly ParameterExpression[] Parameters
-                    = Array.ConvertAll(typeof(TDelegate).GetMethod(nameof(Action.Invoke))!.GetParameters(),
-                        p => Expression.Parameter(p.ParameterType, p.Name));
             }
 
             /// <summary>
