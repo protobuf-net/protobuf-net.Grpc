@@ -47,7 +47,8 @@ Also: make sure that you are *actually using* the preview runtime, via "global.j
 Finally, as a [temporary workaround](https://github.com/protobuf-net/protobuf-net.Grpc/issues/4), add the following to any local project files/directory props files to enable `await foreach`:
 
 ``` xml
-<Target Name="ChangeAliasesOfReactiveExtensions" BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
+<Target Name="ChangeAliasesOfReactiveExtensions"
+  BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
   <ItemGroup>
     <ReferencePath Condition="'%(FileName)' == 'System.Interactive.Async'">
       <Aliases>ix</Aliases>
