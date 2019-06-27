@@ -11,10 +11,19 @@ namespace ProtoBuf.Grpc.Configuration
     /// </summary>
     public class ProtoBufMarshallerFactory : MarshallerFactory
     {
+        /// <summary>
+        /// Options that control protobuf-net marshalling
+        /// </summary>
         [Flags]
         public enum Options
         {
+            /// <summary>
+            /// No options
+            /// </summary>
             None = 0,
+            /// <summary>
+            /// Enforce that only contract-types should be allowed
+            /// </summary>
             ContractTypesOnly = 1,
         }
 
@@ -44,11 +53,13 @@ namespace ProtoBuf.Grpc.Configuration
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool Has(Options option) => (_options & option) == option;
 
+        /* see: https://github.com/grpc/grpc/pull/19471 / https://github.com/grpc/grpc/issues/19470
         /// <summary>
         /// Deserializes an object from a payload
         /// </summary>
-        protected override global::Grpc.Core.Marshaller<T> CreateMarshaller<T>()
+        protected internal override global::Grpc.Core.Marshaller<T> CreateMarshaller<T>()
             => new global::Grpc.Core.Marshaller<T>(ContextualSerialize<T>, ContextualDeserialize<T>);
+        */
 
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
             => context.Complete(Serialize(value));

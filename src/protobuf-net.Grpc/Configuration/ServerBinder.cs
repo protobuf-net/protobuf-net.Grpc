@@ -21,8 +21,8 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
-        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService? service = null)
-            where TService : class
+        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService service = null)
+            where TService : class                                                            // TService? - but: compiler bug in preview6
             => Bind(state, typeof(TService), binderConfiguration, service);
 
         /// <summary>
