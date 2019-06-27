@@ -44,6 +44,20 @@ Also: make sure that you are *actually using* the preview runtime, via "global.j
 }
 ```
 
+Finally, as a [temporary workaround](https://github.com/protobuf-net/protobuf-net.Grpc/issues/4), add the following to any local project files/directory props files to enable `await foreach`:
+
+``` xml
+<Target Name="ChangeAliasesOfReactiveExtensions" BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
+  <ItemGroup>
+    <ReferencePath Condition="'%(FileName)' == 'System.Interactive.Async'">
+      <Aliases>ix</Aliases>
+    </ReferencePath>
+  </ItemGroup>
+</Target>
+```
+
+(see the above link for what this does and why)
+
 ### 1: define your data contracts and service contracts
 
 Your service and data contracts can be placed directly in the client/server (see later), or can be in a separate class library. If you use
