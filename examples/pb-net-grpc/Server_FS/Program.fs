@@ -8,7 +8,7 @@ let exitCode = 0
 let createHostBuilder args =
     WebHost.CreateDefaultBuilder(args)
            .ConfigureKestrel(fun options ->
-                options.ListenLocalhost(10042, fun listenOptions->
+                options.ListenLocalhost(10042, fun listenOptions ->
                     listenOptions.Protocols <- HttpProtocols.Http2
                 ))
            .UseStartup<Startup>()

@@ -4,19 +4,16 @@ open System.ServiceModel
 open System.Threading.Tasks
 open System.Runtime.Serialization
 
-[<DataContract>]
-type MultiplyRequest() =    
-    [<DataMember(Order = 1)>]
-    member val public X = 0 with get, set
-    [<DataMember(Order = 2)>]
-    member val public Y = 0 with get, set
+[<DataContract; CLIMutable>]
+type MultiplyRequest =
+    { [<DataMember(Order = 1)>] X : int
+      [<DataMember(Order = 2)>] Y : int }
     
-[<DataContract>]
-type MultiplyResult() =
-    [<DataMember(Order = 1)>]
-    member val public Result = 0 with get, set
+[<DataContract; CLIMutable>]
+type MultiplyResult =
+    { [<DataMember(Order = 1)>] Result : int }
 
 [<ServiceContract(Name = "Hyper.Calculator")>]
 type ICalculator =
-    abstract MultiplyAsync : request : MultiplyRequest -> ValueTask<MultiplyResult>
+    abstract MultiplyAsync : MultiplyRequest -> ValueTask<MultiplyResult>
 
