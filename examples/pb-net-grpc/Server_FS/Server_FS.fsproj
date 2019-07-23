@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
 
@@ -12,8 +13,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
     <PackageReference Include="TaskBuilder.fs" Version="2.1.0" />
+
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" />
   </ItemGroup>
 
 </Project>

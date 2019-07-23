@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
+    <RootNamespace>Server_VB</RootNamespace>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" />
+    
+    <ProjectReference Include="..\Shared_VB\Shared_VB.vbproj" />
+  </ItemGroup>
+</Project>

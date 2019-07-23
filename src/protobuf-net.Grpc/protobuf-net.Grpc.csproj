@@ -1,18 +1,32 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <TargetFrameworks>netcoreapp3.0;netstandard2.0;net461</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc</RootNamespace>
     <Version>0.1-preview1</Version>
+    <LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Grpc.Core.Api" Version="1.21.0" />
-    <PackageReference Include="Grpc.Core" Version="1.21.0" />
+    <PackageReference Include="Grpc.Core.Api" Version="$(GrpcVersion)" />
+    <PackageReference Include="System.Threading.Channels" Version="4.5.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.0.0-preview6.19303.8" />
+    <PackageReference Include="protobuf-net" Version="2.4.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net461'"> <!-- because doesn't get it transitively -->
+    <PackageReference Include="System.Buffers" Version="4.5.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <PackageReference Include="protobuf-net" Version="3.0.0-alpha.43" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore.Server" Version="0.1.21-pre1" />
-    <PackageReference Include="Grpc.Net.Client" Version="0.1.21-pre1" />
-  </ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'"> <!-- not until preview7 -->
+    <DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
+    <DefineConstants>$(DefineConstants);PLAT_NOSPAN;PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net461'">
+    <DefineConstants>$(DefineConstants);PLAT_DESER_ROS</DefineConstants>
+  </PropertyGroup>
 </Project>

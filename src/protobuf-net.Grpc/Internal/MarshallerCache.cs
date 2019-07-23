@@ -1,33 +1,62 @@
 ﻿using Grpc.Core;
-using ProtoBuf.Meta;
-using System.IO;
+using ProtoBuf.Grpc.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Collections.Concurrent;
+using System.Reflection;
+using System.Diagnostics;
 
 namespace ProtoBuf.Grpc.Internal
 {
-    internal static class MarshallerCache<T>
+    internal sealed class MarshallerCache
     {
-#pragma warning disable CS0618
-        public static Marshaller<T> Instance { get; } = typeof(T) == typeof(Empty)
-            ? (Marshaller<T>)(object)Empty.Marshaller : new Marshaller<T>(Serialize, Deserialize);
-#pragma warning restore CS0618
-
-        private static readonly RuntimeTypeModel _model = RuntimeTypeModel.Default;
-
-        private static T Deserialize(byte[] payload)
+        private readonly MarshallerFactory[] _factories;
+        public MarshallerCache(MarshallerFactory[] factories)
+            => _factories = factories ?? throw new ArgumentNullException(nameof(factories));
+        internal bool CanSerializeType(Type type)
         {
-            using (var reader = ProtoReader.Create(out var state, payload, _model))
-            {
-                return (T)_model.Deserialize(reader, ref state, null, typeof(T));
-            }
+            if (_marshallers.TryGetValue(type, out var obj)) return obj != null;
+            return SlowImpl(this, type);
+
+            static bool SlowImpl(MarshallerCache obj, Type type)
+                => _createAndAdd.MakeGenericMethod(type).Invoke(obj, Array.Empty<object>()) != null;
+        }
+        static readonly MethodInfo _createAndAdd = typeof(MarshallerCache).GetMethod(
+            nameof(CreateAndAdd), BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        private readonly ConcurrentDictionary<Type, object?> _marshallers
+            = new ConcurrentDictionary<Type, object?>
+        {
+#pragma warning disable CS0618 // Empty
+            [typeof(Empty)] = Empty.Marshaller
+#pragma warning restore CS0618
+        };
+
+        internal Marshaller<T> GetMarshaller<T>()
+        {
+            return (_marshallers.TryGetValue(typeof(T), out var obj)
+                ? (Marshaller<T>?)obj : CreateAndAdd<T>()) ?? Throw();
+
+            static Marshaller<T> Throw() => throw new InvalidOperationException("No marshaller available for " + typeof(T).FullName);
         }
 
-        private static byte[] Serialize(T value)
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private Marshaller<T>? CreateAndAdd<T>()
         {
-            using (var ms = new MemoryStream())
+            object? obj = CreateMarshaller<T>();
+            if (!_marshallers.TryAdd(typeof(T), obj)) obj= _marshallers[typeof(T)];
+            return obj as Marshaller<T>;
+        }
+        private Marshaller<T>? CreateMarshaller<T>()
+        {
+            foreach (var factory in _factories)
             {
-                Serializer.Serialize(ms, value);
-                return ms.ToArray();
+                if (factory.CanSerialize(typeof(T)))
+                    return factory.CreateMarshaller<T>(); 
             }
+            return null;
         }
     }
 }

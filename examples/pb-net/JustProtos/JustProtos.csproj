@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Descriptor.proto" />
+    <None Remove="MyContracts.proto" />
+    <None Remove="TimeService.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="protobuf-net.MSBuild" Version="2.3.17" />
+  </ItemGroup>
+
+</Project>

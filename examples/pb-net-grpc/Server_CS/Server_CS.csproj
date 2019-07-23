@@ -1,15 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
     <RootNamespace>Server_CS</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore.Server" Version="0.1.21-pre1" />
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
-    <!--<ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />-->
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" />
+    
     <ProjectReference Include="..\Shared_CS\Shared_CS.csproj" />
   </ItemGroup>
 

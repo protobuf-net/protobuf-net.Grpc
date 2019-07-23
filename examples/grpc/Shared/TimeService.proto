@@ -1,0 +1,13 @@
+﻿syntax = "proto3";
+package MegaCorp;
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+option csharp_namespace = "MegaCorp";
+
+message TimeResult {
+	.google.protobuf.Timestamp Time = 1;
+}
+
+service TimeService {
+	rpc Subscribe(.google.protobuf.Empty) returns (stream TimeResult);
+}

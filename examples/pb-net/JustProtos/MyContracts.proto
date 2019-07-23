@@ -1,0 +1,16 @@
+﻿syntax = "proto3";
+
+package Hyper;
+option csharp_namespace = "Hyper";
+message MultiplyRequest {
+	int32 x = 1;
+	int32 y = 2;
+}
+
+message MultiplyResult {
+	int32 result = 1;
+}
+
+service Calculator {
+	rpc Multiply (MultiplyRequest) returns (MultiplyResult);
+}

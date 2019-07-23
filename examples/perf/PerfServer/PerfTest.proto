@@ -1,0 +1,16 @@
+﻿syntax = "proto3";
+import "google/protobuf/empty.proto";
+package PerfTest;
+option csharp_namespace = "PerfTest";
+
+message IncrementResult {
+    int32 count = 1;
+}
+service VanillaGrpc {
+	rpc Increment (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+	rpc Reset (.google.protobuf.Empty) returns (IncrementResult);
+}
+service ProtobufNetGrpc {
+	rpc Increment (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+	rpc Reset (.google.protobuf.Empty) returns (IncrementResult);
+}

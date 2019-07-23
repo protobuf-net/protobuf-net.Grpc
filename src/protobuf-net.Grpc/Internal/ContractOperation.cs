@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.Reflection;
 using Grpc.Core;
-using System.ServiceModel;
-using System.Buffers;
+using ProtoBuf.Grpc.Configuration;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Diagnostics;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -37,28 +35,6 @@ namespace ProtoBuf.Grpc.Internal
             Result = resultKind;
             Void = @void;
         }
-
-        public static bool TryGetServiceName(Type contractType, out string? serviceName, bool demandAttribute = false)
-        {
-            var sca = (ServiceContractAttribute?)Attribute.GetCustomAttribute(contractType, typeof(ServiceContractAttribute), inherit: true);
-            if (demandAttribute && sca == null)
-            {
-                serviceName = null;
-                return false;
-            }
-            serviceName = sca?.Name;
-            if (string.IsNullOrWhiteSpace(serviceName))
-            {
-                serviceName = contractType.Name;
-                if (contractType.IsInterface && serviceName.StartsWith('I')) serviceName = serviceName.Substring(1); // IFoo => Foo
-                serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
-                serviceName = serviceName.Replace('+', '.'); // nested types
-            }
-            return !string.IsNullOrWhiteSpace(serviceName);
-        }
-
-        public static bool TryIdentifySignature(MethodInfo method, out ContractOperation operation)
-            => TryGetPattern(method, false, out operation);
 
         internal enum TypeCategory
         {
@@ -153,7 +129,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static int GeneralPurposeSignatureCount() => s_signaturePatterns.Values.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext);
 
-        static TypeCategory GetCategory(Type type)
+        static TypeCategory GetCategory(MarshallerCache marshallerCache, Type type)
         {
             if (type == null) return TypeCategory.None;
             if (type == typeof(void)) return TypeCategory.Void;
@@ -178,46 +154,36 @@ namespace ProtoBuf.Grpc.Internal
             }
 
             if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
-            // otherwise, assume data
-            return TypeCategory.Data;
+
+            return marshallerCache.CanSerializeType(type) ? TypeCategory.Data : TypeCategory.None;
         }
 
-        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MethodInfo method)
-            => GetSignature(method.GetParameters(), method.ReturnType);
+        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, MethodInfo method)
+            => GetSignature(marshallerCache, method.GetParameters(), method.ReturnType);
 
-        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(ParameterInfo[] args, Type returnType)
+        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, ParameterInfo[] args, Type returnType)
         {
             (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
-            if (args.Length >= 1) signature.Arg0 = GetCategory(args[0].ParameterType);
-            if (args.Length >= 2) signature.Arg1 = GetCategory(args[1].ParameterType);
-            if (args.Length >= 3) signature.Arg2 = GetCategory(args[2].ParameterType);
-            signature.Ret = GetCategory(returnType);
+            if (args.Length >= 1) signature.Arg0 = GetCategory(marshallerCache, args[0].ParameterType);
+            if (args.Length >= 2) signature.Arg1 = GetCategory(marshallerCache, args[1].ParameterType);
+            if (args.Length >= 3) signature.Arg2 = GetCategory(marshallerCache, args[2].ParameterType);
+            signature.Ret = GetCategory(marshallerCache, returnType);
             return signature;
         }
-        private static bool TryGetPattern(MethodInfo method, bool demandAttribute, out ContractOperation operation)
+        internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation)
         {
             operation = default;
 
             if (method.IsGenericMethodDefinition) return false; // can't work with <T> methods
 
             if ((method.Attributes & (MethodAttributes.SpecialName)) != 0) return false; // some kind of accessor etc
-
-            var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
-            if (demandAttribute && oca == null) return false;
-
-            string? opName = oca?.Name;
-            if (string.IsNullOrWhiteSpace(opName))
-            {
-                opName = method.Name;
-                if (opName.EndsWith("Async"))
-                    opName = opName.Substring(0, opName.Length - 5);
-            }
-            if (string.IsNullOrWhiteSpace(opName)) return false;
+            
+            if (!binderConfig.Binder.IsOperationContract(method, out var opName)) return false;
 
             var args = method.GetParameters();
             if (args.Length > 3) return false; // too many parameters
 
-            var signature = GetSignature(args, method.ReturnType);
+            var signature = GetSignature(binderConfig.MarshallerCache, args, method.ReturnType);
 
             if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
 
@@ -233,7 +199,8 @@ namespace ProtoBuf.Grpc.Internal
                     default: throw new IndexOutOfRangeException(nameof(index));
                 }
             }
-            Type GetDataType((Type type, TypeCategory category) key, bool req)
+
+            static Type GetDataType((Type type, TypeCategory category) key, bool req)
             {
                 var type = key.type;
                 switch (key.category)
@@ -243,7 +210,7 @@ namespace ProtoBuf.Grpc.Internal
                     case TypeCategory.Void:
                     case TypeCategory.UntypedTask:
                     case TypeCategory.UntypedValueTask:
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Empty
                         return typeof(Empty);
 #pragma warning restore CS0618
                     case TypeCategory.TypedTask:
@@ -268,13 +235,13 @@ namespace ProtoBuf.Grpc.Internal
             operation = new ContractOperation(opName, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
         }
-        public static List<ContractOperation> FindOperations(Type contractType, bool demandAttribute = false)
+        public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType)
         {
             var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             var ops = new List<ContractOperation>(all.Length);
             foreach (var method in all)
             {
-                if (TryGetPattern(method, demandAttribute, out var op))
+                if (TryIdentifySignature(method, binderConfig, out var op))
                     ops.Add(op);
             }
             return ops;
@@ -287,7 +254,7 @@ namespace ProtoBuf.Grpc.Internal
             if (name == null || !s_reshaper.TryGetValue(name, out var method)) return null;
             return method.MakeGenericMethod(From, To);
         }
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Reshape
         static readonly Dictionary<string, MethodInfo> s_reshaper =
 
             (from method in typeof(Reshape).GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -345,7 +312,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static ISet<Type> ExpandInterfaces(Type type)
         {
-            var set = type.GetInterfaces().ToHashSet();
+            var set = new HashSet<Type>(type.GetInterfaces());
             if (type.IsInterface) set.Add(type);
             return set;
         }

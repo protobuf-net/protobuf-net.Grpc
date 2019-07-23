@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
@@ -10,7 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.HttpClient" Version="$(PBGRPCLibVersion)" />
+    
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
     <PackageReference Include="TaskBuilder.fs" Version="2.1.0" />
   </ItemGroup>

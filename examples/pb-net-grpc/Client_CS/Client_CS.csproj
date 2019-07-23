@@ -1,13 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
-    <!--<ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />-->
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.HttpClient" Version="$(PBGRPCLibVersion)" />
+
     <ProjectReference Include="..\Shared_CS\Shared_CS.csproj" />
   </ItemGroup>
 

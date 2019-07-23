@@ -5,15 +5,33 @@ using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Internal
 {
+    /// <summary>
+    /// Represents a void request or result
+    /// </summary>
     [Obsolete(Reshape.WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
     public sealed class Empty : IEquatable<Empty>
     {
+        /// <summary>
+        /// The singleton instance of this type
+        /// </summary>
         public static readonly Empty Instance = new Empty();
-        internal static readonly Task<Empty> InstanceTask = Task.FromResult(Instance);
+        /// <summary>
+        /// The singleton instance of this type, as a task
+        /// </summary>
+        public static readonly Task<Empty> InstanceTask = Task.FromResult(Instance);
         private Empty() { }
+        /// <summary>
+        /// Represents the value as a string
+        /// </summary>
         public override string ToString() => nameof(Empty);
+        /// <summary>
+        /// Compares two instances for equality
+        /// </summary>
         public override bool Equals(object? obj) => obj is Empty;
+        /// <summary>
+        /// Compares two instances for equality
+        /// </summary>
         public override int GetHashCode() => 42;
         bool IEquatable<Empty>.Equals(Empty other) => other != null;
 

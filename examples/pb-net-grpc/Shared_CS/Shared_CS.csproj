@@ -1,13 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.ServiceModel.Primitives" Version="4.5.3" />
-    <PackageReference Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
-    <!--<ProjectReference Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />-->
+
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
   </ItemGroup>
 
 </Project>

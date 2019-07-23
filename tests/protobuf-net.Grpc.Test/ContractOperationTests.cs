@@ -1,7 +1,7 @@
 using Grpc.Core;
 using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Internal;
-using ProtoBuf.Grpc.Server;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -58,7 +58,7 @@ namespace protobuf_net.Grpc.Test
         [Fact]
         public void ServerSignatureCount()
         {
-            Assert.Equal(38, ServicesExtensions.GeneralPurposeSignatureCount());
+            Assert.Equal(38, ServerInvokerLookup.GeneralPurposeSignatureCount());
         }
 
         [Fact]
@@ -82,7 +82,7 @@ namespace protobuf_net.Grpc.Test
 
             Assert.Empty(expected);
         }
-#pragma warning disable CS0618
+#pragma warning disable CS0618 // Empty
         [Theory]
         [InlineData(nameof(IAllOptions.Client_AsyncUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Grpc, (int)VoidKind.None)]
         [InlineData(nameof(IAllOptions.Client_BlockingUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Sync, (int)VoidKind.None)]
@@ -143,9 +143,10 @@ namespace protobuf_net.Grpc.Test
         {
             var method = typeof(IAllOptions).GetMethod(name);
             Assert.NotNull(method);
-            if (!ContractOperation.TryIdentifySignature(method!, out var operation))
+            var config = BinderConfiguration.Default;
+            if (!ContractOperation.TryIdentifySignature(method!, config, out var operation))
             {
-                var sig = ContractOperation.GetSignature(method!);
+                var sig = ContractOperation.GetSignature(config.MarshallerCache, method!);
                 Assert.True(false, sig.ToString());
             }
             Assert.Equal(method, operation.Method);
@@ -163,9 +164,10 @@ namespace protobuf_net.Grpc.Test
         {
             var list = new List<(MethodType Kind, string Signature)>();
             var sb = new StringBuilder();
+            var binder = BinderConfiguration.Default;
             foreach (var method in typeof(IAllOptions).GetMethods())
             {
-                if (ContractOperation.TryIdentifySignature(method, out var operation))
+                if (ContractOperation.TryIdentifySignature(method, binder, out var operation))
                 {
                     sb.Clear();
                     sb.Append(Sanitize(method.ReturnType)).Append(" Foo(");
@@ -184,12 +186,12 @@ namespace protobuf_net.Grpc.Test
             {
                 _output.WriteLine(grp.Key.ToString());
                 _output.WriteLine("");
-                foreach(var item in grp.OrderBy(x => x.Signature))
-                    _output.WriteLine(item.Signature);
+                foreach(var (kind, signature) in grp.OrderBy(x => x.Signature))
+                    _output.WriteLine(signature);
                 _output.WriteLine("");
             }
 
-            string Sanitize(Type type)
+            static string Sanitize(Type type)
             {
                 if (type == typeof(HelloRequest)) return "TRequest";
                 if (type == typeof(HelloReply)) return "TReply";
