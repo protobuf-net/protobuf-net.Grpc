@@ -3,8 +3,6 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Server.Kestrel.Core
 open Server_FS
 
-let exitCode = 0
-
 let createHostBuilder args =
     WebHost.CreateDefaultBuilder(args)
            .ConfigureKestrel(fun options ->
@@ -16,4 +14,4 @@ let createHostBuilder args =
 [<EntryPoint>]
 let main args =
     createHostBuilder(args).Build().Run()
-    exitCode
+    0
