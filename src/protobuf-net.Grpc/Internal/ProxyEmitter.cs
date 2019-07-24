@@ -243,9 +243,9 @@ namespace ProtoBuf.Grpc.Internal
                 cctor.Emit(OpCodes.Ret); // end the type initializer (after creating all the field types)
 
 #if NETSTANDARD2_0
-                var finalType = type.AsType();
+                var finalType = type.AsType()!;
 #else
-                var finalType = type.CreateType();
+                var finalType = type.CreateType()!;
 #endif
                 // assign the marshallers and invoke the init
                 foreach((var field, var name, var instance) in marshallers.Values)

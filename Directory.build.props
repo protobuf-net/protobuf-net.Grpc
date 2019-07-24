@@ -26,8 +26,8 @@
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>0.0.3-alpha.54</PBGRPCLibVersion>
-    <GrpcDotNetVersion>0.1.22-pre1</GrpcDotNetVersion>
-    <GrpcVersion>1.21.0</GrpcVersion>
+    <GrpcDotNetVersion>0.1.22-pre2</GrpcDotNetVersion>
+    <GrpcVersion>1.22.0</GrpcVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -38,7 +38,7 @@
     <PackageReference Include="SourceLink.Create.GitHub" Version="2.8.3" PrivateAssets="All" /> 
     <DotNetCliToolReference Include="dotnet-sourcelink" Version="2.8.3" />
     <DotNetCliToolReference Include="dotnet-sourcelink-git" Version="2.8.3" />
-    <PackageReference Include="Nerdbank.GitVersioning" Version="2.3.138">
+    <PackageReference Include="Nerdbank.GitVersioning" Version="2.3.183">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
