@@ -9,9 +9,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <PackageReference Include="Grpc.AspNetCore.Server" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>
 </Project>
