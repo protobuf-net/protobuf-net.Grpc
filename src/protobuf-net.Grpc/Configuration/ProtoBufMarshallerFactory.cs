@@ -66,9 +66,8 @@ namespace ProtoBuf.Grpc.Configuration
 
         private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
         {
-#if PLAT_DESER_ROS
             var ros = context.PayloadAsReadOnlySequence();
-#if PLAT_NOSPAN
+#if PLAT_PBN_NOSPAN
             // copy the data out of the ROS into a rented buffer, and deserialize
             // from that
             var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
@@ -88,12 +87,6 @@ namespace ProtoBuf.Grpc.Configuration
                 return (T)_model.Deserialize(reader, ref state, null, typeof(T));
             }
 #endif
-
-#else
-            // only the right-sized byte[] API available to us
-            var arr = context.PayloadAsNewBuffer();
-            return Deserialize<T>(arr, 0, arr.Length);
-#endif
         }
 
         /// <summary>
@@ -112,7 +105,7 @@ namespace ProtoBuf.Grpc.Configuration
 
         private T Deserialize<T>(byte[] payload, int offset, int count)
         {
-#if PLAT_NOSPAN
+#if PLAT_PBN_NOSPAN
             using (var ms = new MemoryStream(payload, offset, count))
             using (var reader = ProtoReader.Create(ms, _model))
             {
