@@ -11,9 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
-    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.HttpClient" Version="$(PBGRPCLibVersion)" />
-    
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
     <PackageReference Include="TaskBuilder.fs" Version="2.1.0" />
   </ItemGroup>

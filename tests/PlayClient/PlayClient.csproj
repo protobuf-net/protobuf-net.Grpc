@@ -14,7 +14,7 @@
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
-    <ProjectReference Include="..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
+    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>
 
 </Project>

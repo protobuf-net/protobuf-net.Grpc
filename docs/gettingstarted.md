@@ -20,7 +20,8 @@ Unrelated to gRPC; for many years now, [`protobuf-net`](https://github.com/mgrav
 protobuf serialization for .NET; `protobuf-net.Grpc` takes the best bits from `protobuf-net` and `Grpc.Net` and smashes
 them together to give you:
 
-- the "Kestrel" and `HttpClient` HTTP/2 bindings
+- support for the managed "Kestrel" (server) and `HttpClient` (client) HTTP/2 bindings on .NET Core 3
+- support for the unmanaged `Grpc.Core` chttp2 client and server bindings 
 - code-first or contract-first
 - the "protogen" codegen tool is proto2 and proto3, and offers C# and VB
 - and if you have code-first support, you can use any .NET language (tested: C#, VB, F#)
@@ -39,25 +40,10 @@ Also: make sure that you are *actually using* the preview runtime, via "global.j
 ``` json
 {
   "sdk": {
-    "version": "3.0.100-preview7"
+    "version": "3.0.100-preview9"
   }
 }
 ```
-
-Finally, as a [temporary workaround](https://github.com/protobuf-net/protobuf-net.Grpc/issues/4), add the following to any local project files/directory props files to enable `await foreach`:
-
-``` xml
-<Target Name="ChangeAliasesOfReactiveExtensions"
-  BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
-  <ItemGroup>
-    <ReferencePath Condition="'%(FileName)' == 'System.Interactive.Async'">
-      <Aliases>ix</Aliases>
-    </ReferencePath>
-  </ItemGroup>
-</Target>
-```
-
-(see the above link for what this does and why)
 
 ### 1: define your data contracts and service contracts
 
@@ -216,16 +202,16 @@ Now listening on: http://localhost:10042
 ### 2: implement the client
 
 OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET Core console application targeting `netcoreapp3.0`,
-and add a package reference to [`protobuf-net.Grpc.HttpClient`](https://www.nuget.org/packages/protobuf-net.Grpc.HttpClient). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
+and add a package reference to [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.GrpcHttpClient). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
 need to twist it's arm a little; then we can very easily create a client to our services at our base address; let's start by doing some maths:
 
 ``` c#
 static async Task Main()
 {
-    HttpClientExtensions.AllowUnencryptedHttp2 = true;
-    using (var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") })
+    GrpcClientFactory.AllowUnencryptedHttp2 = true;
+    using (var channel = GrpcChannel.ForAddress("http://localhost:10042"))
     {
-        var calculator = http.CreateGrpcService<ICalculator>();
+        var calculator = channel.CreateGrpcService<ICalculator>();
         var result = await calculator.MultiplyAsync(new MultiplyRequest { X = 12, Y = 4 });
         Console.WriteLine(result.Result);
     }
@@ -241,7 +227,7 @@ If we use `dotnet run`, unsurprisingly we see:
 So let's do something more exciting and consume our time service for, say, a minute:
 
 ``` c#
-var clock = http.CreateGrpcService<ITimeService>();
+var clock = channel.CreateGrpcService<ITimeService>();
 var cancel = new CancellationTokenSource(TimeSpan.FromMinutes(1));
 var options = new CallOptions(cancellationToken: cancel.Token);
 await foreach(var time in clock.SubscribeAsync(new CallContext(options)))

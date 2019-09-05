@@ -99,8 +99,8 @@ namespace PlayClient
 #if HTTPCLIENT
         static async Task TestHttpClient()
         {
-            HttpClientExtensions.AllowUnencryptedHttp2 = true;
-            using var http = new HttpClient { BaseAddress = new Uri("http://localhost:10042") };
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = Grpc.Net.Client.GrpcChannel.ForAddress("http://localhost:10042");
 
             var calculator = http.CreateGrpcService<ICalculator>();
             await TestCalculator(calculator);

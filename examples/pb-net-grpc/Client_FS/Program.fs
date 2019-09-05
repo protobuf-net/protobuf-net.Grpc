@@ -1,14 +1,13 @@
 ﻿open ProtoBuf.Grpc.Client
 open Shared_FS
-open System
-open System.Net.Http
+open Grpc.Net.Client
 open FSharp.Control.Tasks
 
 [<EntryPoint>]
 let main _ =
-    HttpClientExtensions.AllowUnencryptedHttp2 <- true
+    GrpcClientFactory.AllowUnencryptedHttp2 <- true
     task {
-        use http = new HttpClient (BaseAddress = Uri "http://localhost:10042")
+        use http = GrpcChannel.ForAddress("http://localhost:10042")
         let client = http.CreateGrpcService<ICalculator>()
         let! result = client.MultiplyAsync { X = 12; Y = 4 }
         printfn "%i" result.Result

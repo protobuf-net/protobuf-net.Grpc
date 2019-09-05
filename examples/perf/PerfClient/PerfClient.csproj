@@ -10,7 +10,7 @@
     <None Remove="PerfTest.proto" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.8.0" />
+    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufVersion)" />
     <PackageReference Include="Grpc" Version="$(GrpcVersion)" />
     <PackageReference Include="Grpc.Tools" Version="$(GrpcVersion)">
       <PrivateAssets>all</PrivateAssets>
@@ -19,7 +19,6 @@
     <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
     <ProjectReference Include="..\..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
   </ItemGroup>
   <ItemGroup>
