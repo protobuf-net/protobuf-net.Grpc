@@ -27,7 +27,7 @@ namespace Client
 
                 var clock = new TimeService.TimeServiceClient(channel);
                 using var subResult = clock.Subscribe(new Empty());
-                using var reader = subResult.ResponseStream;
+                var reader = subResult.ResponseStream;
                 while (await reader.MoveNext(default))
                 {
                     var time = reader.Current.Time;

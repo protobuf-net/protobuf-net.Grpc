@@ -47,12 +47,12 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Indicates whether an interface should be considered a service-contract (and if so: by what name)
         /// </summary>
-        public virtual bool IsServiceContract(Type contractType, out string name)
+        public virtual bool IsServiceContract(Type contractType, out string? name)
         {
             var sca = (ServiceContractAttribute?)Attribute.GetCustomAttribute(contractType, typeof(ServiceContractAttribute), inherit: true);
             if (sca == null)
             {
-                name = "";
+                name = default;
                 return false;
             }
             var serviceName = sca?.Name;
@@ -65,7 +65,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Indicates whether a method should be considered an operation-contract (and if so: by what name)
         /// </summary>
-        public virtual bool IsOperationContract(MethodInfo method, out string name)
+        public virtual bool IsOperationContract(MethodInfo method, out string? name)
         {
             var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
             string? opName = oca?.Name;

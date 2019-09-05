@@ -64,7 +64,7 @@ convertible from `CallOptions`, so you don't need to do the intermediate step:
 
 ``` c#
 // create a client
-var client = http.CreateGrpcService<IMyAmazingService>();
+var client = channel.CreateGrpcService<IMyAmazingService>();
 // specify your gRPC options here including auth if needed
 var options = new CallOptions(...);
 // invoke the RPC call

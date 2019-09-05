@@ -1,16 +1,14 @@
-﻿using Grpc.Net.Client;
-using Microsoft.Extensions.Logging;
+﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using System;
-using System.Net.Http;
 using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Client
 {
     /// <summary>
-    /// Provides extension methods to the HttpClient API
+    /// Provides extension methods to the native Channel API
     /// </summary>
-    public static class HttpClientExtensions
+    public static class GrpcClientFactory
     {
         private const string Switch_AllowUnencryptedHttp2 = "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport";
         /// <summary>
@@ -21,5 +19,13 @@ namespace ProtoBuf.Grpc.Client
             get => AppContext.TryGetSwitch(Switch_AllowUnencryptedHttp2, out var enabled) ? enabled : false;
             set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, true);
         }
+
+        /// <summary>
+        /// Creates a code-first service backed by a Channel instance
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static TService CreateGrpcService<TService>(this ChannelBase client, ClientFactory? clientFactory = null)
+            where TService : class
+                    => (clientFactory ?? ClientFactory.Default).CreateClient<TService>(client.CreateCallInvoker());
     }
 }

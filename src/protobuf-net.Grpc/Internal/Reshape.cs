@@ -121,12 +121,9 @@ namespace ProtoBuf.Grpc.Internal
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static async IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IAsyncStreamReader<T> reader, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            using (reader)
+            while (await reader.MoveNext(cancellationToken))
             {
-                while (await reader.MoveNext(cancellationToken))
-                {
-                    yield return reader.Current;
-                }
+                yield return reader.Current;
             }
         }
 
@@ -253,7 +250,7 @@ namespace ProtoBuf.Grpc.Internal
             {
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
 
-                using var seq = call.ResponseStream;
+                var seq = call.ResponseStream;
                 while (await seq.MoveNext(default))
                 {
                     yield return seq.Current;
@@ -358,7 +355,7 @@ namespace ProtoBuf.Grpc.Internal
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
 
-                using var seq = call.ResponseStream;
+                var seq = call.ResponseStream;
                 while (await seq.MoveNext(default))
                 {
                     yield return seq.Current;

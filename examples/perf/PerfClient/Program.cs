@@ -6,7 +6,6 @@ using PerfTest;
 using ProtoBuf.Grpc.Client;
 using System;
 using System.Diagnostics;
-using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace PerfClient
@@ -17,9 +16,9 @@ namespace PerfClient
         {
             var unmanagedClientmanagedClientUnmanagedServer = new Channel("localhost", 10050, ChannelCredentials.Insecure);
             var unmanagedClientmanagedClientManagedServer = new Channel("localhost", 10051, ChannelCredentials.Insecure);
-            HttpClientExtensions.AllowUnencryptedHttp2 = true;
-            var managedClientUnmanagedServer = new HttpClient { BaseAddress = new Uri("http://localhost:10050") };
-            var managedClientManagedServer = new HttpClient { BaseAddress = new Uri("http://localhost:10051") };
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            var managedClientUnmanagedServer = GrpcChannel.ForAddress("http://localhost:10050");
+            var managedClientManagedServer = GrpcChannel.ForAddress("http://localhost:10051");
 
             Console.WriteLine("warming up...");
             await Test(20, false);
@@ -43,13 +42,13 @@ namespace PerfClient
                 await Test3("unmanaged", "managed", unmanagedClientmanagedClientManagedServer.CreateGrpcService<IVanillaGrpc>(), count, log);
                 await Test4("unmanaged", "managed", unmanagedClientmanagedClientManagedServer.CreateGrpcService<IProtobufNetGrpc>(), count, log);
 
-                await Test1("managed", "unmanaged", new HttpClientCallInvoker(managedClientUnmanagedServer, null), count, log);
-                await Test2("managed", "unmanaged", new HttpClientCallInvoker(managedClientUnmanagedServer, null), count, log);
+                await Test1("managed", "unmanaged", managedClientUnmanagedServer.CreateCallInvoker(), count, log);
+                await Test2("managed", "unmanaged", managedClientUnmanagedServer.CreateCallInvoker(), count, log);
                 await Test3("managed", "unmanaged", managedClientUnmanagedServer.CreateGrpcService<IVanillaGrpc>(), count, log);
                 await Test4("managed", "unmanaged", managedClientUnmanagedServer.CreateGrpcService<IProtobufNetGrpc>(), count, log);
 
-                await Test1("managed", "managed", new HttpClientCallInvoker(managedClientManagedServer, null), count, log);
-                await Test2("managed", "managed", new HttpClientCallInvoker(managedClientManagedServer, null), count, log);
+                await Test1("managed", "managed", managedClientManagedServer.CreateCallInvoker(), count, log);
+                await Test2("managed", "managed", managedClientManagedServer.CreateCallInvoker(), count, log);
                 await Test3("managed", "managed", managedClientManagedServer.CreateGrpcService<IVanillaGrpc>(), count, log);
                 await Test4("managed", "managed", managedClientManagedServer.CreateGrpcService<IProtobufNetGrpc>(), count, log);
 

@@ -8,9 +8,9 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.HttpClient\protobuf-net.Grpc.HttpClient.csproj" />
-    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.HttpClient" Version="$(PBGRPCLibVersion)" />
-    
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
+    <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
     <ProjectReference Include="..\Shared_VB\Shared_VB.vbproj" />
   </ItemGroup>
 </Project>
