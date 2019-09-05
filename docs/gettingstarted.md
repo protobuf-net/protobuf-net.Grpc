@@ -202,7 +202,7 @@ Now listening on: http://localhost:10042
 ### 2: implement the client
 
 OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET Core console application targeting `netcoreapp3.0`,
-and add a package reference to [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.GrpcHttpClient). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
+and add a package reference to [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
 need to twist it's arm a little; then we can very easily create a client to our services at our base address; let's start by doing some maths:
 
 ``` c#
