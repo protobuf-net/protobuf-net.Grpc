@@ -8,7 +8,7 @@
     <NoWarn>NU5105;CS1701;BC42016;MSB3884;NETSDK1057;CS8632</NoWarn>
     <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)ProtoBuf.snk</AssemblyOriginatorKeyFile>
     <Copyright>Marc Gravell, 2019-</Copyright>
-    <PackageLicenseUrl>https://raw.githubusercontent.com/protobuf-net/protobuf-net.Grpc/master/LICENSE</PackageLicenseUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/protobuf-net/protobuf-net.Grpc</PackageProjectUrl>
     <RepositoryUrl>https://github.com/protobuf-net/protobuf-net.Grpc</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
