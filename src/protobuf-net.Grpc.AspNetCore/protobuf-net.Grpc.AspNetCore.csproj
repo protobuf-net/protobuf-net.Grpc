@@ -3,7 +3,6 @@
   <PropertyGroup>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <RootNamespace>ProtoBuf.Grpc.Server</RootNamespace>
-    <Version>0.1-preview1</Version>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
 

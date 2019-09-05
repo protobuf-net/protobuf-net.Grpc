@@ -11,7 +11,7 @@
     <PackageReference Include="System.Threading.Channels" Version="4.5.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' or '$(TargetFramework)' == 'net461'">
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.0.0-preview7.19362.9" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.0.0-preview9.19421.4" />
     <PackageReference Include="protobuf-net" Version="2.4.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net461'"> <!-- because doesn't get it transitively -->
