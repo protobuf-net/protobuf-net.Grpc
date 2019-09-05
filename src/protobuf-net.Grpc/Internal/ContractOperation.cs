@@ -189,15 +189,15 @@ namespace ProtoBuf.Grpc.Internal
 
             (Type type, TypeCategory category) GetTypeByIndex(int index)
             {
-                switch (index)
+                return index switch
                 {
-                    case 0: return (args[0].ParameterType, signature.Arg0);
-                    case 1: return (args[1].ParameterType, signature.Arg1);
-                    case 2: return (args[2].ParameterType, signature.Arg2);
-                    case RET: return (method.ReturnType, signature.Ret);
-                    case VOID: return (typeof(void), TypeCategory.Void);
-                    default: throw new IndexOutOfRangeException(nameof(index));
-                }
+                    0 => (args[0].ParameterType, signature.Arg0),
+                    1 => (args[1].ParameterType, signature.Arg1),
+                    2 => (args[2].ParameterType, signature.Arg2),
+                    RET => (method.ReturnType, signature.Ret),
+                    VOID => (typeof(void), TypeCategory.Void),
+                    _ => throw new IndexOutOfRangeException(nameof(index)),
+                };
             }
 
             static Type GetDataType((Type type, TypeCategory category) key, bool req)
@@ -232,7 +232,7 @@ namespace ProtoBuf.Grpc.Internal
             var from = GetDataType(GetTypeByIndex(config.From), true);
             var to = GetDataType(GetTypeByIndex(config.To), false);
 
-            operation = new ContractOperation(opName, from, to, method, config.Method, config.Context, config.Result, config.Void);
+            operation = new ContractOperation(opName!, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
         }
         public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType)

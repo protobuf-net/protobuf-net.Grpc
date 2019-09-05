@@ -54,7 +54,7 @@ namespace ProtoBuf.Grpc.Configuration
                         svcOpCount++;
                     }
                 }
-                OnServiceBound(state, serviceName, serviceType, serviceContract, svcOpCount);
+                OnServiceBound(state, serviceName!, serviceType, serviceContract, svcOpCount);
             }
             return totalCount;
 
