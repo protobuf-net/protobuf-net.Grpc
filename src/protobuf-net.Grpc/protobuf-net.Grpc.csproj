@@ -1,24 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.1;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net461;netstandard2.1;netstandard2.0</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc</RootNamespace>
     <LangVersion>preview</LangVersion>
-    
+
     <!-- note: stick with RTM versions of protobuf-net for now; update all later-->
-    <DefineConstants>$(DefineConstants);PLAT_PBN_NOSPAN</DefineConstants>
+    <DefineConstants>$(DefineConstants);PLAT_PBN_NOSPAN;PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Grpc.Core.Api" Version="$(GrpcVersion)" />
     <PackageReference Include="System.Threading.Channels" Version="4.5.0" />
     <PackageReference Include="protobuf-net" Version="2.4.0" />
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.1'">
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.0.0-preview9.19421.4" />
   </ItemGroup>
-  
-  <!-- this only exists in netcoreapp3.0; not worth the extra TFM? -->
-  <PropertyGroup Condition="'$(TargetFramework)' != 'netcoreapp3.0'">
-    <DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
-  </PropertyGroup>
 </Project>

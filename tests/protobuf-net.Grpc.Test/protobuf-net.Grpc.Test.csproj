@@ -2,9 +2,10 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <TargetFrameworks>net461;netcoreapp3.0</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
+    <LangVersion>preview</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
+    <!--<ProjectReference Include="..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />-->
     <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
   </ItemGroup>
 
