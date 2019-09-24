@@ -27,8 +27,8 @@
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>0.0.3-alpha.54</PBGRPCLibVersion>
-    <GrpcDotNetVersion>0.2.23-pre1</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.9.1</GoogleProtobufVersion>
+    <GrpcDotNetVersion>2.23.2</GrpcDotNetVersion>
+    <GoogleProtobufVersion>3.9.2</GoogleProtobufVersion>
     <GrpcVersion>2.23.0</GrpcVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
