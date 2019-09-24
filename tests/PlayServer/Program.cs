@@ -52,7 +52,9 @@ internal class MyServer : ICalculator, IDuplex
 
 
     private IAsyncEnumerable<MultiplyResult> ProduceAsync(CallContext context) => ProduceAsyncImpl(context.CancellationToken);
+#pragma warning disable IDE0060
     private async IAsyncEnumerable<MultiplyResult> ProduceAsyncImpl([EnumeratorCancellation] CancellationToken cancellationToken)
+#pragma warning restore IDE0060
     {
         for (int i = 0; i < 4; i++)
         {

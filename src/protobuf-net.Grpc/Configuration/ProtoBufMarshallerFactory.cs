@@ -106,11 +106,9 @@ namespace ProtoBuf.Grpc.Configuration
         private T Deserialize<T>(byte[] payload, int offset, int count)
         {
 #if PLAT_PBN_NOSPAN
-            using (var ms = new MemoryStream(payload, offset, count))
-            using (var reader = ProtoReader.Create(ms, _model))
-            {
-                return (T)_model.Deserialize(reader, null, typeof(T));
-            }
+            using var ms = new MemoryStream(payload, offset, count);
+            using var reader = ProtoReader.Create(ms, _model);
+            return (T)_model.Deserialize(reader, null, typeof(T));
 #else
             var range = new ReadOnlyMemory<byte>(payload, offset, count);
             using (var reader = ProtoReader.Create(out var state, range, _model))
@@ -125,11 +123,9 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected override byte[] Serialize<T>(T value)
         {
-            using (var ms = new MemoryStream())
-            {
-                _model.Serialize(ms, value, context: null);
-                return ms.ToArray();
-            }
+            using var ms = new MemoryStream();
+            _model.Serialize(ms, value, context: null);
+            return ms.ToArray();
         }
     }
 }
