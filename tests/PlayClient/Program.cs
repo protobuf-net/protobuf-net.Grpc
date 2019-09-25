@@ -67,9 +67,11 @@ namespace PlayClient
             return default;
         };
 
+#pragma warning disable IDE0060
         static async IAsyncEnumerable<MultiplyRequest> Rand(int count, TimeSpan delay, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+#pragma warning restore IDE0060
         {
-            for(int i = 0; i < count; i++)
+            for (int i = 0; i < count; i++)
             {
                 await Task.Delay(delay);
                 var next = new MultiplyRequest { X = i, Y = i };
