@@ -243,7 +243,7 @@ namespace ProtoBuf.Grpc.Internal
                 cctor.Emit(OpCodes.Ret); // end the type initializer (after creating all the field types)
 
 #if NETSTANDARD2_0
-                var finalType = type.AsType()!;
+                var finalType = type.CreateTypeInfo()!;
 #else
                 var finalType = type.CreateType()!;
 #endif
