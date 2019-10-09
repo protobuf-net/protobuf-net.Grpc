@@ -64,7 +64,7 @@ namespace protobuf_net.Grpc.Test
         [Fact]
         public void CheckAllMethodsConvered()
         {
-            var expected =  typeof(IAllOptions).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(x => x.Name).ToHashSet();
+            var expected =  new HashSet<string>(typeof(IAllOptions).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(x => x.Name));
             Assert.Equal(ContractOperation.SignatureCount, expected.Count);
 
             var attribs = GetType().GetMethod(nameof(CheckMethodIdentification))!.GetCustomAttributesData();
