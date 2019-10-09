@@ -14,7 +14,7 @@ namespace ProtoBuf.Grpc.Internal
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
     public static class Reshape
     {
-        internal const string WarningMessage = "This API is intended for use by runtime-generated code; all methods can be changed without notice - it is only guaranteed to work with the internally generated code";
+        internal const string WarningMessage = "This API is intended for use by runtime-generated code; all types and methods can be changed without notice - it is only guaranteed to work with the internally generated code";
 
         /// <summary>
         /// Provides a task that is equivalent to a void operation
