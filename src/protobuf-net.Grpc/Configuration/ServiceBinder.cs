@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Reflection;
 using System.ServiceModel;
 
@@ -49,6 +50,12 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public virtual bool IsServiceContract(Type contractType, out string? name)
         {
+            if (contractType.GetInterfaces().Any(x => x == typeof(IGrpcService)))
+            {
+                name = contractType.Name;
+                return true;
+            }
+
             var sca = (ServiceContractAttribute?)Attribute.GetCustomAttribute(contractType, typeof(ServiceContractAttribute), inherit: true);
             if (sca == null)
             {
@@ -67,6 +74,12 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public virtual bool IsOperationContract(MethodInfo method, out string? name)
         {
+            if (method.DeclaringType == typeof(object) || !method.IsPublic)
+            {
+                name = null;
+                return false;
+            }
+
             var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
             string? opName = oca?.Name;
             if (string.IsNullOrWhiteSpace(opName))
