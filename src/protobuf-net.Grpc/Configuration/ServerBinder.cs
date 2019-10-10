@@ -1,6 +1,8 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Internal;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -39,7 +41,11 @@ namespace ProtoBuf.Grpc.Configuration
             Type[] typesBuffer = Array.Empty<Type>();
             string? serviceName;
             if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
-            foreach (var serviceContract in ContractOperation.ExpandInterfaces(serviceType))
+            var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
+                ? new HashSet<Type> { serviceType }
+                : ContractOperation.ExpandInterfaces(serviceType);
+
+            foreach (var serviceContract in serviceContracts)
             {
                 if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
 
