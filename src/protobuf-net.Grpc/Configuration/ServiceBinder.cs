@@ -50,7 +50,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public virtual bool IsServiceContract(Type contractType, out string? name)
         {
-            if (contractType.GetInterfaces().Any(x => x == typeof(IGrpcService)))
+            if (typeof(IGrpcService).IsAssignableFrom(contractType))
             {
                 name = contractType.Name;
                 return true;
