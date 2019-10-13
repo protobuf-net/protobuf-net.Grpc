@@ -32,15 +32,15 @@ Additionally, it even works with the standard (unmanaged) `Grpc.Core` implementa
 
 ### 0: get your build environment
 
-This work assumes you have the [.NET Core 3 preview](https://github.com/dotnet/core/blob/master/daily-builds.md), and an up-to-date compiler, ideally
-by having the latest **preview** IDE (16.2.0 preview 2 at time of writing).
+This walkthrough assumes you have the [.NET Core 3 SDK](https://dotnet.microsoft.com/download/dotnet-core/3.0), and an up-to-date compiler, ideally
+by having an up-to-date IDE. Note that the tools work on more platforms than just .NET Core 3 (although you'd need to use the unmanaged bindings).
 
-Also: make sure that you are *actually using* the preview runtime, via "global.json"; right now, my "global.json" is:
+Also: make sure that you are *actually using* the .NET Core 3 SDK, via "global.json"; right now, my "global.json" is:
 
 ``` json
 {
   "sdk": {
-    "version": "3.0.100-preview9"
+    "version": "3.0.100"
   }
 }
 ```
