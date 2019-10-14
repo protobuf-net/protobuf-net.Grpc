@@ -1,5 +1,9 @@
 # Release Notes
 
+## 1.0.13
+
+- add API to allow additional configuration when calling `AddCodeFirstGrpc`
+
 ## 1.0.10
 
 - add alternative API for defining simple services ([via @mythz](https://github.com/protobuf-net/protobuf-net.Grpc/pull/23))
