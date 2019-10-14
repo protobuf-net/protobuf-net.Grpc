@@ -1,9 +1,11 @@
-﻿using Grpc.AspNetCore.Server.Model;
+﻿using Grpc.AspNetCore.Server;
+using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
+using System;
 using System.Collections.Generic;
 
 namespace ProtoBuf.Grpc.Server
@@ -16,10 +18,16 @@ namespace ProtoBuf.Grpc.Server
         /// <summary>
         /// Registers a provider that can recognize and handle code-first services
         /// </summary>
-        public static void AddCodeFirstGrpc(this IServiceCollection services)
+        public static void AddCodeFirstGrpc(this IServiceCollection services) => AddCodeFirstGrpc(services, null);
+
+        /// <summary>
+        /// Registers a provider that can recognize and handle code-first services
+        /// </summary>
+        public static IGrpcServerBuilder AddCodeFirstGrpc(this IServiceCollection services, Action<GrpcServiceOptions>? configureOptions)
         {
-            services.AddGrpc();
+            var builder = configureOptions == null ? services.AddGrpc() : services.AddGrpc(configureOptions);
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
+            return builder;
         }
 
         private sealed class CodeFirstServiceMethodProvider<TService> : IServiceMethodProvider<TService> where TService : class
