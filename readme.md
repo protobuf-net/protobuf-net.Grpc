@@ -1,5 +1,7 @@
 # protobuf-net.Grpc
 
+[![Build status](https://ci.appveyor.com/api/projects/status/en9i5mp471ci6ip3/branch/master?svg=true)](https://ci.appveyor.com/project/StackExchange/protobuf-net-grpc/branch/master)
+
 `protobuf-net.Grpc` adds code-first support for services over gRPC using either the native `Grpc.Core` API, or the fully-managed `Grpc.Net.Client` / `Grpc.AspNetCore.Server` API.
 
 It should work on all .NET languages that can generate something *even remotely like* a regular .NET type model.
