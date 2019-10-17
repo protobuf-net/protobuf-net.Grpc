@@ -150,8 +150,8 @@ namespace ProtoBuf.Grpc.Internal
         public static TResponse UnarySync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
         {
             context.Prepare();
             return invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
@@ -166,8 +166,8 @@ namespace ProtoBuf.Grpc.Internal
         public static void UnarySyncVoid<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
         {
             context.Prepare();
             invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
@@ -182,8 +182,8 @@ namespace ProtoBuf.Grpc.Internal
         public static Task<TResponse> UnaryTaskAsync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare());
 
         /// <summary>
@@ -195,8 +195,8 @@ namespace ProtoBuf.Grpc.Internal
         public static ValueTask<TResponse> UnaryValueTaskAsync<TRequest, TResponse>(
             this in CallContext context, CallInvoker invoker,
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
 
         /// <summary>
@@ -208,8 +208,8 @@ namespace ProtoBuf.Grpc.Internal
         public static ValueTask UnaryValueTaskAsyncVoid<TRequest, TResponse>(
             this in CallContext context, CallInvoker invoker,
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -238,8 +238,8 @@ namespace ProtoBuf.Grpc.Internal
         public static IAsyncEnumerable<TResponse> ServerStreamingAsync<TRequest, TResponse>(
             this in CallContext context,
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => ServerStreamingAsyncImpl<TRequest, TResponse>(invoker.AsyncServerStreamingCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare(), context.CancellationToken);
 
         private static async IAsyncEnumerable<TResponse> ServerStreamingAsyncImpl<TRequest, TResponse>(
@@ -272,8 +272,8 @@ namespace ProtoBuf.Grpc.Internal
         public static Task<TResponse> ClientStreamingTaskAsync<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request);
 
         /// <summary>
@@ -285,8 +285,8 @@ namespace ProtoBuf.Grpc.Internal
         public static ValueTask<TResponse> ClientStreamingValueTaskAsync<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request));
 
         /// <summary>
@@ -298,8 +298,8 @@ namespace ProtoBuf.Grpc.Internal
         public static ValueTask ClientStreamingValueTaskAsyncVoid<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request));
 
         private static async Task<TResponse> ClientStreamingTaskAsyncImpl<TRequest, TResponse>(
@@ -340,8 +340,8 @@ namespace ProtoBuf.Grpc.Internal
         public static IAsyncEnumerable<TResponse> DuplexAsync<TRequest, TResponse>(
             this in CallContext options,
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
-            where TRequest : class
-            where TResponse : class
+            where TRequest : class, struct
+            where TResponse : class, struct
             => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request);
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
