@@ -78,7 +78,8 @@ namespace ProtoBuf.Grpc.Configuration
         {
             // the managed implementation does not yet implement this API
             try { writer = context.GetBufferWriter(); }
-            catch { writer = default; }
+            catch (NotSupportedException) { writer = default; }
+            catch (NotImplementedException) { writer = default; }
             return writer is object;
         }
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
