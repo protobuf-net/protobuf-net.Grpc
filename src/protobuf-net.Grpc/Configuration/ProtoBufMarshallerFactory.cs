@@ -34,20 +34,26 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None);
 
-        private readonly RuntimeTypeModel _model;
+        private readonly TypeModel _model;
         private readonly Options _options;
 
         /// <summary>
         /// Create a new factory using a specific protobuf-net model
         /// </summary>
-        public static MarshallerFactory Create(RuntimeTypeModel? model = null, Options options = Options.None)
+        public static MarshallerFactory Create(TypeModel? model = null, Options options = Options.None)
         {
-            if (model == null) model = RuntimeTypeModel.Default;
+            model ??= RuntimeTypeModel.Default;
             if (options == Options.None && model == RuntimeTypeModel.Default) return Default;
             return new ProtoBufMarshallerFactory(model, options);
         }
 
-        internal ProtoBufMarshallerFactory(RuntimeTypeModel model, Options options)
+        /// <summary>
+        /// Create a new factory using a specific protobuf-net model
+        /// </summary>
+        public static MarshallerFactory Create(RuntimeTypeModel model, Options options)
+            => Create((TypeModel)model, options);
+
+        internal ProtoBufMarshallerFactory(TypeModel model, Options options)
         {
             _model = model;
             _options = options;
@@ -84,7 +90,7 @@ namespace ProtoBuf.Grpc.Configuration
         }
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
         {
-            if ((object)_model is IProtoOutput<IBufferWriter<byte>> native
+            if (_model is IProtoOutput<IBufferWriter<byte>> native
                 && TryGetBufferWriter(context, out var writer))
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
                 RecordUplevelBufferWrite();
@@ -100,7 +106,7 @@ namespace ProtoBuf.Grpc.Configuration
         private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
         {
             var ros = context.PayloadAsReadOnlySequence();
-            if ((object)_model is IProtoInput<ReadOnlySequence<byte>> native)
+            if (_model is IProtoInput<ReadOnlySequence<byte>> native)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
                 RecordUplevelBufferRead();
                 return native.Deserialize<T>(ros);
