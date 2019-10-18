@@ -1,12 +1,9 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Collections.Concurrent;
 using System.Reflection;
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Internal
 {

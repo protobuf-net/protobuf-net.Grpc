@@ -4,10 +4,14 @@ using System;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
-using Grpc.Net.Client;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using Xunit;
+using Xunit.Abstractions;
+
+#if MANAGED_CLIENT
+using Grpc.Net.Client;
+#endif
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -33,7 +37,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [DataMember(Order = 1)]
         public int Result { get; set; }
     }
-    
+
     public class ApplyServices : IGrpcService
     {
         public Task<ApplyResponse> Add(Apply request) => Task.FromResult(new ApplyResponse(request.X + request.Y));
@@ -46,7 +50,7 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         public const int Port = 10042;
         private readonly Server _server;
-        
+
         public GrpcServiceFixture()
         {
             _server = new Server
@@ -62,20 +66,43 @@ namespace protobuf_net.Grpc.Test.Integration
             await _server.ShutdownAsync();
         }
     }
-    
+
     public class GrpcServiceTests : IClassFixture<GrpcServiceFixture>
     {
-        private GrpcServiceFixture _fixture;
-        public GrpcServiceTests(GrpcServiceFixture fixture) => _fixture = fixture;
+        private readonly GrpcServiceFixture _fixture;
+        private readonly ITestOutputHelper _log;
+        public GrpcServiceTests(ITestOutputHelper log, GrpcServiceFixture fixture)
+        {
+            _fixture = fixture;
+            _log = log;
+        }
+
+        private void Log(string message) => _log?.WriteLine(message);
 
         [Fact]
-        public async Task CanCallAllApplyServices()
+        public async Task CanCallAllApplyServices_NativeClient()
         {
-            GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            var channel = new Channel("localhost", GrpcServiceFixture.Port, ChannelCredentials.Insecure);
+            try
+            {
+                await TestMathAsync(channel);
+            }
+            finally
+            {
+                await channel.ShutdownAsync();
+            }
+        }
 
+        private async Task TestMathAsync(ChannelBase channel)
+        {
+            var invoker = channel.CreateCallInvoker();
             var request = new Apply { X = 6, Y = 3 };
-            var invoker = http.CreateCallInvoker();
+
+#if DEBUG
+            var uplevelReadsBefore = ProtoBufMarshallerFactory.UplevelBufferReadCount;
+            var uplevelWritesBefore = ProtoBufMarshallerFactory.UplevelBufferWriteCount;
+            Log($"Buffer usage before: {uplevelReadsBefore}/{uplevelWritesBefore}");
+#endif
 
             var response = await invoker.Execute<Apply, ApplyResponse>(request, nameof(ApplyServices), nameof(ApplyServices.Add));
             Assert.Equal(9, response.Result);
@@ -85,9 +112,36 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(3, response.Result);
             response = await invoker.Execute<Apply, ApplyResponse>(request, nameof(ApplyServices), nameof(ApplyServices.Div));
             Assert.Equal(2, response.Result);
+
+#if DEBUG
+            var uplevelReadsAfter = ProtoBufMarshallerFactory.UplevelBufferReadCount;
+            var uplevelWritesAfter = ProtoBufMarshallerFactory.UplevelBufferWriteCount;
+            Log($"Buffer usage after: {uplevelReadsAfter}/{uplevelWritesAfter}");
+
+#if PROTOBUFNET_BUFFERS
+            Assert.True(uplevelReadsBefore < uplevelReadsAfter);
+            Assert.True(uplevelWritesBefore < uplevelWritesAfter);
+#else
+            Assert.Equal(uplevelReadsBefore, uplevelReadsAfter);
+            Assert.Equal(uplevelWritesBefore, uplevelWritesAfter);
+#endif
+
+#endif
         }
+
+#if MANAGED_CLIENT
+        [Fact]
+        public async Task CanCallAllApplyServices_ManagedClient()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            await TestMathAsync(http);
+
+
+        }
+#endif // MANAGED_CLIENT
     }
-    
+
     public static class GrpcExtensions
     {
         public static Task<TResponse> Execute<TRequest, TResponse>(this Channel channel, TRequest request, string serviceName, string methodName,
@@ -95,41 +149,19 @@ namespace protobuf_net.Grpc.Test.Integration
             where TRequest : class
             where TResponse : class
             => Execute<TRequest, TResponse>(new DefaultCallInvoker(channel), request, serviceName, methodName, options, host);
-        
+
         public static async Task<TResponse> Execute<TRequest, TResponse>(this CallInvoker invoker, TRequest request, string serviceName, string methodName,
             CallOptions options = default, string? host = null)
             where TRequest : class
             where TResponse : class
         {
+            var config = BinderConfiguration.Default;
             var method = new Method<TRequest, TResponse>(MethodType.Unary, serviceName, methodName,
-                CustomMarshaller<TRequest>.Instance, CustomMarshaller<TResponse>.Instance);
-            using (var auc = invoker.AsyncUnaryCall(method, host, options, request))
-            {
-                return await auc.ResponseAsync;
-            }
+                config.GetMarshaller<TRequest>(), config.GetMarshaller<TResponse>());
+            
+            using var auc = invoker.AsyncUnaryCall(method, host, options, request);
+            return await auc.ResponseAsync;
         }
-        
-        class CustomMarshaller<T> : Marshaller<T>
-        {
-            public static readonly CustomMarshaller<T> Instance = new CustomMarshaller<T>();
-            private CustomMarshaller() : base(Serialize, Deserialize) { }
+    }
 
-            private static T Deserialize(byte[] payload)
-            {
-                using (var ms = new MemoryStream(payload))
-                {
-                    return ProtoBuf.Serializer.Deserialize<T>(ms);
-                }
-            }
-            private static byte[] Serialize(T payload)
-            {
-                using (var ms = new MemoryStream())
-                {
-                    ProtoBuf.Serializer.Serialize<T>(ms, payload);
-                    return ms.ToArray();
-                }
-            }
-        }
-    }    
-    
 }

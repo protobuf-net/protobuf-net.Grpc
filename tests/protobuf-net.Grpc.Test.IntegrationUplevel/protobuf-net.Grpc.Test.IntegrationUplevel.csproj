@@ -5,16 +5,19 @@
     <RootNamespace>protobuf_net.Grpc.Test.Integration</RootNamespace>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
+    <DefineConstants>PROTOBUFNET_BUFFERS</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup  Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <DefineConstants>$(DefineConstants);MANAGED_CLIENT</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\protobuf-net.Grpc.Test.Integration\GrpcServiceTests.cs" Link="GrpcServiceTests.cs" />
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
     <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
 
+    <PackageReference Include="protobuf-net" Version="3.0.0-alpha.103" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.3.0" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1">

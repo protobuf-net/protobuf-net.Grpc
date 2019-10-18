@@ -3,13 +3,15 @@ using System;
 using System.Buffers;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
     /// Provides protobuf-net implementation of a per-type marshaller
     /// </summary>
-    public class ProtoBufMarshallerFactory : MarshallerFactory
+    public partial class ProtoBufMarshallerFactory : MarshallerFactory
     {
         /// <summary>
         /// Options that control protobuf-net marshalling
@@ -34,6 +36,7 @@ namespace ProtoBuf.Grpc.Configuration
 
         private readonly RuntimeTypeModel _model;
         private readonly Options _options;
+
         /// <summary>
         /// Create a new factory using a specific protobuf-net model
         /// </summary>
@@ -53,40 +56,76 @@ namespace ProtoBuf.Grpc.Configuration
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool Has(Options option) => (_options & option) == option;
 
-        /* see: https://github.com/grpc/grpc/pull/19471 / https://github.com/grpc/grpc/issues/19470
         /// <summary>
         /// Deserializes an object from a payload
         /// </summary>
         protected internal override global::Grpc.Core.Marshaller<T> CreateMarshaller<T>()
-            => new global::Grpc.Core.Marshaller<T>(ContextualSerialize<T>, ContextualDeserialize<T>);
-        */
+           => new global::Grpc.Core.Marshaller<T>(ContextualSerialize<T>, ContextualDeserialize<T>);
 
+#if DEBUG
+        private static int _uplevelBufferReadCount, _uplevelBufferWriteCount;
+        public static int UplevelBufferReadCount => Volatile.Read(ref _uplevelBufferReadCount);
+        public static int UplevelBufferWriteCount => Volatile.Read(ref _uplevelBufferWriteCount);
+
+        static partial void RecordUplevelBufferRead() => Interlocked.Increment(ref _uplevelBufferReadCount);
+        static partial void RecordUplevelBufferWrite() => Interlocked.Increment(ref _uplevelBufferWriteCount);
+#endif
+
+        static partial void RecordUplevelBufferRead();
+        static partial void RecordUplevelBufferWrite();
+
+        private bool TryGetBufferWriter(global::Grpc.Core.SerializationContext context, out IBufferWriter<byte>? writer)
+        {
+            // the managed implementation does not yet implement this API
+            writer = default;
+            try { writer = context.GetBufferWriter(); }
+            catch { }
+            return writer is object;
+        }
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
-            => context.Complete(Serialize(value));
+        {
+            if ((object)_model is IProtoOutput<IBufferWriter<byte>> native
+                && TryGetBufferWriter(context, out var writer))
+            {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
+                RecordUplevelBufferWrite();
+                native.Serialize<T>(writer!, value);
+                context.Complete();
+            }
+            else
+            {
+                context.Complete(Serialize<T>(value));
+            }
+        }
 
         private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
         {
             var ros = context.PayloadAsReadOnlySequence();
-#if PLAT_PBN_NOSPAN
-            // copy the data out of the ROS into a rented buffer, and deserialize
-            // from that
+            if ((object)_model is IProtoInput<ReadOnlySequence<byte>> native)
+            {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
+                RecordUplevelBufferRead();
+                return native.Deserialize<T>(ros);
+            }
+
+            // 2.4.2+ can use array-segments
+            IProtoInput<ArraySegment<byte>> segmentReader = _model;
+
+            // can we go direct to a single segment?
+            if (ros.IsSingleSegment && MemoryMarshal.TryGetArray(ros.First, out var segment))
+            {
+                return segmentReader.Deserialize<T>(segment);
+            }
+
+            // otherwise; linearize the data
             var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
             try
             {
                 ros.CopyTo(oversized);
-                return Deserialize<T>(oversized, 0, context.PayloadLength);
+                return segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength));
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(oversized);
             }
-#else
-            // create a reader directly on the ROS
-            using (var reader = ProtoReader.Create(out var state, ros, _model))
-            {
-                return (T)_model.Deserialize(reader, ref state, null, typeof(T));
-            }
-#endif
         }
 
         /// <summary>
@@ -101,21 +140,15 @@ namespace ProtoBuf.Grpc.Configuration
         /// Deserializes an object from a payload
         /// </summary>
         protected override T Deserialize<T>(byte[] payload)
-            => Deserialize<T>(payload, 0, payload.Length);
+        {
+            IProtoInput<byte[]> input = _model;
+            return input.Deserialize<T>(payload);
+        }
 
         private T Deserialize<T>(byte[] payload, int offset, int count)
         {
-#if PLAT_PBN_NOSPAN
-            using var ms = new MemoryStream(payload, offset, count);
-            using var reader = ProtoReader.Create(ms, _model);
-            return (T)_model.Deserialize(reader, null, typeof(T));
-#else
-            var range = new ReadOnlyMemory<byte>(payload, offset, count);
-            using (var reader = ProtoReader.Create(out var state, range, _model))
-            {
-                return (T)_model.Deserialize(reader, ref state, null, typeof(T));
-            }
-#endif
+            IProtoInput<ArraySegment<byte>> input = _model;
+            return input.Deserialize<T>(new ArraySegment<byte>(payload, offset, count));
         }
 
         /// <summary>
