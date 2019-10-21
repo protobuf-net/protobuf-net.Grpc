@@ -97,7 +97,6 @@ namespace ProtoBuf.Grpc.Configuration
         }
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
         {
-
             if (_measuredWriterModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
 
