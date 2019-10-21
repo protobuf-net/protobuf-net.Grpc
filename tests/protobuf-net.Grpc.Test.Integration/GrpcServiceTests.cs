@@ -57,7 +57,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
-            int opCount = _server.Services.AddCodeFirst(new ApplyServices());
+            _server.Services.AddCodeFirst(new ApplyServices());
             _server.Start();
         }
 

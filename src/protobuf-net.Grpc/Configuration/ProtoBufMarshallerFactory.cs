@@ -34,8 +34,12 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None);
 
-        private readonly TypeModel _model;
         private readonly Options _options;
+        private readonly TypeModel _model;
+        // note: these are the same *object*, but pre-checked for optional API support, for efficiency
+        // (the minimum .NET object size means that the extra fields don't cost anything)
+        private readonly IMeasuredProtoOutput<IBufferWriter<byte>>? _measuredWriterModel;
+        private readonly IProtoInput<ReadOnlySequence<byte>>? _squenceReaderModel;
 
         /// <summary>
         /// Create a new factory using a specific protobuf-net model
@@ -57,6 +61,9 @@ namespace ProtoBuf.Grpc.Configuration
         {
             _model = model;
             _options = options;
+            // test these once rather than every time
+            _measuredWriterModel = model as IMeasuredProtoOutput<IBufferWriter<byte>>;
+            _squenceReaderModel = model as IProtoInput<ReadOnlySequence<byte>>;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -90,12 +97,30 @@ namespace ProtoBuf.Grpc.Configuration
         }
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
         {
-            if (_model is IProtoOutput<IBufferWriter<byte>> native
-                && TryGetBufferWriter(context, out var writer))
+
+            if (_measuredWriterModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
+
                 RecordUplevelBufferWrite();
-                native.Serialize<T>(writer!, value);
-                context.Complete();
+
+                using var measured = _measuredWriterModel.Measure(value);
+                int len = checked((int)measured.Length);
+
+                // speculative API; see https://github.com/grpc/grpc-dotnet/pull/611 and
+                // https://github.com/grpc/grpc/pull/20691
+                //TODO: context.SetPayloadLength(len);
+
+                if (TryGetBufferWriter(context, out var writer))
+                {   // write to the buffer-writer API
+                    _measuredWriterModel.Serialize(measured, writer!);
+                    context.Complete();
+                }
+                else
+                {
+                    // the buffer-writer API wasn't supported, but we can still optimize by right-sizing
+                    // a MemoryStream to write to, to avoid a resize etc
+                    context.Complete(Serialize<T>(value, len));
+                }
             }
             else
             {
@@ -106,10 +131,10 @@ namespace ProtoBuf.Grpc.Configuration
         private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
         {
             var ros = context.PayloadAsReadOnlySequence();
-            if (_model is IProtoInput<ReadOnlySequence<byte>> native)
+            if (_squenceReaderModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
                 RecordUplevelBufferRead();
-                return native.Deserialize<T>(ros);
+                return _squenceReaderModel.Deserialize<T>(ros);
             }
 
             // 2.4.2+ can use array-segments
@@ -165,6 +190,19 @@ namespace ProtoBuf.Grpc.Configuration
             using var ms = new MemoryStream();
             _model.Serialize(ms, value, context: null);
             return ms.ToArray();
+        }
+
+        private byte[] Serialize<T>(T value, int length)
+        {
+
+            if (length == 0) return Array.Empty<byte>();
+
+            var arr = new byte[length];
+            using var ms = new MemoryStream(arr);
+            _model.Serialize(ms, value, context: null);
+            if (ms.Length != length) throw new InvalidOperationException(
+                $"Length miscalculated; expected {length}, got {ms.Length}");
+            return arr;
         }
     }
 }
