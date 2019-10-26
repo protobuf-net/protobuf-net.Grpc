@@ -34,8 +34,6 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public int Bind(object state, Type serviceType, BinderConfiguration? binderConfiguration = null, object? service = null)
         {
-            if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
-
             int totalCount = 0;
             object?[]? argsBuffer = null;
             Type[] typesBuffer = Array.Empty<Type>();
