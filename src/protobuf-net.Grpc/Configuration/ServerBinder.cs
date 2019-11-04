@@ -163,7 +163,7 @@ namespace ProtoBuf.Grpc.Configuration
                     else
                     {
                         // basic - direct call
-                        return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
+                        return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service?.Value, Method);
                     }
                 }
                 else

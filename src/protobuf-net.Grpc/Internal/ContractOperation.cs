@@ -205,21 +205,47 @@ namespace ProtoBuf.Grpc.Internal
             if (method.IsGenericMethodDefinition) return false; // can't work with <T> methods
 
             if ((method.Attributes & (MethodAttributes.SpecialName)) != 0) return false; // some kind of accessor etc
-            
+
             if (!binderConfig.Binder.IsOperationContract(method, out var opName)) return false;
 
             var args = method.GetParameters();
-            if (args.Length > 3) return false; // too many parameters
+            var dataArgsTypes = args
+                .TakeWhile(arg => GetCategory(binderConfig.MarshallerCache, arg.ParameterType, bindContext) == TypeCategory.Data)
+                .Select(arg => arg.ParameterType)
+                .ToArray();
+            if (args.Length - dataArgsTypes.Length > 3) return false; // too many parameters
+            if (dataArgsTypes.Length > 1)
+                args = args.Skip(dataArgsTypes.Length - 1).ToArray();
 
             var signature = GetSignature(binderConfig.MarshallerCache, args, method.ReturnType, bindContext);
 
             if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
 
+            static Type GetTupledType(Type[] types)
+            {
+                return types.Length switch
+                {
+                    0 => typeof(Tuple),
+                    1 => typeof(Tuple<>).MakeGenericType(types),
+                    2 => typeof(Tuple<,>).MakeGenericType(types),
+                    3 => typeof(Tuple<,,>).MakeGenericType(types),
+                    4 => typeof(Tuple<,,,>).MakeGenericType(types),
+                    5 => typeof(Tuple<,,,,>).MakeGenericType(types),
+                    6 => typeof(Tuple<,,,,,>).MakeGenericType(types),
+                    7 => typeof(Tuple<,,,,,,>).MakeGenericType(types),
+                    _ => typeof(Tuple<,,,,,,,>).MakeGenericType(types.Take(7)
+                        .Concat(new[] { GetTupledType(types.Skip(7).ToArray()) }).ToArray())
+                };
+            }
+
+            Type? arg0Type = dataArgsTypes.Length > 1 ? GetTupledType(dataArgsTypes) :
+                args.Length > 0 ? args[0].ParameterType : null;
+
             (Type type, TypeCategory category) GetTypeByIndex(int index)
             {
                 return index switch
                 {
-                    0 => (args[0].ParameterType, signature.Arg0),
+                    0 => (arg0Type!, signature.Arg0),
                     1 => (args[1].ParameterType, signature.Arg1),
                     2 => (args[2].ParameterType, signature.Arg2),
                     RET => (method.ReturnType, signature.Ret),
@@ -263,6 +289,7 @@ namespace ProtoBuf.Grpc.Internal
             operation = new ContractOperation(opName!, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
         }
+
         public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType, IBindContext? bindContext)
         {
             var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
@@ -282,7 +309,6 @@ namespace ProtoBuf.Grpc.Internal
             }
             return ops;
         }
-
 
         internal MethodInfo? TryGetClientHelper()
         {

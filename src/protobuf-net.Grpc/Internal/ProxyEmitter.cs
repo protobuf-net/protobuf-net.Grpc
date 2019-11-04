@@ -226,7 +226,7 @@ namespace ProtoBuf.Grpc.Internal
                         switch (op.Context)
                         {
                             case ContextKind.CallOptions:
-                                // we only support this for signatures that match the exat google pattern, but:
+                                // we only support this for signatures that match the exact google pattern, but:
                                 // defer for now
                                 il.ThrowException(typeof(NotImplementedException));
                                 break;
@@ -246,14 +246,20 @@ namespace ProtoBuf.Grpc.Internal
                                     switch (op.Context)
                                     {
                                         case ContextKind.CallContext:
-                                            Ldarga(il, op.VoidRequest ? (ushort)1 : (ushort)2);
+                                            // last argument, plus "this" is pTypes.Length
+                                            Ldarga(il, (ushort)pTypes.Length);
+                                            // from now on only keep "data" arguments
+                                            pTypes = pTypes.Take(pTypes.Length - 1).ToArray();
                                             break;
                                         case ContextKind.CancellationToken:
                                             var callContext = il.DeclareLocal(typeof(CallContext));
-                                            Ldarg(il, op.VoidRequest ? (ushort)1 : (ushort)2);
+                                            // last argument, plus "this" is pTypes.Length
+                                            Ldarg(il, (ushort)pTypes.Length);
                                             il.EmitCall(OpCodes.Call, s_CallContext_FromCancellationToken, null);
                                             Stloc(il, callContext);
                                             Ldloca(il, callContext);
+                                            // from now on only keep "data" arguments
+                                            pTypes = pTypes.Take(pTypes.Length - 1).ToArray();
                                             break;
                                         case ContextKind.NoContext:
                                             il.Emit(OpCodes.Ldsflda, s_CallContext_Default);
@@ -272,7 +278,17 @@ namespace ProtoBuf.Grpc.Internal
                                     }
                                     else
                                     {
-                                        il.Emit(OpCodes.Ldarg_1); // request
+                                        if (pTypes.Length > 1)
+                                        {
+                                            for (int i = 0; i < pTypes.Length; i++)
+                                                Ldarg(il, (ushort)(i + 1));
+
+                                            EmitTupleConstructor(il, pTypes); // request as a new Tuple<>
+                                        }
+                                        else
+                                        {
+                                            il.Emit(OpCodes.Ldarg_1); // request
+                                        }
                                     }
                                     il.Emit(OpCodes.Ldnull); // host (always null)
                                     il.EmitCall(OpCodes.Call, method, null);
@@ -294,6 +310,7 @@ namespace ProtoBuf.Grpc.Internal
 #else
                 var finalType = type.CreateType()!;
 #endif
+
                 // assign the marshallers and invoke the init
                 foreach((var field, var name, var instance) in marshallers.Values)
                 {
@@ -322,6 +339,34 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
         }
+
+        private static Type EmitTupleConstructor(ILGenerator il, Type[] types)
+        {
+            Type tupleType;
+            if (types.Length > 7)
+            {
+                var rest = EmitTupleConstructor(il, types.Skip(7).ToArray());
+                tupleType = typeof(Tuple<,,,,,,,>).MakeGenericType(types.Take(7).Concat(new [] { rest }).ToArray());
+            }
+            else
+            {
+                tupleType = types.Length switch
+                {
+                    1 => typeof(Tuple<>).MakeGenericType(types),
+                    2 => typeof(Tuple<,>).MakeGenericType(types),
+                    3 => typeof(Tuple<,,>).MakeGenericType(types),
+                    4 => typeof(Tuple<,,,>).MakeGenericType(types),
+                    5 => typeof(Tuple<,,,,>).MakeGenericType(types),
+                    6 => typeof(Tuple<,,,,,>).MakeGenericType(types),
+                    7 => typeof(Tuple<,,,,,,>).MakeGenericType(types),
+                    _ => throw new ArgumentException() // not actually possible
+                };
+            }
+            var constructor = tupleType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single();
+            il.Emit(OpCodes.Newobj, constructor);
+            return tupleType;
+        }
+
         internal static readonly FieldInfo
             s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
 #pragma warning disable CS0618 // Empty

@@ -82,6 +82,28 @@ namespace protobuf_net.Grpc.Test
 
             Assert.Empty(expected);
         }
+
+        [Fact]
+        public void CheckAllLegacyMethodsCovered()
+        {
+            var expected =  new HashSet<string>(typeof(ILegacyService).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(x => x.Name));
+
+            var attribs = GetType().GetMethod(nameof(CheckLegacyMethodIdentification))!.GetCustomAttributesData();
+            foreach(var attrib in attribs)
+            {
+                if (attrib.AttributeType != typeof(InlineDataAttribute)) continue;
+
+                foreach(var arg in attrib.ConstructorArguments)
+                {
+                    var vals = (ReadOnlyCollection<CustomAttributeTypedArgument>)arg.Value!;
+                    var name = (string)vals[0].Value!;
+                    expected.Remove(name);
+                }
+            }
+
+            Assert.Empty(expected);
+        }
+
 #pragma warning disable CS0618 // Empty
         [Theory]
         [InlineData(nameof(IAllOptions.Client_AsyncUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Grpc, (int)VoidKind.None)]
@@ -160,7 +182,7 @@ namespace protobuf_net.Grpc.Test
         [InlineData(nameof(IAllOptions.Shared_ValueTaskUnary_CancellationToken_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.Unary, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTask, (int)VoidKind.Response)]
         public void CheckMethodIdentification(string name, Type from, Type to, MethodType methodType, int context, int result, int @void)
         {
-            var method = typeof(IAllOptions).GetMethod(name);
+            var method = typeof(IAllOptions).GetMethod(name) ?? typeof(ILegacyService).GetMethod(name);
             Assert.NotNull(method);
             var config = BinderConfiguration.Default;
             if (!ContractOperation.TryIdentifySignature(method!, config, out var operation, null))
@@ -176,6 +198,25 @@ namespace protobuf_net.Grpc.Test
             Assert.Equal(from, operation.From);
             Assert.Equal(to, operation.To);
             Assert.Equal((VoidKind)@void, operation.Void);
+        }
+
+        [Theory]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_BlockingUnary), typeof(Tuple<string, long>), typeof(HelloReply), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.Sync, (int)VoidKind.None)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_BlockingUnary_ManyArgs),
+            typeof(Tuple<string, long, HelloRequest, string, long, HelloRequest, string, Tuple<long, HelloRequest>>),
+            typeof(HelloReply), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.Sync, (int)VoidKind.None)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_BlockingUnary_ValVoid), typeof(Tuple<string, long>), typeof(Empty), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.Sync, (int)VoidKind.Response)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_TaskUnary), typeof(Tuple<string, long>), typeof(HelloReply), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.None)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_TaskUnary_ValVoid), typeof(Tuple<string, long>), typeof(Empty), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.Response)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_ValueTaskUnary), typeof(Tuple<string, long>), typeof(HelloReply), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.ValueTask, (int)VoidKind.None)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_ValueTaskUnary_ValVoid), typeof(Tuple<string, long>), typeof(Empty), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.ValueTask, (int)VoidKind.Response)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_TaskUnary_CancellationToken), typeof(Tuple<string, long>), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CancellationToken, (int)ResultKind.Task, (int)VoidKind.None)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_TaskUnary_CancellationToken_ValVoid), typeof(Tuple<string, long>), typeof(Empty), MethodType.Unary, (int)ContextKind.CancellationToken, (int)ResultKind.Task, (int)VoidKind.Response)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_ValueTaskUnary_CancellationToken), typeof(Tuple<string, long>), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTask, (int)VoidKind.None)]
+        [InlineData(nameof(ILegacyService.Shared_Legacy_ValueTaskUnary_CancellationToken_ValVoid), typeof(Tuple<string, long>), typeof(Empty), MethodType.Unary, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTask, (int)VoidKind.Response)]
+        public void CheckLegacyMethodIdentification(string name, Type from, Type to, MethodType methodType, int context, int result, int @void)
+        {
+            CheckMethodIdentification(name, from, to, methodType, context, result, @void);
         }
 
         [Fact]
