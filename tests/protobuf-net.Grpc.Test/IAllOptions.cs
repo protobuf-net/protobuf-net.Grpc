@@ -23,7 +23,7 @@ namespace protobuf_net.Grpc.Test
 
 
     [ServiceContract]
-    interface IAllOptions
+    public interface IAllOptions
     {
         // google client patterns
         HelloReply Client_BlockingUnary(HelloRequest request, CallOptions options);

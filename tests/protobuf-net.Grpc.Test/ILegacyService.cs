@@ -9,7 +9,7 @@ namespace protobuf_net.Grpc.Test
     /// Legacy ServiceContract, not directly in the gRPC Request/Reply model
     /// </summary>
     [ServiceContract]
-    interface ILegacyService
+    public interface ILegacyService
     {
         // blocking, multiple arguments
         HelloReply Shared_Legacy_BlockingUnary(string arg1, long arg2);
