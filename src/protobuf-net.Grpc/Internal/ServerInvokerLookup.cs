@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Internal
@@ -38,25 +39,87 @@ namespace ProtoBuf.Grpc.Internal
             return Expression.Call(typeof(Task), nameof(Task.FromResult), new Type[] { expression.Type }, expression);
         }
 
-        static Expression TupleDeconstruct(Expression instance, MethodInfo method, params Expression[] args)
+        static Expression TupleInDeconstruct(Expression instance, MethodInfo method, params Expression[] args)
         {
             var parameters = method.GetParameters();
-            if (parameters.Length == args.Length)
-                return Expression.Call(instance, method, args);
+            int nbFinalParams = parameters[parameters.Length - 1].ParameterType == typeof(CallContext) ||
+                parameters[parameters.Length - 1].ParameterType == typeof(CancellationToken) ? 1 : 0;
+            Expression callExpression;
+            if (parameters.Length == nbFinalParams + 1)
+            {
+                if (parameters[0].ParameterType.IsValueType)
+                {
+                    // then the parameter should be wrapped in a ValueTypeWrapper
+                    var valueField = args[0].Type.GetField("Value")!;
+                    var unwrappedArg = Expression.Field(args[0], valueField);
+                    var actualArgs = new[] { unwrappedArg }.Concat(args.Skip(1)).ToArray();
 
-            // assume args[0] is a Tuple with appropriate elements
-            var actualArgs = Enumerable.Range(0, parameters.Length - args.Length + 1)
-                .Select(i => GetNthItem(args[0], i))
-                .Concat(args.Skip(1))
-                .ToArray();
+                    callExpression = Expression.Call(instance, method, actualArgs);
+                }
+                else
+                {
+                    callExpression = Expression.Call(instance, method, args);
+                }
+            }
+            else
+            {
+                // assume args[0] is a Tuple with appropriate elements
+                var actualArgs = Enumerable.Range(0, parameters.Length - args.Length + 1)
+                    .Select(i => GetNthItem(args[0], i))
+                    .Concat(args.Skip(1))
+                    .ToArray();
 
-            return Expression.Call(instance, method, actualArgs);
+                callExpression = Expression.Call(instance, method, actualArgs);
+            }
+
+            return ValueTypeWrapperOutConstruct(callExpression);
 
             Expression GetNthItem(Expression tuple, int n) => n < 7
                 ? Expression.Property(tuple, tuple.Type.GetProperty($"Item{n + 1}") ??
                                              throw new InvalidOperationException($"No property Item{n + 1} found on {tuple.Type.FullName}"))
                 : GetNthItem(Expression.Property(tuple, tuple.Type.GetProperty("Rest") ??
                                                         throw new InvalidOperationException($"No property Rest found on {tuple.Type.FullName}")), n - 7);
+        }
+
+        static Expression ValueTypeWrapperOutConstruct(Expression callResult)
+        {
+            if (callResult.Type == typeof(void) || callResult.Type == typeof(Task) || callResult.Type == typeof(ValueTask) ||
+                (callResult.Type.IsGenericType && typeof(IAsyncEnumerable<>).IsAssignableFrom(callResult.Type.GetGenericTypeDefinition())))
+                return callResult;
+
+            if (callResult.Type.IsGenericType &&
+                (callResult.Type.GetGenericTypeDefinition() == typeof(Task<>) ||
+                 callResult.Type.GetGenericTypeDefinition() == typeof(ValueTask<>)))
+            {
+                var underlyingType = callResult.Type.GetGenericArguments().First();
+                if (!underlyingType.IsValueType)
+                    return callResult;
+
+                var isValueTask = callResult.Type.GetGenericTypeDefinition() == typeof(ValueTask<>);
+                Type valueTypeWrapperType = typeof(ValueTypeWrapper<>).MakeGenericType(underlyingType);
+                var taskType = typeof(Task<>).MakeGenericType(underlyingType);
+                var taskParam = Expression.Parameter(taskType, "t");
+                var valueTypeWrapperConstructor = valueTypeWrapperType.GetConstructor(new[] { underlyingType })!;
+                var resultProperty = taskType.GetProperty("Result")!;
+                var lambdaBody = Expression.New(valueTypeWrapperConstructor, Expression.Property(taskParam, resultProperty));
+                var continuationLambda = Expression.Lambda(lambdaBody, taskParam);
+                var task = isValueTask ? Expression.Call(callResult, callResult.Type.GetMethod(nameof(ValueTask.AsTask))!) : callResult;
+                var continueWithMethod = ReflectionHelper.GetContinueWithForTask(underlyingType, valueTypeWrapperType);
+                var continuation = Expression.Call(task, continueWithMethod, continuationLambda);
+
+                if (!isValueTask)
+                    return continuation;
+
+                var targetValueTaskType = typeof(ValueTask<>).MakeGenericType(valueTypeWrapperType);
+                var targetValueTaskConstructor = targetValueTaskType.GetConstructor(new[] { typeof(Task<>).MakeGenericType(valueTypeWrapperType) })!;
+                return Expression.New(targetValueTaskConstructor, continuation);
+            }
+
+            if (!callResult.Type.IsValueType)
+                return callResult;
+
+            var valueTypeWrapperReturnTypeConstructor = typeof(ValueTypeWrapper<>).MakeGenericType(callResult.Type).GetConstructor(new[] { callResult.Type })!;
+            return Expression.New(valueTypeWrapperReturnTypeConstructor, callResult);
         }
 
         internal static readonly ConstructorInfo s_CallContext_FromServerContext = typeof(CallContext).GetConstructor(new[] { typeof(object), typeof(ServerCallContext) })!;
@@ -93,37 +156,37 @@ namespace ProtoBuf.Grpc.Internal
 
                 // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
                 // => service.{method}(request, [new CallContext(serverCallContext)])
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
-                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
-                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1])) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1])) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1])) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
+                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
+                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Sync, VoidKind.None), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
 
 
                 // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
                 // => service.{method}(request, [new CallContext(serverCallContext)]) return Empty.Instance;
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1])) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
-                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
-                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(TupleDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1])) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1])) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1])) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
+                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
+                {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Sync, VoidKind.Response), (method, args) => ToTaskT(TupleInDeconstruct(args[0], method, args[1], ToCancellationToken(args[2]))) },
 
                 // Unary: Task<TResponse> Foo(TService service, TRequest request, ServerCallContext serverCallContext);
                 // => service.{method}([new CallContext(serverCallContext)])
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method)) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[0], args[2]))) },
-                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCallContext(args[0], args[2]))) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(ValueTypeWrapperOutConstruct(Expression.Call(args[0], method))) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(ValueTypeWrapperOutConstruct(Expression.Call(args[0], method))) },
+                {(MethodType.Unary, ContextKind.NoContext, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(ValueTypeWrapperOutConstruct(Expression.Call(args[0], method))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(ValueTypeWrapperOutConstruct(Expression.Call(args[0], method, ToCallContext(args[0], args[2])))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(ValueTypeWrapperOutConstruct(Expression.Call(args[0], method, ToCallContext(args[0], args[2])))) },
+                {(MethodType.Unary, ContextKind.CallContext, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(ValueTypeWrapperOutConstruct(Expression.Call(args[0], method, ToCallContext(args[0], args[2])))) },
                 {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Task, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCancellationToken(args[2]))) },
                 {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.ValueTask, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCancellationToken(args[2]))) },
                 {(MethodType.Unary, ContextKind.CancellationToken, ResultKind.Sync, VoidKind.Request), (method, args) => ToTaskT(Expression.Call(args[0], method, ToCancellationToken(args[2]))) },
@@ -163,8 +226,8 @@ namespace ProtoBuf.Grpc.Internal
 
                 // Server Streaming: Task Foo(TService service, TRequest request, IServerStreamWriter<TResponse> stream, ServerCallContext serverCallContext);
                 // => service.{method}(request, [new CallContext(serverCallContext)]).WriteTo(stream, serverCallContext.CancellationToken)
-                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(TupleDeconstruct(args[0], method, args[1]), args[2], args[3])},
-                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(TupleInDeconstruct(args[0], method, args[1]), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(TupleInDeconstruct(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
                 {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
 
                 {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, VoidKind.Request), (method, args) => WriteTo(Expression.Call(args[0], method), args[2], args[3])},
