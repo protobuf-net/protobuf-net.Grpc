@@ -1,6 +1,8 @@
 ﻿using Grpc.Core;
+using Grpc.Core.Interceptors;
 using ProtoBuf.Grpc.Configuration;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using static Grpc.Core.Server;
 
@@ -16,12 +18,23 @@ namespace ProtoBuf.Grpc.Server
         /// </summary>
         public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service,
             BinderConfiguration? binderConfiguration = null,
-            TextWriter? log = null)
+            TextWriter? log = null,
+            IReadOnlyList<Interceptor>? interceptors = null)
             where TService : class
         {
             var builder = ServerServiceDefinition.CreateBuilder();
             int count = Binder.Create(log).Bind<TService>(builder, binderConfiguration, service);
-            services.Add(builder.Build());
+            var serverServiceDefinition = builder.Build();
+            
+            if (!(interceptors is null))
+            {
+                foreach(var interceptor in interceptors)
+                {
+                    serverServiceDefinition.Intercept(interceptor);
+                }
+            }
+
+            services.Add(serverServiceDefinition);
             return count;
         }
 
