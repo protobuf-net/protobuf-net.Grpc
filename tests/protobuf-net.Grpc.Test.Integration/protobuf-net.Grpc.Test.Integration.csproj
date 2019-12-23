@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>netcoreapp3.0</TargetFramework>
-        <RootNamespace>protobuf_net.Grpc.Test.Integration</RootNamespace>
+        <RootNamespace>ProtobufNet.Grpc.Test.Integration</RootNamespace>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
         <IsPackable>false</IsPackable>
     </PropertyGroup>

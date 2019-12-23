@@ -9,7 +9,7 @@ using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using Xunit;
 
-namespace protobuf_net.Grpc.Test.Integration
+namespace ProtobufNet.Grpc.Test.Integration
 {
     [DataContract]
     public class Apply
