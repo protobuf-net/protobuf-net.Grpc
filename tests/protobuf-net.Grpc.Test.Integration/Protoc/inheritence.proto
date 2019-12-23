@@ -1,0 +1,31 @@
+syntax = "proto3";
+package ProtobufNet.Grpc.Test.Integration.Protoc;
+
+message Base {
+    string String = 1;
+    map<string,string> StringDictionary = 2;
+    oneof subtype {
+        Sub Sub = 10;
+        GenericBase GenericBase = 11;
+    }
+}
+message GenericBase {
+    T Result = 1;
+}
+message GenericBase_Poco {
+    Poco Result = 1;
+    oneof subtype {
+        SubGeneric SubGeneric = 20;
+    }
+}
+message Poco {
+    int32 Short = 1;
+}
+message Sub {
+    int64 Long = 1;
+}
+message SubGeneric {
+    int32 Int = 1;
+}
+message T {
+}
