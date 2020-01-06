@@ -56,13 +56,15 @@ namespace ProtoBuf.Grpc.Configuration
                 return true;
             }
 
-            var sca = (ServiceContractAttribute?)Attribute.GetCustomAttribute(contractType, typeof(ServiceContractAttribute), inherit: true);
+            // note: uses runtime discovery instead of hard ref because of bind/load problems
+            var sca = Attribute.GetCustomAttributes(contractType, inherit: true)
+                .FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.ServiceContractAttribute");
             if (sca == null)
             {
                 name = default;
                 return false;
             }
-            var serviceName = sca?.Name;
+            TryGetProperty(sca, "Name", out string serviceName);
             if (string.IsNullOrWhiteSpace(serviceName))
                 serviceName = GetDefaultName(contractType);
             name = serviceName;
@@ -80,12 +82,32 @@ namespace ProtoBuf.Grpc.Configuration
                 return false;
             }
 
-            var oca = (OperationContractAttribute?)Attribute.GetCustomAttribute(method, typeof(OperationContractAttribute), inherit: true);
-            string? opName = oca?.Name;
+            // note: uses runtime discovery instead of hard ref because of bind/load problems
+            var oca = Attribute.GetCustomAttributes(method, inherit: true)
+                .FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.OperationContractAttribute");
+            TryGetProperty(oca, "Name", out string opName);
             if (string.IsNullOrWhiteSpace(opName))
                 opName = GetDefaultName(method);
             name = opName;
             return !string.IsNullOrWhiteSpace(name);
+        }
+
+        static bool TryGetProperty<T>(Attribute obj, string name, out T value)
+        {
+            value = default!;
+            if (obj != null)
+            {
+                var prop = obj.GetType().GetProperty(name);
+                if (prop != null)
+                {
+                    if (prop.GetValue(obj) is T typed)
+                    {
+                        value = typed;
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 }
