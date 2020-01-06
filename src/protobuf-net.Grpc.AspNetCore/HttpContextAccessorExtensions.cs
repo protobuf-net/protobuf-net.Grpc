@@ -5,8 +5,14 @@ using ProtoBuf.Grpc;
 
 namespace Microsoft.AspNetCore.Http
 {
+    /// <summary>
+    /// Provides access to http-context specific extension features
+    /// </summary>
     public static class HttpContextAccessorExtensions
     {
+        /// <summary>
+        /// Gets the server-call-context associated with the current http context, if possible
+        /// </summary>
         public static ServerCallContext GetServerCallContext(this IHttpContextAccessor httpContextAccessor)
         {
             var httpContext = httpContextAccessor.HttpContext;
@@ -24,6 +30,9 @@ namespace Microsoft.AspNetCore.Http
             return serverCallContext;
         }
 
+        /// <summary>
+        /// Gets the call-context associated with the current http context, if possible
+        /// </summary>
         public static CallContext GetCallContext(this IHttpContextAccessor httpContextAccessor, object service)
         {
             var serverCallContext = GetServerCallContext(httpContextAccessor);
