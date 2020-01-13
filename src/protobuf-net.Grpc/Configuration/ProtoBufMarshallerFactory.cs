@@ -104,10 +104,7 @@ namespace ProtoBuf.Grpc.Configuration
 
                 using var measured = _measuredWriterModel.Measure(value);
                 int len = checked((int)measured.Length);
-
-                // speculative API; see https://github.com/grpc/grpc-dotnet/pull/611 and
-                // https://github.com/grpc/grpc/pull/20691
-                //TODO: context.SetPayloadLength(len);
+                context.SetPayloadLength(len);
 
                 if (TryGetBufferWriter(context, out var writer))
                 {   // write to the buffer-writer API
