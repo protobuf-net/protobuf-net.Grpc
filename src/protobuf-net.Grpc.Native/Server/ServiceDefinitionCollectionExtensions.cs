@@ -16,17 +16,26 @@ namespace ProtoBuf.Grpc.Server
         /// <summary>
         /// Adds a code-first service to the available services
         /// </summary>
+        public static int AddCodeFirst<TService>(ServiceDefinitionCollection services, TService service,
+            BinderConfiguration? binderConfiguration,
+            TextWriter? log)
+            where TService : class // forwarded to preserve older API
+            => AddCodeFirst<TService>(services, service, binderConfiguration, log, null);
+
+        /// <summary>
+        /// Adds a code-first service to the available services
+        /// </summary>
         public static int AddCodeFirst<TService>(this ServiceDefinitionCollection services, TService service,
             BinderConfiguration? binderConfiguration = null,
             TextWriter? log = null,
-            IReadOnlyList<Interceptor>? interceptors = null)
+            IEnumerable<Interceptor>? interceptors = null)
             where TService : class
         {
             var builder = ServerServiceDefinition.CreateBuilder();
             int count = Binder.Create(log).Bind<TService>(builder, binderConfiguration, service);
             var serverServiceDefinition = builder.Build();
             
-            if (!(interceptors is null))
+            if (interceptors is object)
             {
                 foreach(var interceptor in interceptors)
                 {
