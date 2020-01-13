@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <TargetFrameworks>netcoreapp3.0;netcoreapp3.1</TargetFrameworks>
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
     <RootNamespace>Server_CS</RootNamespace>
   </PropertyGroup>
