@@ -101,6 +101,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.ClientFac
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.Grpc.Test.IntegrationUpLevel", "tests\protobuf-net.Grpc.Test.IntegrationUpLevel\protobuf-net.Grpc.Test.IntegrationUpLevel.csproj", "{B694ED60-93A4-4362-BBCF-4EA04B6F4660}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.Reflection", "src\protobuf-net.Grpc.Reflection\protobuf-net.Grpc.Reflection.csproj", "{B9DAC732-68C2-41AA-96D0-79FEDF181711}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.Grpc.Reflection.Test", "tests\protobuf-net.Grpc.Reflection.Test\protobuf-net.Grpc.Reflection.Test.csproj", "{6F589BF3-221C-43AC-85A4-899599ABF6AC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -264,6 +268,18 @@ Global
 		{B694ED60-93A4-4362-BBCF-4EA04B6F4660}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B694ED60-93A4-4362-BBCF-4EA04B6F4660}.VS|Any CPU.ActiveCfg = Debug|Any CPU
 		{B694ED60-93A4-4362-BBCF-4EA04B6F4660}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC}.VS|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -305,6 +321,8 @@ Global
 		{7AF5B934-AEE9-4FD1-928D-AAE0F7098A32} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
 		{4A7D8244-D6B2-4DD3-A0F3-1BF716FB1A0B} = {39491A90-84A2-4E13-B867-CFC3D4592084}
 		{B694ED60-93A4-4362-BBCF-4EA04B6F4660} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
+		{B9DAC732-68C2-41AA-96D0-79FEDF181711} = {3E0CF81A-BA7A-4AAB-B46D-5AC8E22B0644}
+		{6F589BF3-221C-43AC-85A4-899599ABF6AC} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA14B07C-CA29-430D-A600-F37A050636D3}
