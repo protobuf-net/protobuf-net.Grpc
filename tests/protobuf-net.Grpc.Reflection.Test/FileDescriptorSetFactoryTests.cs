@@ -9,14 +9,18 @@ using Xunit;
 
 namespace protobuf_net.Grpc.Reflection.Test
 {
-    public class ServiceDescriptorFactoryTests
+    public class FileDescriptorSetFactoryTests
     {
         [Fact]
         public void SimpleService()
         {
-            var serviceDescriptors = ServiceDescriptorFactory.Instance.GetServiceDescriptors(typeof(GreeterService)).ToList();
+            var fileDescriptorSet = FileDescriptorSetFactory.Create(new[] { typeof(GreeterService) });
 
-            Assert.Single(serviceDescriptors);
+            Assert.Empty(fileDescriptorSet.GetErrors());
+            Assert.Equal(new[] { "GreeterService" },
+                fileDescriptorSet.Files.SelectMany(x => x.Services).Select(x => x.Name).ToArray());
+            Assert.Equal(new[] { "HelloRequest", "HelloReply" },
+                fileDescriptorSet.Files.SelectMany(x => x.MessageTypes).Select(x => x.Name).ToArray());
         }
     }
 

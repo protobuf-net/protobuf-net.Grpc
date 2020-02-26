@@ -38,13 +38,13 @@ namespace ProtoBuf.Grpc.Reflection
         /// <summary>
         /// Creates a symbol registry from the specified set of file descriptors.
         /// </summary>
-        /// <param name="fileDescriptors">The set of files to include in the registry. Must not contain null values.</param>
+        /// <param name="fileDescriptorSet">The set of files to include in the registry. Must not contain null values.</param>
         /// <returns>A symbol registry for the given files.</returns>
-        public static SymbolRegistry FromFiles(IEnumerable<FileDescriptorProto> fileDescriptors)
+        public static SymbolRegistry FromFiles(FileDescriptorSet fileDescriptorSet)
         {
-            GrpcPreconditions.CheckNotNull(fileDescriptors);
+            GrpcPreconditions.CheckNotNull(fileDescriptorSet);
             var builder = new Builder();
-            foreach (var file in fileDescriptors)
+            foreach (var file in fileDescriptorSet.Files)
             {
                 builder.AddFile(file);
             }

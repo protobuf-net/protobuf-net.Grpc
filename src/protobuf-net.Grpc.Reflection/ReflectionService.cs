@@ -21,16 +21,18 @@ namespace ProtoBuf.Grpc.Reflection
         }
 
         public ReflectionService(BinderConfiguration? binderConfiguration, params Type[] types)
-            : this(types.SelectMany(type => ServiceDescriptorFactory.Instance.GetServiceDescriptors(type, binderConfiguration)))
+            : this(FileDescriptorSetFactory.Create(types, binderConfiguration))
         {
         }
 
         public ReflectionService(
-            IEnumerable<ServiceDescriptorProto> serviceDescriptors)
+            FileDescriptorSet fileDescriptorSet)
         {
-            var descriptors = serviceDescriptors as ServiceDescriptorProto[] ?? serviceDescriptors.ToArray();
-            _services = new List<string>(descriptors.Select((descriptor) => descriptor.FullyQualifiedName));
-            _symbolRegistry = SymbolRegistry.FromFiles(descriptors.Select((descriptor) => descriptor.GetFile()));
+            _services = fileDescriptorSet.Files
+                .SelectMany(x => x.Services)
+                .Select(x => x.FullyQualifiedName)
+                .ToList();
+            _symbolRegistry = SymbolRegistry.FromFiles(fileDescriptorSet);
         }
 
         public async IAsyncEnumerable<ServerReflectionResponse> ServerReflectionInfoAsync(IAsyncEnumerable<ServerReflectionRequest> requests, CallContext context = default)
