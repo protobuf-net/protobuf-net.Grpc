@@ -234,7 +234,7 @@ namespace grpc.reflection.v1alpha
 
     }
 
-    [global::System.ServiceModel.ServiceContract(Name = @"ServerReflection")]
+    [global::System.ServiceModel.ServiceContract(Name = @"grpc.reflection.v1alpha.ServerReflection")]
     public interface IServerReflection
     {
         global::System.Collections.Generic.IAsyncEnumerable<ServerReflectionResponse> ServerReflectionInfoAsync(global::System.Collections.Generic.IAsyncEnumerable<ServerReflectionRequest> values, global::ProtoBuf.Grpc.CallContext context = default);

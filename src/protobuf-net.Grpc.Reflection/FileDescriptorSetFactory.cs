@@ -1,4 +1,5 @@
 ﻿using Google.Protobuf.Reflection;
+using grpc.reflection.v1alpha;
 using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Internal;
@@ -29,6 +30,11 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static void Populate(FileDescriptorSet fileDescriptorSet, Type serviceType, BinderConfiguration binderConfiguration)
         {
+            if (typeof(IServerReflection).IsAssignableFrom(serviceType))
+            {
+                return;
+            }
+
             string? serviceName, inputFile, outputFile;
             var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
                 ? new HashSet<Type> { serviceType }
