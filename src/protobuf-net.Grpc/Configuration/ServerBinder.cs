@@ -2,7 +2,6 @@
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -11,7 +10,7 @@ namespace ProtoBuf.Grpc.Configuration
     /// <summary>
     /// Helper API for binding servers; this is an advanced API that would only be used if you are implementing a new transport provider
     /// </summary>
-    public abstract class ServerBinder
+    public abstract class ServerBinder : IBindContext
     {
         /*
          warning: this code is reflection hell - lots of switching from Type to <T>; it isn't pretty,
@@ -23,9 +22,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
-#pragma warning disable CS8625
-        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService service = null)
-#pragma warning restore CS8625                                                                // TService? - but: compiler bug in preview6
+        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService? service = null)
             where TService : class
             => Bind(state, typeof(TService), binderConfiguration, service);
 
@@ -48,7 +45,7 @@ namespace ProtoBuf.Grpc.Configuration
                 if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
 
                 int svcOpCount = 0;
-                foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract))
+                foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, this))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
                         && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
@@ -174,7 +171,15 @@ namespace ProtoBuf.Grpc.Configuration
         {
             var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerCache.GetMarshaller<TRequest>(), marshallerCache.GetMarshaller<TResponse>());
             var stub = new MethodStub<TService>(invoker, method, service);
-            return TryBind<TService, TRequest, TResponse>(state, grpcMethod, stub);
+            try
+            {
+                return TryBind<TService, TRequest, TResponse>(state, grpcMethod, stub);
+            }
+            catch (Exception ex)
+            {
+                OnError(ex.Message);
+                return false;
+            }
 
         }
 
@@ -186,5 +191,17 @@ namespace ProtoBuf.Grpc.Configuration
             where TRequest : class
             where TResponse : class;
 
+        void IBindContext.LogWarning(string message, object?[]? args) => OnWarn(message, args);
+        void IBindContext.LogError(string message, object?[]? args) => OnError(message, args);
+
+        /// <summary>
+        /// Publish a warning message
+        /// </summary>
+        protected internal virtual void OnWarn(string message, object?[]? args = null) { }
+
+        /// <summary>
+        /// Publish a warning message
+        /// </summary>
+        protected internal virtual void OnError(string message, object?[]? args = null) { }
     }
 }

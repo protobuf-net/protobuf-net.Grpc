@@ -59,6 +59,13 @@ namespace ProtoBuf.Grpc.Server
                 base.OnServiceBound(state, serviceName, serviceType, serviceContract, operationCount);
                 _log?.WriteLine($"{serviceName} bound to {serviceType.Name} : {serviceContract.Name} with {operationCount} operation(s)");
             }
+
+            protected override void OnError(string message, object?[]? args = null)
+                => _log?.WriteLine("[error] " + message, args ?? Array.Empty<object>());
+
+            protected override void OnWarn(string message, object?[]? args = null)
+                => _log?.WriteLine("[warning] " + message, args ?? Array.Empty<object>());
+
             protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
                 where TRequest : class

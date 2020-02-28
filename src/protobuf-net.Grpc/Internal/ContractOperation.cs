@@ -55,6 +55,7 @@ namespace ProtoBuf.Grpc.Internal
             AsyncDuplexStreamingCall,
             AsyncServerStreamingCall,
             Data,
+            Invalid,
         }
 
         const int RET = -1, VOID = -2;
@@ -129,7 +130,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static int GeneralPurposeSignatureCount() => s_signaturePatterns.Values.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext);
 
-        static TypeCategory GetCategory(MarshallerCache marshallerCache, Type type)
+        static TypeCategory GetCategory(MarshallerCache marshallerCache, Type type, IBindContext? bindContext)
         {
             if (type == null) return TypeCategory.None;
             if (type == typeof(void)) return TypeCategory.Void;
@@ -155,22 +156,24 @@ namespace ProtoBuf.Grpc.Internal
 
             if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
 
-            return marshallerCache.CanSerializeType(type) ? TypeCategory.Data : TypeCategory.None;
+            if (marshallerCache.CanSerializeType(type)) return TypeCategory.Data;
+            bindContext?.LogWarning("Type cannot be serialized; ignoring: {0}", type.FullName);
+            return TypeCategory.Invalid;
         }
 
-        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, MethodInfo method)
-            => GetSignature(marshallerCache, method.GetParameters(), method.ReturnType);
+        internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, MethodInfo method, IBindContext? bindContext)
+            => GetSignature(marshallerCache, method.GetParameters(), method.ReturnType, bindContext);
 
-        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, ParameterInfo[] args, Type returnType)
+        private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, ParameterInfo[] args, Type returnType, IBindContext? bindContext)
         {
             (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
-            if (args.Length >= 1) signature.Arg0 = GetCategory(marshallerCache, args[0].ParameterType);
-            if (args.Length >= 2) signature.Arg1 = GetCategory(marshallerCache, args[1].ParameterType);
-            if (args.Length >= 3) signature.Arg2 = GetCategory(marshallerCache, args[2].ParameterType);
-            signature.Ret = GetCategory(marshallerCache, returnType);
+            if (args.Length >= 1) signature.Arg0 = GetCategory(marshallerCache, args[0].ParameterType, bindContext);
+            if (args.Length >= 2) signature.Arg1 = GetCategory(marshallerCache, args[1].ParameterType, bindContext);
+            if (args.Length >= 3) signature.Arg2 = GetCategory(marshallerCache, args[2].ParameterType, bindContext);
+            signature.Ret = GetCategory(marshallerCache, returnType, bindContext);
             return signature;
         }
-        internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation)
+        internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation, IBindContext? bindContext)
         {
             operation = default;
 
@@ -183,7 +186,7 @@ namespace ProtoBuf.Grpc.Internal
             var args = method.GetParameters();
             if (args.Length > 3) return false; // too many parameters
 
-            var signature = GetSignature(binderConfig.MarshallerCache, args, method.ReturnType);
+            var signature = GetSignature(binderConfig.MarshallerCache, args, method.ReturnType, bindContext);
 
             if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
 
@@ -235,14 +238,20 @@ namespace ProtoBuf.Grpc.Internal
             operation = new ContractOperation(opName!, from, to, method, config.Method, config.Context, config.Result, config.Void);
             return true;
         }
-        public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType)
+        public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType, IBindContext? bindContext)
         {
             var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             var ops = new List<ContractOperation>(all.Length);
             foreach (var method in all)
             {
-                if (TryIdentifySignature(method, binderConfig, out var op))
+                if (TryIdentifySignature(method, binderConfig, out var op, bindContext))
+                {
                     ops.Add(op);
+                }
+                else
+                {
+                    bindContext?.LogWarning("Signature not recognized for '{0}'; method will not be bound", method.Name);
+                }
             }
             return ops;
         }

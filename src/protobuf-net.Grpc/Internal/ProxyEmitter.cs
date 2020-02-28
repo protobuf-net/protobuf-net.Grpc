@@ -132,7 +132,7 @@ namespace ProtoBuf.Grpc.Internal
                 const string InitMethodName = "Init";
                 var cctor = type.DefineMethod(InitMethodName, MethodAttributes.Static | MethodAttributes.Public).GetILGenerator();
 
-                var ops = ContractOperation.FindOperations(binderConfig, typeof(TService));
+                var ops = ContractOperation.FindOperations(binderConfig, typeof(TService), null);
 
                 int marshallerIndex = 0;
                 Dictionary<Type, (FieldBuilder Field, string Name, object Instance)> marshallers = new Dictionary<Type, (FieldBuilder, string, object)>();
@@ -167,7 +167,7 @@ namespace ProtoBuf.Grpc.Internal
                         type.DefineMethodOverride(impl, iMethod);
 
                         var il = impl.GetILGenerator();
-                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op)))
+                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op, null)))
                         {
                             il.ThrowException(typeof(NotSupportedException));
                             continue;

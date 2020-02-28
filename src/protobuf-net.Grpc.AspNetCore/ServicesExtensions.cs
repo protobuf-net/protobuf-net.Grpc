@@ -42,14 +42,21 @@ namespace ProtoBuf.Grpc.Server
 
             void IServiceMethodProvider<TService>.OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
             {
-                int count = Binder.Instance.Bind<TService>(context, _binderConfiguration);
+                int count = new Binder(_logger).Bind<TService>(context, _binderConfiguration);
                 if (count != 0) _logger.Log(LogLevel.Information, "RPC services being provided by {0}: {1}", typeof(TService), count);
             }
         }
         private sealed class Binder : ServerBinder
         {
-            private Binder() { }
-            public static readonly Binder Instance = new Binder();
+            private ILogger _logger;
+            internal Binder(ILogger logger)
+                => _logger = logger;
+
+            protected override void OnWarn(string message, object?[]? args)
+                => _logger?.LogWarning(message, args ?? Array.Empty<object>());
+
+            protected override void OnError(string message, object?[]? args = null)
+                => _logger?.LogError(message, args ?? Array.Empty<object>());
 
             protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
