@@ -250,7 +250,7 @@ namespace ProtoBuf.Grpc.Internal
                 }
                 else
                 {
-                    bindContext?.LogWarning("Signature not recognized for '{0}'; method will not be bound", method.Name);
+                    bindContext?.LogWarning("Signature not recognized for {0}.{1}; method will not be bound", contractType.FullName, method.Name);
                 }
             }
             return ops;
