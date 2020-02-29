@@ -45,10 +45,11 @@ namespace ProtoBuf.Grpc.Configuration
                 if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
 
                 int svcOpCount = 0;
+                var bindCtx = new ServiceBindContext(serviceContract, serviceType, state);
                 foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, this))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
-                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker))
+                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker, bindCtx))
                     {
                         // yay!
                         totalCount++;
@@ -59,7 +60,8 @@ namespace ProtoBuf.Grpc.Configuration
             }
             return totalCount;
 
-            bool AddMethod(Type @in, Type @out, string on, MethodInfo m, MethodType t, Func<MethodInfo, ParameterExpression[], Expression>? invoker)
+            bool AddMethod(Type @in, Type @out, string on, MethodInfo m, MethodType t,
+                Func<MethodInfo, ParameterExpression[], Expression>? invoker, ServiceBindContext bindContext)
             {
                 try
                 {
@@ -72,12 +74,13 @@ namespace ProtoBuf.Grpc.Configuration
 
                     if (argsBuffer == null)
                     {
-                        argsBuffer = new object?[] { null, null, null, null, state, null, binderConfiguration!.MarshallerCache, service == null ? null : Expression.Constant(service, serviceType) };
+                        argsBuffer = new object?[] { null, null, null, null, null, null, binderConfiguration!.MarshallerCache, service == null ? null : Expression.Constant(service, serviceType) };
                     }
                     argsBuffer[0] = serviceName;
                     argsBuffer[1] = on;
                     argsBuffer[2] = m;
                     argsBuffer[3] = t;
+                    argsBuffer[4] = bindContext;
                     argsBuffer[5] = invoker;
 
                     return (bool)s_addMethod.MakeGenericMethod(typesBuffer).Invoke(this, argsBuffer)!;
@@ -152,7 +155,7 @@ namespace ProtoBuf.Grpc.Configuration
                     mapArgs[0] = _service;
                     lambdaArgs.CopyTo(mapArgs, 1);
                 }
-                
+
                 var body = _invoker.Invoke(Method, mapArgs);
                 var lambda = Expression.Lambda<TDelegate>(body, lambdaArgs);
 
@@ -162,7 +165,7 @@ namespace ProtoBuf.Grpc.Configuration
 
         private bool AddMethod<TService, TRequest, TResponse>(
             string serviceName, string operationName, MethodInfo method, MethodType methodType,
-            object state,
+            ServiceBindContext bindContext,
             Func<MethodInfo, Expression[], Expression>? invoker, MarshallerCache marshallerCache,
             ConstantExpression? service)
             where TService : class
@@ -173,7 +176,7 @@ namespace ProtoBuf.Grpc.Configuration
             var stub = new MethodStub<TService>(invoker, method, service);
             try
             {
-                return TryBind<TService, TRequest, TResponse>(state, grpcMethod, stub);
+                return TryBind<TService, TRequest, TResponse>(bindContext, grpcMethod, stub);
             }
             catch (Exception ex)
             {
@@ -186,7 +189,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// The implementing binder should bind the method to the bind-state
         /// </summary>
-        protected abstract bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
+        protected abstract bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
             where TService : class
             where TRequest : class
             where TResponse : class;
@@ -203,5 +206,67 @@ namespace ProtoBuf.Grpc.Configuration
         /// Publish a warning message
         /// </summary>
         protected internal virtual void OnError(string message, object?[]? args = null) { }
+
+        /// <summary>
+        /// Describes the relationship between a service contract and a service definition
+        /// </summary>
+        protected internal sealed class ServiceBindContext
+        {
+            public object State { get; }
+            /// <summary>
+            /// The service contract interface type
+            /// </summary>
+            public Type ContractType => _map.InterfaceType;
+            /// <summary>
+            /// The concrete service type
+            /// </summary>
+            public Type ServiceType => _map.TargetType;
+
+            private readonly InterfaceMapping _map;
+            internal ServiceBindContext(Type contractType, Type serviceType, object state)
+            {
+                State = state;
+                _map = serviceType.GetInterfaceMap(contractType);
+            }
+
+            /// <summary>
+            /// Gets the implementing method from a method definition
+            /// </summary>
+            public MethodInfo GetImplementation(MethodInfo serviceMethod)
+            {
+                var from = _map.InterfaceMethods;
+                var to = _map.TargetMethods;
+                int end = Math.Min(from.Length, to.Length);
+                for (int i = 0; i < end; i++)
+                {
+                    if (from[i] == serviceMethod) return to[i];
+                }
+                throw new ArgumentException(nameof(serviceMethod));
+            }
+
+            /// <summary>
+            /// Gets the metadata associated with a specific contract method
+            /// </summary>
+            public List<object> GetMetadata(MethodInfo method)
+            {
+                // note: later is higher priority in the code that consumes this, so
+                // work upwards
+                var metadata = new List<object>();
+                // service contract - IFoo
+                metadata.AddRange(ContractType.GetCustomAttributes(inherit: true));
+
+                // service type - SomeService : IFoo
+                metadata.AddRange(ServiceType.GetCustomAttributes(inherit: true));
+
+                // service contract method: IFoo.Bar
+                metadata.AddRange(method.GetCustomAttributes(inherit: true));
+
+                // service type method: SomeService.Bar
+                metadata.AddRange(GetImplementation(method).GetCustomAttributes(inherit: true));
+
+                return metadata;
+            }
+        }
     }
+
 }
