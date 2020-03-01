@@ -56,15 +56,24 @@ namespace ProtoBuf.Grpc.Configuration
                 return true;
             }
 
-            // note: uses runtime discovery instead of hard ref because of bind/load problems
-            var sca = Attribute.GetCustomAttributes(contractType, inherit: true)
-                .FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.ServiceContractAttribute");
-            if (sca == null)
+            string? serviceName = null;
+            var attribs = Attribute.GetCustomAttributes(contractType, inherit: true);
+            var sa = attribs.OfType<ServiceAttribute>().FirstOrDefault();
+            if (sa == null)
             {
-                name = default;
-                return false;
+                // note: uses runtime discovery instead of hard ref because of bind/load problems
+                var sca = attribs.FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.ServiceContractAttribute");
+                if (sca == null)
+                {
+                    name = default;
+                    return false;
+                }
+                TryGetProperty(sca, "Name", out serviceName);
             }
-            TryGetProperty(sca, "Name", out string serviceName);
+            else
+            {
+                serviceName = sa.Name;
+            }
             if (string.IsNullOrWhiteSpace(serviceName))
                 serviceName = GetDefaultName(contractType);
             name = serviceName;
@@ -82,10 +91,20 @@ namespace ProtoBuf.Grpc.Configuration
                 return false;
             }
 
-            // note: uses runtime discovery instead of hard ref because of bind/load problems
-            var oca = Attribute.GetCustomAttributes(method, inherit: true)
-                .FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.OperationContractAttribute");
-            TryGetProperty(oca, "Name", out string opName);
+            string? opName = null;
+            var attribs = Attribute.GetCustomAttributes(method, inherit: true);
+            var oa = attribs.OfType<OperationAttribute>().FirstOrDefault();
+            if (oa == null)
+            {
+                // note: uses runtime discovery instead of hard ref because of bind/load problems
+                var oca = attribs
+                    .FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.OperationContractAttribute");
+                TryGetProperty(oca, "Name", out opName);
+            }
+            else
+            {
+                opName = oa.Name;
+            }
             if (string.IsNullOrWhiteSpace(opName))
                 opName = GetDefaultName(method);
             name = opName;
