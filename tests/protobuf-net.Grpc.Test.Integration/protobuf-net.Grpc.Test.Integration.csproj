@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netcoreapp3.0</TargetFramework>
+        <TargetFramework>netcoreapp3.1</TargetFramework>
         <RootNamespace>protobuf_net.Grpc.Test.Integration</RootNamespace>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
         <IsPackable>false</IsPackable>
@@ -19,7 +19,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
     </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
+    <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.1'">
         <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
     </ItemGroup>
 

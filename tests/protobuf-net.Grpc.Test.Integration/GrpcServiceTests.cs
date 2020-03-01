@@ -53,7 +53,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
-            int opCount = _server.Services.AddCodeFirst(new ApplyServices());
+            _ = _server.Services.AddCodeFirst(new ApplyServices());
             _server.Start();
         }
 
@@ -65,7 +65,7 @@ namespace protobuf_net.Grpc.Test.Integration
     
     public class GrpcServiceTests : IClassFixture<GrpcServiceFixture>
     {
-        private GrpcServiceFixture _fixture;
+        private readonly GrpcServiceFixture _fixture;
         public GrpcServiceTests(GrpcServiceFixture fixture) => _fixture = fixture;
 
         [Fact]
@@ -103,10 +103,8 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             var method = new Method<TRequest, TResponse>(MethodType.Unary, serviceName, methodName,
                 CustomMarshaller<TRequest>.Instance, CustomMarshaller<TResponse>.Instance);
-            using (var auc = invoker.AsyncUnaryCall(method, host, options, request))
-            {
-                return await auc.ResponseAsync;
-            }
+            using var auc = invoker.AsyncUnaryCall(method, host, options, request);
+            return await auc.ResponseAsync;
         }
         
         class CustomMarshaller<T> : Marshaller<T>
@@ -116,18 +114,14 @@ namespace protobuf_net.Grpc.Test.Integration
 
             private static T Deserialize(byte[] payload)
             {
-                using (var ms = new MemoryStream(payload))
-                {
-                    return ProtoBuf.Serializer.Deserialize<T>(ms);
-                }
+                using var ms = new MemoryStream(payload);
+                return ProtoBuf.Serializer.Deserialize<T>(ms);
             }
             private static byte[] Serialize(T payload)
             {
-                using (var ms = new MemoryStream())
-                {
-                    ProtoBuf.Serializer.Serialize<T>(ms, payload);
-                    return ms.ToArray();
-                }
+                using var ms = new MemoryStream();
+                ProtoBuf.Serializer.Serialize<T>(ms, payload);
+                return ms.ToArray();
             }
         }
     }    

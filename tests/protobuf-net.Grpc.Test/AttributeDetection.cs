@@ -43,14 +43,11 @@ namespace protobuf_net.Grpc.Test
 
     public class AttributeDetection
     {
-        // note that GetAttributes lists "base" *last*; this is consistent with dotnet-grpc, although personally
-        // I'd want the order to be:
-        // "Interface,BaseType,Service,ImplicitInterfaceMethod,ImplicitServiceMethodBase,ImplicitServiceMethodOverride")]
         [Theory]
         [InlineData(nameof(ISomeService.Implicit),
-            "Interface,Service,BaseType,ImplicitInterfaceMethod,ImplicitServiceMethodOverride,ImplicitServiceMethodBase")]
+            "Interface,ImplicitInterfaceMethod,BaseType,Service,ImplicitServiceMethodBase,ImplicitServiceMethodOverride")]
         [InlineData(nameof(ISomeService.Explicit),
-            "Interface,Service,BaseType,ExplicitInterfaceMethod,ExplicitServiceMethod")]
+            "Interface,ExplicitInterfaceMethod,BaseType,Service,ExplicitServiceMethod")]
         public void AttributesDetectedWherever(string methodName, string expected)
         {
             var ctx = new ServiceBindContext(typeof(ISomeService), typeof(SomeServer), "n/a");

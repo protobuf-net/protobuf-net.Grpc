@@ -216,32 +216,39 @@ namespace ProtoBuf.Grpc.Configuration
             /// <summary>
             /// The service contract interface type
             /// </summary>
-            public Type ContractType => _map.InterfaceType;
+            public Type ContractType { get; }
             /// <summary>
             /// The concrete service type
             /// </summary>
-            public Type ServiceType => _map.TargetType;
+            public Type ServiceType { get; }
 
-            private readonly InterfaceMapping _map;
+            private InterfaceMapping? _map;
+            private InterfaceMapping GetMap() // lazily memoized
+                => _map ??= ServiceType.GetInterfaceMap(ContractType);
             internal ServiceBindContext(Type contractType, Type serviceType, object state)
             {
                 State = state;
-                _map = serviceType.GetInterfaceMap(contractType);
+                ContractType = contractType;
+                ServiceType = serviceType;
             }
 
             /// <summary>
             /// Gets the implementing method from a method definition
             /// </summary>
-            public MethodInfo GetImplementation(MethodInfo serviceMethod)
+            public MethodInfo? GetImplementation(MethodInfo serviceMethod)
             {
-                var from = _map.InterfaceMethods;
-                var to = _map.TargetMethods;
-                int end = Math.Min(from.Length, to.Length);
-                for (int i = 0; i < end; i++)
+                if (ContractType != ServiceType & serviceMethod is object)
                 {
-                    if (from[i] == serviceMethod) return to[i];
+                    var map = GetMap();
+                    var from = map.InterfaceMethods;
+                    var to = map.TargetMethods;
+                    int end = Math.Min(from.Length, to.Length);
+                    for (int i = 0; i < end; i++)
+                    {
+                        if (from[i] == serviceMethod) return to[i];
+                    }
                 }
-                throw new ArgumentException(nameof(serviceMethod));
+                return null;
             }
 
             /// <summary>
@@ -249,21 +256,31 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             public List<object> GetMetadata(MethodInfo method)
             {
-                // note: later is higher priority in the code that consumes this, so
-                // work upwards
-                var metadata = new List<object>();
-                // service contract - IFoo
-                metadata.AddRange(ContractType.GetCustomAttributes(inherit: true));
+                // consider the various possible sources of distinct metadata
+                object[]
+                    contractType = ContractType.GetCustomAttributes(inherit: true),
+                    contractMethod = method.GetCustomAttributes(inherit: true),
+                    serviceType = Array.Empty<object>(),
+                    serviceMethod = Array.Empty<object>();
+                if (ContractType != ServiceType & ContractType.IsInterface & ServiceType.IsClass)
+                {
+                    serviceType = ServiceType.GetCustomAttributes(inherit: true);
+                    serviceMethod = GetImplementation(method)?.GetCustomAttributes(inherit: true)
+                        ?? Array.Empty<object>();
+                }
 
-                // service type - SomeService : IFoo
-                metadata.AddRange(ServiceType.GetCustomAttributes(inherit: true));
+                // note: later is higher priority in the code that consumes this, but
+                // GetAttributes() is "most derived to least derived", so: add everything
+                // backwards, then reverse
+                var metadata = new List<object>(
+                    contractType.Length + contractMethod.Length +
+                    serviceType.Length + serviceMethod.Length);
 
-                // service contract method: IFoo.Bar
-                metadata.AddRange(method.GetCustomAttributes(inherit: true));
-
-                // service type method: SomeService.Bar
-                metadata.AddRange(GetImplementation(method).GetCustomAttributes(inherit: true));
-
+                metadata.AddRange(serviceMethod);
+                metadata.AddRange(serviceType);
+                metadata.AddRange(contractMethod);
+                metadata.AddRange(contractType);
+                metadata.Reverse();
                 return metadata;
             }
         }
