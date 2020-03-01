@@ -1,7 +1,7 @@
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
-using System.IO;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using Grpc.Net.Client;
@@ -69,7 +69,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public GrpcServiceTests(GrpcServiceFixture fixture) => _fixture = fixture;
 
         [Fact]
-        public async Task CanCallAllApplyServices()
+        public async Task CanCallAllApplyServicesUnaryAsync()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
@@ -77,53 +77,87 @@ namespace protobuf_net.Grpc.Test.Integration
             var request = new Apply { X = 6, Y = 3 };
             var invoker = http.CreateCallInvoker();
 
-            var response = await invoker.Execute<Apply, ApplyResponse>(request, nameof(ApplyServices), nameof(ApplyServices.Add));
+            var client = new GrpcClient(http, nameof(ApplyServices));
+            Assert.Equal(nameof(ApplyServices), client.ToString());
+
+            var response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Add));
             Assert.Equal(9, response.Result);
-            response = await invoker.Execute<Apply, ApplyResponse>(request, nameof(ApplyServices), nameof(ApplyServices.Mul));
+            response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Mul));
             Assert.Equal(18, response.Result);
-            response = await invoker.Execute<Apply, ApplyResponse>(request, nameof(ApplyServices), nameof(ApplyServices.Sub));
+            response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Sub));
             Assert.Equal(3, response.Result);
-            response = await invoker.Execute<Apply, ApplyResponse>(request, nameof(ApplyServices), nameof(ApplyServices.Div));
+            response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Div));
             Assert.Equal(2, response.Result);
         }
-    }
-    
-    public static class GrpcExtensions
-    {
-        public static Task<TResponse> Execute<TRequest, TResponse>(this Channel channel, TRequest request, string serviceName, string methodName,
-            CallOptions options = default, string? host = null)
-            where TRequest : class
-            where TResponse : class
-            => Execute<TRequest, TResponse>(new DefaultCallInvoker(channel), request, serviceName, methodName, options, host);
-        
-        public static async Task<TResponse> Execute<TRequest, TResponse>(this CallInvoker invoker, TRequest request, string serviceName, string methodName,
-            CallOptions options = default, string? host = null)
-            where TRequest : class
-            where TResponse : class
-        {
-            var method = new Method<TRequest, TResponse>(MethodType.Unary, serviceName, methodName,
-                CustomMarshaller<TRequest>.Instance, CustomMarshaller<TResponse>.Instance);
-            using var auc = invoker.AsyncUnaryCall(method, host, options, request);
-            return await auc.ResponseAsync;
-        }
-        
-        class CustomMarshaller<T> : Marshaller<T>
-        {
-            public static readonly CustomMarshaller<T> Instance = new CustomMarshaller<T>();
-            private CustomMarshaller() : base(Serialize, Deserialize) { }
 
-            private static T Deserialize(byte[] payload)
-            {
-                using var ms = new MemoryStream(payload);
-                return ProtoBuf.Serializer.Deserialize<T>(ms);
-            }
-            private static byte[] Serialize(T payload)
-            {
-                using var ms = new MemoryStream();
-                ProtoBuf.Serializer.Serialize<T>(ms, payload);
-                return ms.ToArray();
-            }
+        [Fact]
+        public async Task CanCallAllApplyServicesTypedUnaryAsync()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+
+            var request = new Apply { X = 6, Y = 3 };
+            var invoker = http.CreateCallInvoker();
+
+            var client = new GrpcClient(http, typeof(ApplyServices));
+            Assert.Equal(nameof(ApplyServices), client.ToString());
+
+            var response = await client.UnaryAsync<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Add)));
+            Assert.Equal(9, response.Result);
+            response = await client.UnaryAsync<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Mul)));
+            Assert.Equal(18, response.Result);
+            response = await client.UnaryAsync<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Sub)));
+            Assert.Equal(3, response.Result);
+            response = await client.UnaryAsync<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Div)));
+            Assert.Equal(2, response.Result);
+
+            static MethodInfo GetMethod(string name) => typeof(ApplyServices).GetMethod(name)!;
         }
-    }    
-    
+
+        [Fact]
+        public void CanCallAllApplyServicesUnarySync()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+
+            var request = new Apply { X = 6, Y = 3 };
+            var invoker = http.CreateCallInvoker();
+
+            var client = new GrpcClient(http, nameof(ApplyServices));
+            Assert.Equal(nameof(ApplyServices), client.ToString());
+
+            var response = client.BlockingUnary<Apply, ApplyResponse>(request, nameof(ApplyServices.Add));
+            Assert.Equal(9, response.Result);
+            response = client.BlockingUnary<Apply, ApplyResponse>(request, nameof(ApplyServices.Mul));
+            Assert.Equal(18, response.Result);
+            response = client.BlockingUnary<Apply, ApplyResponse>(request, nameof(ApplyServices.Sub));
+            Assert.Equal(3, response.Result);
+            response = client.BlockingUnary<Apply, ApplyResponse>(request, nameof(ApplyServices.Div));
+            Assert.Equal(2, response.Result);
+        }
+
+        [Fact]
+        public void CanCallAllApplyServicesTypedUnarySync()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+
+            var request = new Apply { X = 6, Y = 3 };
+            var invoker = http.CreateCallInvoker();
+
+            var client = new GrpcClient(http, typeof(ApplyServices));
+            Assert.Equal(nameof(ApplyServices), client.ToString());
+
+            var response = client.BlockingUnary<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Add)));
+            Assert.Equal(9, response.Result);
+            response = client.BlockingUnary<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Mul)));
+            Assert.Equal(18, response.Result);
+            response = client.BlockingUnary<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Sub)));
+            Assert.Equal(3, response.Result);
+            response = client.BlockingUnary<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Div)));
+            Assert.Equal(2, response.Result);
+
+            static MethodInfo GetMethod(string name) => typeof(ApplyServices).GetMethod(name)!;
+        }
+    }
 }

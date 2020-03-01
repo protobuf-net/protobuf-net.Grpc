@@ -212,6 +212,9 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected internal sealed class ServiceBindContext
         {
+            /// <summary>
+            /// The caller-provided state for this operation
+            /// </summary>
             public object State { get; }
             /// <summary>
             /// The service contract interface type
