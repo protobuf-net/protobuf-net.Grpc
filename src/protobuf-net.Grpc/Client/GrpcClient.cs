@@ -1,7 +1,10 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
+using ProtoBuf.Grpc.Internal;
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Client
@@ -52,44 +55,104 @@ namespace ProtoBuf.Grpc.Client
         /// <summary>
         /// Invoke the specified gRPC method
         /// </summary>
-        public async Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, string methodName, CallOptions options = default)
+        public Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, string operationName, in CallContext context = default)
             where TRequest : class
             where TResponse : class
         {
-            var marshaller = _binderConfiguration.MarshallerCache;
-            var method = new Method<TRequest, TResponse>(MethodType.Unary, _serviceName, methodName,
-                marshaller.GetMarshaller<TRequest>(), marshaller.GetMarshaller<TResponse>());
-            using var call = _callInvoker.AsyncUnaryCall(method, _host, options, request);
-            return await call.ResponseAsync.ConfigureAwait(false);
+            var method = GetMethod<TRequest, TResponse>(MethodType.Unary, operationName);
+#pragma warning disable CS0618
+            return Reshape.UnaryTaskAsync(context, _callInvoker, method, request, _host);
+#pragma warning restore CS0618
         }
 
         /// <summary>
         /// Invoke the specified gRPC method
         /// </summary>
-        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, string methodName, CallOptions options = default)
+        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, string operationName, in CallContext context = default)
             where TRequest : class
             where TResponse : class
         {
-            var marshaller = _binderConfiguration.MarshallerCache;
-            var method = new Method<TRequest, TResponse>(MethodType.Unary, _serviceName, methodName,
-                marshaller.GetMarshaller<TRequest>(), marshaller.GetMarshaller<TResponse>());
-            return _callInvoker.BlockingUnaryCall(method, _host, options, request);
+            var method = GetMethod<TRequest, TResponse>(MethodType.Unary, operationName);
+#pragma warning disable CS0618
+            return Reshape.UnarySync(context, _callInvoker, method, request, _host);
+#pragma warning restore CS0618
+        }
+
+        /// <summary>
+        /// Invoke the specified gRPC method
+        /// </summary>
+        public Task<TResponse> ClientStreamingAsync<TRequest, TResponse>(IAsyncEnumerable<TRequest> request, string operationName, in CallContext context = default)
+            where TRequest : class
+            where TResponse : class
+        {
+            var method = GetMethod<TRequest, TResponse>(MethodType.ClientStreaming, operationName);
+#pragma warning disable CS0618
+            return Reshape.ClientStreamingTaskAsync(context, _callInvoker, method, request, _host);
+#pragma warning restore CS0618
+        }
+
+        /// <summary>
+        /// Invoke the specified gRPC method
+        /// </summary>
+        public IAsyncEnumerable<TResponse> ServerStreamingAsync<TRequest, TResponse>(TRequest request, string operationName, in CallContext context = default)
+            where TRequest : class
+            where TResponse : class
+        {
+            var method = GetMethod<TRequest, TResponse>(MethodType.ServerStreaming, operationName);
+#pragma warning disable CS0618
+            return Reshape.ServerStreamingAsync(context, _callInvoker, method, request, _host);
+#pragma warning restore CS0618
+        }
+
+        /// <summary>
+        /// Invoke the specified gRPC method
+        /// </summary>
+        public IAsyncEnumerable<TResponse> DuplexStreamingAsync<TRequest, TResponse>(IAsyncEnumerable<TRequest> request, string operationName, in CallContext context = default)
+            where TRequest : class
+            where TResponse : class
+        {
+            var method = GetMethod<TRequest, TResponse>(MethodType.DuplexStreaming, operationName);
+#pragma warning disable CS0618
+            return Reshape.DuplexAsync(context, _callInvoker, method, request, _host);
+#pragma warning restore CS0618
         }
 
         /// <summary>
         /// Invoke the specified gRPC method, inferring the operation name from the method
         /// </summary>
-        public Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, MethodInfo method, CallOptions options = default)
+        public Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, MethodInfo method, in CallContext context = default)
             where TRequest : class
             where TResponse : class
-            => UnaryAsync<TRequest, TResponse>(request, GetOperationName(method), options);
+            => UnaryAsync<TRequest, TResponse>(request, GetOperationName(method), context);
         /// <summary>
         /// Invoke the specified gRPC method, inferring the operation name from the method
         /// </summary>
-        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, MethodInfo method, CallOptions options = default)
+        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, MethodInfo method, in CallContext context = default)
             where TRequest : class
             where TResponse : class
-            => BlockingUnary<TRequest, TResponse>(request, GetOperationName(method), options);
+            => BlockingUnary<TRequest, TResponse>(request, GetOperationName(method), context);
+        /// <summary>
+        /// Invoke the specified gRPC method, inferring the operation name from the method
+        /// </summary>
+        public Task<TResponse> ClientStreamingAsync<TRequest, TResponse>(IAsyncEnumerable<TRequest> request, MethodInfo method, in CallContext context = default)
+            where TRequest : class
+            where TResponse : class
+            => ClientStreamingAsync<TRequest, TResponse>(request, GetOperationName(method), context);
+        /// <summary>
+        /// Invoke the specified gRPC method, inferring the operation name from the method
+        /// </summary>
+        public IAsyncEnumerable<TResponse> ServerStreamingAsync<TRequest, TResponse>(TRequest request, MethodInfo method, in CallContext context = default)
+            where TRequest : class
+            where TResponse : class
+            => ServerStreamingAsync<TRequest, TResponse>(request, GetOperationName(method), context);
+        /// <summary>
+        /// Invoke the specified gRPC method, inferring the operation name from the method
+        /// </summary>
+        public IAsyncEnumerable<TResponse> DuplexStreamingAsync<TRequest, TResponse>(IAsyncEnumerable<TRequest> request, MethodInfo method, in CallContext context = default)
+            where TRequest : class
+            where TResponse : class
+            => DuplexStreamingAsync<TRequest, TResponse>(request, GetOperationName(method), context);
+
 
         private static string GetServiceName(Type contractType, BinderConfiguration? binderConfiguration)
         {
@@ -98,11 +161,22 @@ namespace ProtoBuf.Grpc.Client
                 throw new InvalidOperationException("Invalid service type: " + contractType.FullName);
             return name!;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Method<TRequest, TResponse> GetMethod<TRequest, TResponse>(MethodType methodType, string name)
+        {
+            var marshallerCache = _binderConfiguration.MarshallerCache;
+            return new Method<TRequest, TResponse>(methodType, _serviceName, name,
+                marshallerCache.GetMarshaller<TRequest>(), marshallerCache.GetMarshaller<TResponse>());
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private string GetOperationName(MethodInfo method)
         {
             if (!_binderConfiguration.Binder.IsOperationContract(method, out var name))
-                throw new InvalidOperationException("Invalid operation: " + method.Name);
+                ThrowInvalid(method);
             return name!;
+            static void ThrowInvalid(MethodInfo method) =>
+                throw new InvalidOperationException("Invalid operation: " + method.Name);
         }
     }
 }
