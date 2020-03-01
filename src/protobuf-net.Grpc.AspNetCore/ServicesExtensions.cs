@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
 using System;
-using System.Collections.Generic;
 
 namespace ProtoBuf.Grpc.Server
 {
@@ -48,7 +47,7 @@ namespace ProtoBuf.Grpc.Server
         }
         private sealed class Binder : ServerBinder
         {
-            private ILogger _logger;
+            private readonly ILogger _logger;
             internal Binder(ILogger logger)
                 => _logger = logger;
 
@@ -58,18 +57,14 @@ namespace ProtoBuf.Grpc.Server
             protected override void OnError(string message, object?[]? args = null)
                 => _logger?.LogError(message, args ?? Array.Empty<object>());
 
-            protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
+            protected override bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
                 where TRequest : class
                 where TResponse : class
             {
-                var metadata = new List<object>();
-                // Add type metadata first so it has a lower priority
-                metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
-                // Add method metadata last so it has a higher priority
-                metadata.AddRange(stub.Method.GetCustomAttributes(inherit: true));
+                var metadata = bindContext.GetMetadata(stub.Method);
                 
-                var context = (ServiceMethodProviderContext<TService>)state;
+                var context = (ServiceMethodProviderContext<TService>)bindContext.State;
                 switch (method.Type)
                 {
                     case MethodType.Unary:

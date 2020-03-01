@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFrameworks>net461;net472;netcoreapp2.1;netcoreapp3.0</TargetFrameworks>
+    <TargetFrameworks>net461;net472;netcoreapp2.1;netcoreapp3.1</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>

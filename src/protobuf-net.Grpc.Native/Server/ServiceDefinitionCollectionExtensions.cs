@@ -66,12 +66,12 @@ namespace ProtoBuf.Grpc.Server
             protected override void OnWarn(string message, object?[]? args = null)
                 => _log?.WriteLine("[warning] " + message, args ?? Array.Empty<object>());
 
-            protected override bool TryBind<TService, TRequest, TResponse>(object state, Method<TRequest, TResponse> method, MethodStub<TService> stub)
+            protected override bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
                 where TService : class
                 where TRequest : class
                 where TResponse : class
             {
-                var builder = (ServerServiceDefinition.Builder)state;
+                var builder = (ServerServiceDefinition.Builder)bindContext.State;
                 switch (method.Type)
                 {
                     case MethodType.Unary:
