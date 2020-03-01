@@ -19,79 +19,77 @@ namespace ProtoBuf.Grpc.Client
 
         private readonly CallInvoker _callInvoker;
         private readonly string _serviceName;
+        private readonly string? _host;
         private readonly BinderConfiguration _binderConfiguration;
 
         /// <summary>
         /// Create a new client instance for the specified service
         /// </summary>
-        public GrpcClient(ChannelBase channel, string serviceName, BinderConfiguration? binderConfiguration = null)
-            : this(channel.CreateCallInvoker(), serviceName, binderConfiguration) { }
+        public GrpcClient(ChannelBase channel, string serviceName, BinderConfiguration? binderConfiguration = null, string? host = null)
+            : this(channel.CreateCallInvoker(), serviceName, binderConfiguration, host) { }
         /// <summary>
         /// Create a new client instance for the specified service
         /// </summary>
-        public GrpcClient(CallInvoker callInvoker, string serviceName, BinderConfiguration? binderConfiguration = null)
+        public GrpcClient(CallInvoker callInvoker, string serviceName, BinderConfiguration? binderConfiguration = null, string? host = null)
         {
             _binderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
             if (string.IsNullOrWhiteSpace(serviceName)) throw new ArgumentException(nameof(serviceName));
             _serviceName = serviceName;
             _callInvoker = callInvoker;
+            _host = host;
         }
         /// <summary>
         /// Create a new client instance for the specified service, inferring the service name from the type
         /// </summary>
-        public GrpcClient(ChannelBase channel, Type contractType, BinderConfiguration? binderConfiguration = null)
-            : this(channel.CreateCallInvoker(), GetServiceName(contractType, binderConfiguration), binderConfiguration) { }
+        public GrpcClient(ChannelBase channel, Type contractType, BinderConfiguration? binderConfiguration = null, string? host = null)
+            : this(channel.CreateCallInvoker(), GetServiceName(contractType, binderConfiguration), binderConfiguration, host) { }
         /// <summary>
         /// Create a new client instance for the specified service, inferring the service name from the type
         /// </summary>
-        public GrpcClient(CallInvoker callInvoker, Type contractType, BinderConfiguration? binderConfiguration = null)
-            : this(callInvoker, GetServiceName(contractType, binderConfiguration), binderConfiguration) { }
+        public GrpcClient(CallInvoker callInvoker, Type contractType, BinderConfiguration? binderConfiguration = null, string? host = null)
+            : this(callInvoker, GetServiceName(contractType, binderConfiguration), binderConfiguration, host) { }
 
         /// <summary>
         /// Invoke the specified gRPC method
         /// </summary>
-        public async Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, string methodName,
-            CallOptions options = default, string? host = null)
+        public async Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, string methodName, CallOptions options = default)
             where TRequest : class
             where TResponse : class
         {
             var marshaller = _binderConfiguration.MarshallerCache;
             var method = new Method<TRequest, TResponse>(MethodType.Unary, _serviceName, methodName,
                 marshaller.GetMarshaller<TRequest>(), marshaller.GetMarshaller<TResponse>());
-            using var call = _callInvoker.AsyncUnaryCall(method, host, options, request);
+            using var call = _callInvoker.AsyncUnaryCall(method, _host, options, request);
             return await call.ResponseAsync.ConfigureAwait(false);
         }
 
         /// <summary>
         /// Invoke the specified gRPC method
         /// </summary>
-        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, string methodName,
-            CallOptions options = default, string? host = null)
+        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, string methodName, CallOptions options = default)
             where TRequest : class
             where TResponse : class
         {
             var marshaller = _binderConfiguration.MarshallerCache;
             var method = new Method<TRequest, TResponse>(MethodType.Unary, _serviceName, methodName,
                 marshaller.GetMarshaller<TRequest>(), marshaller.GetMarshaller<TResponse>());
-            return _callInvoker.BlockingUnaryCall(method, host, options, request);
+            return _callInvoker.BlockingUnaryCall(method, _host, options, request);
         }
 
         /// <summary>
         /// Invoke the specified gRPC method, inferring the operation name from the method
         /// </summary>
-        public Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, MethodInfo method,
-            CallOptions options = default, string? host = null)
+        public Task<TResponse> UnaryAsync<TRequest, TResponse>(TRequest request, MethodInfo method, CallOptions options = default)
             where TRequest : class
             where TResponse : class
-            => UnaryAsync<TRequest, TResponse>(request, GetOperationName(method), options, host);
+            => UnaryAsync<TRequest, TResponse>(request, GetOperationName(method), options);
         /// <summary>
         /// Invoke the specified gRPC method, inferring the operation name from the method
         /// </summary>
-        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, MethodInfo method,
-            CallOptions options = default, string? host = null)
+        public TResponse BlockingUnary<TRequest, TResponse>(TRequest request, MethodInfo method, CallOptions options = default)
             where TRequest : class
             where TResponse : class
-            => BlockingUnary<TRequest, TResponse>(request, GetOperationName(method), options, host);
+            => BlockingUnary<TRequest, TResponse>(request, GetOperationName(method), options);
 
         private static string GetServiceName(Type contractType, BinderConfiguration? binderConfiguration)
         {
