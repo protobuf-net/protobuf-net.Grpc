@@ -1,14 +1,15 @@
 ﻿using ProtoBuf;
 using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
-using System.ServiceModel;
 
 namespace MegaCorp
 {
-    [ServiceContract]
+    [Service]
     public interface ITimeService
     {
+        [Operation]
         IAsyncEnumerable<TimeResult> SubscribeAsync(CallContext context = default);
     }
 
