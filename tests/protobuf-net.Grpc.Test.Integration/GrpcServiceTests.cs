@@ -75,9 +75,8 @@ namespace protobuf_net.Grpc.Test.Integration
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            var invoker = http.CreateCallInvoker();
-
             var client = new GrpcClient(http, nameof(ApplyServices));
+
             Assert.Equal(nameof(ApplyServices), client.ToString());
 
             var response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Add));
@@ -97,9 +96,8 @@ namespace protobuf_net.Grpc.Test.Integration
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            var invoker = http.CreateCallInvoker();
 
-            var client = new GrpcClient(http, typeof(ApplyServices));
+            var client = http.CreateGrpcService(typeof(ApplyServices));
             Assert.Equal(nameof(ApplyServices), client.ToString());
 
             var response = await client.UnaryAsync<Apply, ApplyResponse>(request, GetMethod(nameof(ApplyServices.Add)));

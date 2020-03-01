@@ -21,11 +21,18 @@ namespace ProtoBuf.Grpc.Client
         }
 
         /// <summary>
-        /// Creates a code-first service backed by a Channel instance
+        /// Creates a code-first service backed by a ChannelBase instance
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TService CreateGrpcService<TService>(this ChannelBase client, ClientFactory? clientFactory = null)
             where TService : class
                     => (clientFactory ?? ClientFactory.Default).CreateClient<TService>(client.CreateCallInvoker());
+
+        /// <summary>
+        /// Creates a general purpose service backed by a ChannelBase instance
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static GrpcClient CreateGrpcService(this ChannelBase client, Type serviceType, ClientFactory? clientFactory = null)
+            => (clientFactory ?? ClientFactory.Default).CreateClient(client.CreateCallInvoker(), serviceType);
     }
 }

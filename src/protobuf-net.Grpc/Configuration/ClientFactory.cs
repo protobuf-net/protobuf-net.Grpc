@@ -1,9 +1,9 @@
-﻿using ProtoBuf.Grpc.Internal;
+﻿using Grpc.Core;
+using ProtoBuf.Grpc.Client;
+using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using ProtoBuf.Grpc.Configuration;
-using Grpc.Core;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -24,6 +24,11 @@ namespace ProtoBuf.Grpc.Configuration
             => (binderConfiguration == null || binderConfiguration == BinderConfiguration.Default) ? Default : new ConfiguredClientFactory(binderConfiguration);
 
         /// <summary>
+        /// Get the binder configuration associated with this instance
+        /// </summary>
+        protected abstract BinderConfiguration BinderConfiguration { get; }
+
+        /// <summary>
         /// Create a service-client backed by a CallInvoker
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -32,16 +37,23 @@ namespace ProtoBuf.Grpc.Configuration
             => CreateClient<SimpleClientBase, TService, CallInvoker>(channel);
 #pragma warning restore CS0618
 
+        /// <summary>
+        /// Create a service-client backed by a CallInvoker
+        /// </summary>
+        public virtual GrpcClient CreateClient(CallInvoker channel, Type contractType)
+            => new GrpcClient(channel, contractType, BinderConfiguration);
+
         // TODO: remove this, standardizing on SimpleClient (or LiteClientBase) and CallInvoker?
         internal abstract TService CreateClient<TBase, TService, TChannel>(TChannel channel) where TService : class;
 
 
         private sealed class ConfiguredClientFactory : ClientFactory
         {
-            private readonly BinderConfiguration _binderConfiguration;
+            protected override BinderConfiguration BinderConfiguration { get; }
+
             public ConfiguredClientFactory(BinderConfiguration? binderConfiguration)
             {
-                _binderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
+                BinderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
             }
 
             private readonly ConcurrentDictionary<(Type, Type, Type), object> _proxyCache = new ConcurrentDictionary<(Type, Type, Type), object>();
@@ -50,7 +62,7 @@ namespace ProtoBuf.Grpc.Configuration
             private TService SlowCreateClient<TBase, TService, TChannel>(TChannel channel)
                 where TService : class
             {
-                var factory = ProxyEmitter.CreateFactory<TChannel, TService>(typeof(TBase), _binderConfiguration);
+                var factory = ProxyEmitter.CreateFactory<TChannel, TService>(typeof(TBase), BinderConfiguration);
                 var key = (typeof(TBase), typeof(TService), typeof(TChannel));
 
                 if (!_proxyCache.TryAdd(key, factory)) factory = (Func<TChannel, TService>)_proxyCache[key];
@@ -72,6 +84,8 @@ namespace ProtoBuf.Grpc.Configuration
 
         private sealed class DefaultClientFactory : ClientFactory
         {
+            protected override BinderConfiguration BinderConfiguration => BinderConfiguration.Default;
+
             public static readonly DefaultClientFactory Instance = new DefaultClientFactory();
             private DefaultClientFactory() { }
 

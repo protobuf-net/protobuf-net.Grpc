@@ -244,7 +244,9 @@ namespace ProtoBuf.Grpc.Internal
             var ops = new List<ContractOperation>(all.Length);
             foreach (var method in all)
             {
-                if (TryIdentifySignature(method, binderConfig, out var op, bindContext))
+                if (method.DeclaringType == typeof(object))
+                { /* skip */ }
+                else if (TryIdentifySignature(method, binderConfig, out var op, bindContext))
                 {
                     ops.Add(op);
                 }
