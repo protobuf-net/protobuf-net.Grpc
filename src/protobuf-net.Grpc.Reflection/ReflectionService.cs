@@ -30,7 +30,7 @@ namespace ProtoBuf.Grpc.Reflection
         {
             _services = fileDescriptorSet.Files
                 .SelectMany(x => x.Services)
-                .Select(x => x.FullyQualifiedName)
+                .Select(x => x.FullyQualifiedName.TrimStart('.'))
                 .ToList();
             _symbolRegistry = SymbolRegistry.FromFiles(fileDescriptorSet);
         }
@@ -77,7 +77,7 @@ namespace ProtoBuf.Grpc.Reflection
 
         private ServerReflectionResponse FileContainingSymbol(string symbol)
         {
-            var file = _symbolRegistry.FileContainingSymbol(symbol);
+            var file = _symbolRegistry.FileContainingSymbol("." + symbol.TrimStart('.'));
             if (file == null)
             {
                 return CreateErrorResponse(StatusCode.NotFound, "Symbol not found.");
@@ -91,11 +91,12 @@ namespace ProtoBuf.Grpc.Reflection
 
         private FileDescriptorResponse GetFileDescriptorResponse(FileDescriptorProto file)
         {
-            var transitiveDependencies = new HashSet<FileDescriptorProto>();
+            var transitiveDependencies = new SortedSet<FileDescriptorProto>(FileDescriptorProtoComparer.Instance);
             CollectTransitiveDependencies(file, transitiveDependencies);
 
             var response = new FileDescriptorResponse();
-            response.FileDescriptorProtoes.AddRange(transitiveDependencies.Select(Serialize));
+            response.FileDescriptorProtoes.AddRange(
+                transitiveDependencies.Select(Serialize));
 
             return response;
         }
@@ -122,7 +123,7 @@ namespace ProtoBuf.Grpc.Reflection
             };
         }
 
-        private void CollectTransitiveDependencies(FileDescriptorProto descriptor, HashSet<FileDescriptorProto> pool)
+        private void CollectTransitiveDependencies(FileDescriptorProto descriptor, ISet<FileDescriptorProto> pool)
         {
             pool.Add(descriptor);
             foreach (var dependency in descriptor.GetDependencies())
@@ -141,6 +142,29 @@ namespace ProtoBuf.Grpc.Reflection
             Serializer.Serialize(memoryStrem, fileDescriptor);
 
             return memoryStrem.ToArray();
+        }
+
+        private class FileDescriptorProtoComparer : IComparer<FileDescriptorProto>
+        {
+            public static FileDescriptorProtoComparer Instance { get; } = new FileDescriptorProtoComparer();
+
+            public int Compare(FileDescriptorProto left, FileDescriptorProto right)
+            {
+                if (left.Dependencies.Contains(right.Name))
+                {
+                    return 1;
+                }
+                if (right.Dependencies.Contains(left.Name))
+                {
+                    return -1;
+                }
+                if (left.Name == right.Name)
+                {
+                    return 0;
+                }
+
+                return 1;
+            }
         }
     }
 }
