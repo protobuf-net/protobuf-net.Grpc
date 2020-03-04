@@ -67,15 +67,16 @@ namespace protobuf_net.Grpc.Test.Integration
 
     static class AdhocConfig
     {
-        public static BinderConfiguration Binder { get; }
-            = BinderConfiguration.Create(new[] {
+        public static ClientFactory ClientFactory { get; }
+            = ClientFactory.Create(BinderConfiguration.Create(new[] {
+                    // we'll allow multiple marshallers to take a stab; protobuf-net first,
+                    // then try BinaryFormatter for anything that protobuf-net can't handle
+
                     ProtoBufMarshallerFactory.Default,
 #pragma warning disable CS0618 // Type or member is obsolete
-                    BinaryFormatterMarshallerFactory.Default,
+                    BinaryFormatterMarshallerFactory.Default, // READ THE NOTES ON NOT DOING THIS
 #pragma warning restore CS0618 // Type or member is obsolete
-                    });
-        public static ClientFactory ClientFactory { get; }
-            = ClientFactory.Create(Binder);
+                    }));
     }
 
     public class GrpcServiceFixture : IAsyncDisposable
@@ -85,12 +86,17 @@ namespace protobuf_net.Grpc.Test.Integration
         
         public GrpcServiceFixture()
         {
+#pragma warning disable CS0618 // Type or member is obsolete
+            BinaryFormatterMarshallerFactory.I_Have_Read_The_Notes_On_Not_Using_BinaryFormatter = true;
+            BinaryFormatterMarshallerFactory.I_Promise_Not_To_Do_This = true; // signed: Marc Gravell
+#pragma warning restore CS0618 // Type or member is obsolete
+
             _server = new Server
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
             _ = _server.Services.AddCodeFirst(new ApplyServices());
-            _ = _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.Binder);
+            _ = _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
             _server.Start();
         }
 
