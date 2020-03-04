@@ -29,6 +29,11 @@ namespace ProtoBuf.Grpc.Configuration
         protected abstract BinderConfiguration BinderConfiguration { get; }
 
         /// <summary>
+        /// Get the binder configuration associated with this instance
+        /// </summary>
+        public static implicit operator BinderConfiguration(ClientFactory value) => value.BinderConfiguration;
+
+        /// <summary>
         /// Create a service-client backed by a CallInvoker
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

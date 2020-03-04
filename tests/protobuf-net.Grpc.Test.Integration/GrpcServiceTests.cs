@@ -42,6 +42,43 @@ namespace protobuf_net.Grpc.Test.Integration
         public Task<ApplyResponse> Div(Apply request) => Task.FromResult(new ApplyResponse(request.X / request.Y));
     }
 
+    [Serializable]
+    public class AdhocRequest
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+    }
+    [Serializable]
+    public class AdhocResponse
+    {
+        public int Z { get; set; }
+    }
+    [Service]
+    public interface IAdhocService
+    {
+        AdhocResponse AdhocMethod(AdhocRequest request);
+    }
+
+    public class AdhocService : IAdhocService
+    {
+        public AdhocResponse AdhocMethod(AdhocRequest request)
+            => new AdhocResponse { Z = request.X + request.Y };
+    }
+
+    static class AdhocConfig
+    {
+        public static ClientFactory ClientFactory { get; }
+            = ClientFactory.Create(BinderConfiguration.Create(new[] {
+                    // we'll allow multiple marshallers to take a stab; protobuf-net first,
+                    // then try BinaryFormatter for anything that protobuf-net can't handle
+
+                    ProtoBufMarshallerFactory.Default,
+#pragma warning disable CS0618 // Type or member is obsolete
+                    BinaryFormatterMarshallerFactory.Default, // READ THE NOTES ON NOT DOING THIS
+#pragma warning restore CS0618 // Type or member is obsolete
+                    }));
+    }
+
     public class GrpcServiceFixture : IAsyncDisposable
     {
         public const int Port = 10042;
@@ -49,11 +86,17 @@ namespace protobuf_net.Grpc.Test.Integration
         
         public GrpcServiceFixture()
         {
+#pragma warning disable CS0618 // Type or member is obsolete
+            BinaryFormatterMarshallerFactory.I_Have_Read_The_Notes_On_Not_Using_BinaryFormatter = true;
+            BinaryFormatterMarshallerFactory.I_Promise_Not_To_Do_This = true; // signed: Marc Gravell
+#pragma warning restore CS0618 // Type or member is obsolete
+
             _server = new Server
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
             _ = _server.Services.AddCodeFirst(new ApplyServices());
+            _ = _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
             _server.Start();
         }
 
@@ -119,7 +162,6 @@ namespace protobuf_net.Grpc.Test.Integration
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            var invoker = http.CreateCallInvoker();
 
             var client = new GrpcClient(http, nameof(ApplyServices));
             Assert.Equal(nameof(ApplyServices), client.ToString());
@@ -141,8 +183,7 @@ namespace protobuf_net.Grpc.Test.Integration
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            var invoker = http.CreateCallInvoker();
-
+            
             var client = new GrpcClient(http, typeof(ApplyServices));
             Assert.Equal(nameof(ApplyServices), client.ToString());
 
@@ -156,6 +197,18 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(2, response.Result);
 
             static MethodInfo GetMethod(string name) => typeof(ApplyServices).GetMethod(name)!;
+        }
+
+        [Fact]
+        public void CanCallAdocService()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+
+            var request = new AdhocRequest { X = 12, Y = 7 };
+            var client = http.CreateGrpcService<IAdhocService>(AdhocConfig.ClientFactory);
+            var response = client.AdhocMethod(request);
+            Assert.Equal(19, response.Z);
         }
     }
 }
