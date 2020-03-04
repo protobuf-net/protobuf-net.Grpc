@@ -30,7 +30,7 @@ namespace protobuf_net.Grpc.Test.Integration
             modified application, or just a 7-line console application. With a suitably crafted payload, such a client
             could compromise your server; this is usually considered "a bad thing". Likewise (but perhaps rarer), a
             suitably motivated attacker could hijack your DNS (etc) and replace the server, compromising the client. If
-            you're thinking "I'll provide a custom BinaryFormatter 'binder' to limit this risk": don't; that's just an\
+            you're thinking "I'll provide a custom BinaryFormatter 'binder' to limit this risk": don't; that's just an
             arms race. You only need to lose that race once.
 
             Cross-platform compatibility: BinaryFormatter will only be usable between .NET applications; the premise of
