@@ -8,7 +8,7 @@ namespace protobuf_net.Grpc.Test.Integration
     /// <summary>
     /// Uses BinaryFormatter for serialization
     /// </summary>
-    [Obsolete("Use of BinaryFormatter is *extremely* discoraged for security, cross-platform compatibility, compatibility-between-versions, and performance reasons")]
+    [Obsolete("Use of BinaryFormatter is *extremely* discouraged for security, cross-platform compatibility, compatibility-between-versions, and performance reasons")]
     public sealed class BinaryFormatterMarshallerFactory : MarshallerFactory
     {
         public static bool I_Have_Read_The_Notes_On_Not_Using_BinaryFormatter { get; set; } // see a few lines below
