@@ -35,10 +35,12 @@ namespace protobuf_net.Grpc.Test.Integration
 
             "But this is service-to-service inside my network and I control every piece"
             It is a good job that attacks never originate internally, then‽ this could be a disgruntled/bribed employee,
-            or it could be an escalation attack from one compromised system other systems; for example, your edge
+            or it could be an escalation attack from one compromised system to other systems; for example, your edge
             web-server in the DMZ with a low access account and restricted network might get compromised (it happens!);
             the attacker could now use RPC-based RCE (via BinaryFormatter etc) to jump to your service tier that is
-            in your restricted network and which has access to more systems (databases, file systems, etc).
+            in your restricted network and which has access to more systems (databases, file systems, etc). Don't make
+            it easy for attackers. BinaryFormatter RCE is almost at the same level as probing a web-site for what happens
+            when you try searching for "Fred'; drop table Orders; --"
 
             "But I just use it for storing state and reloading"
             You might want to ask House House how well that worked out for them:
