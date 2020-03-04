@@ -24,6 +24,8 @@ namespace protobuf_net.Grpc.Test.Integration
             1) to show you *how* you can write a custom marshaller
             2) to allow me time and space to write this very important treatise!
 
+            -------------------------------------
+
             Security: BinaryFormatter is a known RCE attack vector; the point of gRPC is to allow communication between
             two end-points, often client-server. In such a scenario you must *assume* that the other end could be hostile.
             For example, someone could reverse-engineer your communications protocol and make their own requests from a
@@ -46,12 +48,11 @@ namespace protobuf_net.Grpc.Test.Integration
             You might want to ask House House how well that worked out for them:
             https://www.scmagazine.com/home/security-news/vulnerabilities/untitled-goose-game-rce-flaw-revealed/
 
-            Additionally, it is ridiculously easy to accidentally include
-            more in your payload than you intended - a classic being not remembering to add [field:NonSerialized] on an
-            event, and accidentally serializing your entire UI model (basically, your entire application memory) and
-            sending that with your payload. I don't care if the other end silently ignores the extra data, or whether
-            it throws a fault while trying to deserialize it: *you still sent it*; that's a data leak and is a
-            security hole.
+            Additionally, it is ridiculously easy to accidentally include more in your payload than you intended - a
+            classic being not remembering to add [field:NonSerialized] on an event, and accidentally serializing your
+            entire UI/application model (basically, your entire application memory) and sending that with your payload.
+            I don't care if the other end silently ignores the extra data, or whether it throws a fault while trying
+            to deserialize it: *you still sent it*; that's a data leak and is a security hole.
 
             -------------------------------------
 
