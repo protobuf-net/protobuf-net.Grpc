@@ -74,13 +74,9 @@ namespace protobuf_net.Grpc.Test.Integration
             those options are anathema to the "hey, I'll just whack [Serializable] on it" approach that people are
             usually talking about when using BinaryFormatter.
 
-            -------------------------------------
-
-            Performace: it just isn't great. At the serializer layer, it could be faster; but it is also relatively
+            Performance: it just isn't great. At the serializer layer, it could be faster; but it is also relatively
             large payload-wise compared to other options. There is also the "we sent more data than we expected" issue
             (from the "Security" section), which can bloat payloads significantly.
-
-            -------------------------------------
 
             So: there are **lots** of reasons not to use BinaryFormatter. Please don't.
         */
