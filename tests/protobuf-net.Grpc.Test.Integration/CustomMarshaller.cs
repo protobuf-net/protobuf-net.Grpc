@@ -49,7 +49,7 @@ namespace protobuf_net.Grpc.Test.Integration
             those options are anathema to the "hey, I'll just whack [Serializable] on it" approach that people are
             usually talking about when using BinaryFormatter.
 
-            Performace: it just isn't great. At the serializer layer, it could be faster; but it is also relatively
+            Performance: it just isn't great. At the serializer layer, it could be faster; but it is also relatively
             large payload-wise compared to other options. Additionally, it is ridiculously easy to accidentally include
             more in your payload than you intended - a classic being not remembering to add [field:NonSerialized] on an
             event, and accidentally serializing your entire UI model (basically, your entire application memory) and
