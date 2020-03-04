@@ -24,6 +24,8 @@ namespace protobuf_net.Grpc.Test.Integration
             1) to show you *how* you can write a custom marshaller
             2) to allow me time and space to write this very important treatise!
 
+            -------------------------------------
+
             Security: BinaryFormatter is a known RCE attack vector; the point of gRPC is to allow communication between
             two end-points, often client-server. In such a scenario you must *assume* that the other end could be hostile.
             For example, someone could reverse-engineer your communications protocol and make their own requests from a
@@ -33,12 +35,35 @@ namespace protobuf_net.Grpc.Test.Integration
             you're thinking "I'll provide a custom BinaryFormatter 'binder' to limit this risk": don't; that's just an
             arms race. You only need to lose that race once.
 
+            "But this is service-to-service inside my network and I control every piece"
+            It is a good job that attacks never originate internally, then‽ this could be a disgruntled/bribed employee,
+            or it could be an escalation attack from one compromised system to other systems; for example, your edge
+            web-server in the DMZ with a low access account and restricted network might get compromised (it happens!);
+            the attacker could now use RPC-based RCE (via BinaryFormatter etc) to jump to your service tier that is
+            in your restricted network and which has access to more systems (databases, file systems, etc). Don't make
+            it easy for attackers. BinaryFormatter RCE is almost at the same level as probing a web-site for what happens
+            when you try searching for "Fred'; drop table Orders; --"
+
+            "But I just use it for storing state and reloading"
+            You might want to ask House House how well that worked out for them:
+            https://www.scmagazine.com/home/security-news/vulnerabilities/untitled-goose-game-rce-flaw-revealed/
+
+            Additionally, it is ridiculously easy to accidentally include more in your payload than you intended - a
+            classic being not remembering to add [field:NonSerialized] on an event, and accidentally serializing your
+            entire UI/application model (basically, your entire application memory) and sending that with your payload.
+            I don't care if the other end silently ignores the extra data, or whether it throws a fault while trying
+            to deserialize it: *you still sent it*; that's a data leak and is a security hole.
+
+            -------------------------------------
+
             Cross-platform compatibility: BinaryFormatter will only be usable between .NET applications; the premise of
             gRPC is that you can use it *between* platforms. Using a framework-specific marshaller flies against what
             the tool is trying to do for you. Note that because a lot of libraries moved around between .NET Framework
             and .NET Core (or .NET 5), this also means that it is very unreliable to use BinaryFormatter between
             .NET Framework and .NET Core - or sometimes just between sub-versions of .NET Framework, or sub-versions of
             .NET Core.
+
+            -------------------------------------
 
             Compatibility between versions: BinaryFormatter is simply brittle. What you might consider minor refactorings
             to your code can completely break the serializer. For example, changing something from an automatically
@@ -50,10 +75,8 @@ namespace protobuf_net.Grpc.Test.Integration
             usually talking about when using BinaryFormatter.
 
             Performance: it just isn't great. At the serializer layer, it could be faster; but it is also relatively
-            large payload-wise compared to other options. Additionally, it is ridiculously easy to accidentally include
-            more in your payload than you intended - a classic being not remembering to add [field:NonSerialized] on an
-            event, and accidentally serializing your entire UI model (basically, your entire application memory) and
-            sending that with your payload.
+            large payload-wise compared to other options. There is also the "we sent more data than we expected" issue
+            (from the "Security" section), which can bloat payloads significantly.
 
             So: there are **lots** of reasons not to use BinaryFormatter. Please don't.
         */
