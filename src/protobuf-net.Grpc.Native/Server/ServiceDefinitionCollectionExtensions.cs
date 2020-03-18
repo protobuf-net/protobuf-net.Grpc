@@ -39,7 +39,7 @@ namespace ProtoBuf.Grpc.Server
             {
                 foreach(var interceptor in interceptors)
                 {
-                    serverServiceDefinition.Intercept(interceptor);
+                    serverServiceDefinition = serverServiceDefinition.Intercept(interceptor);
                 }
             }
 

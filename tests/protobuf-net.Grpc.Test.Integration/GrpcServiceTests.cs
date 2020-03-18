@@ -8,6 +8,9 @@ using Grpc.Net.Client;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using Xunit;
+using Grpc.Core.Interceptors;
+using Xunit.Abstractions;
+using System.Runtime.CompilerServices;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -33,13 +36,23 @@ namespace protobuf_net.Grpc.Test.Integration
         [DataMember(Order = 1)]
         public int Result { get; set; }
     }
-    
+
     public class ApplyServices : IGrpcService
     {
         public Task<ApplyResponse> Add(Apply request) => Task.FromResult(new ApplyResponse(request.X + request.Y));
         public Task<ApplyResponse> Mul(Apply request) => Task.FromResult(new ApplyResponse(request.X * request.Y));
         public Task<ApplyResponse> Sub(Apply request) => Task.FromResult(new ApplyResponse(request.X - request.Y));
         public Task<ApplyResponse> Div(Apply request) => Task.FromResult(new ApplyResponse(request.X / request.Y));
+    }
+
+    [Service]
+    public interface IInterceptedService
+    {
+        ValueTask<ApplyResponse> Add(Apply request);
+    }
+    public class InterceptedService : IInterceptedService
+    {
+        public ValueTask<ApplyResponse> Add(Apply request) => new ValueTask<ApplyResponse>(new ApplyResponse(request.X + request.Y));
     }
 
     [Serializable]
@@ -83,9 +96,13 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         public const int Port = 10042;
         private readonly Server _server;
-        
+
+        private readonly Interceptor _interceptor;
+        public ITestOutputHelper? Output { get; set; }
+        public void Log(string message) => Output?.WriteLine(message);
         public GrpcServiceFixture()
         {
+            _interceptor = new TestInterceptor(this);
 #pragma warning disable CS0618 // Type or member is obsolete
             BinaryFormatterMarshallerFactory.I_Have_Read_The_Notes_On_Not_Using_BinaryFormatter = true;
             BinaryFormatterMarshallerFactory.I_Promise_Not_To_Do_This = true; // signed: Marc Gravell
@@ -95,8 +112,9 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
-            _ = _server.Services.AddCodeFirst(new ApplyServices());
-            _ = _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
+            _server.Services.AddCodeFirst(new ApplyServices());
+            _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
+            _server.Services.AddCodeFirst(new InterceptedService() , interceptors: new[] { _interceptor });
             _server.Start();
         }
 
@@ -105,11 +123,35 @@ namespace protobuf_net.Grpc.Test.Integration
             await _server.ShutdownAsync();
         }
     }
-    
-    public class GrpcServiceTests : IClassFixture<GrpcServiceFixture>
+    public class TestInterceptor : Interceptor
+    {
+        private readonly GrpcServiceFixture _parent;
+        public void Log(string message) => _parent?.Log(message);
+        public TestInterceptor(GrpcServiceFixture parent) => _parent = parent;
+        private static string Me([CallerMemberName] string? caller = null) => caller ?? "(unknown)";
+        public override async Task<TResponse> UnaryServerHandler<TRequest, TResponse>(TRequest request, ServerCallContext context, UnaryServerMethod<TRequest, TResponse> continuation)
+        {
+            Log($"> {Me()}");
+            var result = await base.UnaryServerHandler(request, context, continuation);
+            Log($"< {Me()}");
+            return result;
+        }
+    }
+
+
+    public class GrpcServiceTests : IClassFixture<GrpcServiceFixture>, IDisposable
     {
         private readonly GrpcServiceFixture _fixture;
-        public GrpcServiceTests(GrpcServiceFixture fixture) => _fixture = fixture;
+        public GrpcServiceTests(GrpcServiceFixture fixture, ITestOutputHelper log)
+        {
+            _fixture = fixture;
+            if (fixture != null) fixture.Output = log;
+        }
+
+        public void Dispose()
+        {
+            if (_fixture != null) _fixture.Output = null;
+        }
 
         [Fact]
         public async Task CanCallAllApplyServicesUnaryAsync()
@@ -183,7 +225,7 @@ namespace protobuf_net.Grpc.Test.Integration
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            
+
             var client = new GrpcClient(http, typeof(ApplyServices));
             Assert.Equal(nameof(ApplyServices), client.ToString());
 
@@ -209,6 +251,21 @@ namespace protobuf_net.Grpc.Test.Integration
             var client = http.CreateGrpcService<IAdhocService>(AdhocConfig.ClientFactory);
             var response = client.AdhocMethod(request);
             Assert.Equal(19, response.Z);
+        }
+
+        [Fact]
+        public async Task CanCallInterceptedService()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+
+            var request = new Apply { X = 6, Y = 3 };
+
+            var client = http.CreateGrpcService<IInterceptedService>();
+            _fixture?.Log("> Add");
+            var result = await client.Add(new Apply { X = 42, Y = 8 });
+            _fixture?.Log("< Add");
+            Assert.Equal(50, result.Result);
         }
     }
 }
