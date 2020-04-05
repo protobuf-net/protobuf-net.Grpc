@@ -20,4 +20,8 @@
     <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.7.1" />
+  </ItemGroup>
+
 </Project>
