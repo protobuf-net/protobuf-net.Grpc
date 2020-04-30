@@ -24,17 +24,28 @@ namespace ProtoBuf.Grpc.Generator
 
             // get into the correct location in the type/namespace hive
             var fqn = FullyQualifiedName.For(service);
+
+            if (fqn.File?.Usings.Any() == true)
+            {
+                foreach (var item in fqn.File.Usings)
+                {
+                    sb.Append(item);
+                    NewLine();
+                }
+                NewLine();
+            }
+
             if (fqn.Namespaces?.Any() == true)
             {
-                sb.Append("namespace ");
-                bool first = true;
                 foreach (var item in fqn.Namespaces)
                 {
-                    if (first) first = false;
-                    else sb.Append('.');
-                    sb.Append(item.Name);
+                    sb.Append("namespace ").Append(item.Name);
+                    StartBlock();
+                    foreach(var usingDirective in item.Usings)
+                    {
+                        NewLine().Append(usingDirective);
+                    }
                 }
-                StartBlock();
             }
 
             if (fqn.Types?.Any() == true)
@@ -60,16 +71,14 @@ namespace ProtoBuf.Grpc.Generator
                 if (member is MethodDeclarationSyntax method)
                 {
                     // write a method implementation; we'll use implicit implementation for simplicity
-                    NewLine().Append("public ");
-                    AppendFullyQualifiedName(method.ReturnType);
+                    NewLine().Append("public ").Append(method.ReturnType);
                     sb.Append(" ").Append(method.Identifier).Append('(');
                     bool first = true;
                     foreach (var arg in method.ParameterList.Parameters)
                     {
                         if (first) first = false;
                         else sb.Append(", ");
-                        AppendFullyQualifiedName(arg.Type!);
-                        sb.Append(" ").Append(arg.Identifier);
+                        sb.Append(arg.Type!).Append(" ").Append(arg.Identifier);
                     }
                     sb.Append(")");
 
@@ -86,7 +95,10 @@ namespace ProtoBuf.Grpc.Generator
             {
                 foreach (var _ in fqn.Types) EndBlock();
             }
-            if (fqn.Namespaces?.Any() == true) EndBlock();
+            if (fqn.Namespaces?.Any() == true)
+            {
+                foreach (var _ in fqn.Namespaces) EndBlock();
+            }
 
             // add the generated content
             context.AddSource($"{service.Identifier}.Generated.cs", SourceText.From(sb.ToString()));
@@ -95,11 +107,6 @@ namespace ProtoBuf.Grpc.Generator
 #endif
 
             // utility methods for working with the generator
-            void AppendFullyQualifiedName(TypeSyntax type)
-            {
-                FullyQualifiedName.For(type).WriteSite(sb);
-                sb.Append(type);
-            }
             StringBuilder NewLine()
                 => sb!.AppendLine().Append('\t', indent);
             StringBuilder StartBlock()
@@ -150,24 +157,14 @@ namespace ProtoBuf.Grpc.Generator
         public SyntaxNode? Node { get; }
         public List<TypeDeclarationSyntax>? Types { get; }
         public List<NamespaceDeclarationSyntax>? Namespaces { get; }
+        public CompilationUnitSyntax? File { get; }
 
-        public FullyQualifiedName(SyntaxNode? original, List<TypeDeclarationSyntax>? types, List<NamespaceDeclarationSyntax>? namespaces)
+        public FullyQualifiedName(SyntaxNode? original, List<TypeDeclarationSyntax>? types, List<NamespaceDeclarationSyntax>? namespaces, CompilationUnitSyntax? file)
         {
             Node = original;
             Types = types;
             Namespaces = namespaces;
-        }
-
-        public void WriteSite(StringBuilder sb)
-        {
-            if (Namespaces?.Any() == true)
-            {
-                foreach (var item in Namespaces) sb.Append(item.Name).Append('.');
-            }
-            if (Types?.Any() == true)
-            {
-                foreach (var item in Types) sb.Append(item.Identifier.Text).Append('.');
-            }
+            File = file;
         }
 
         // need to get the correct namespace etc; some useful context here: https://stackoverflow.com/a/61409409/23354
@@ -176,6 +173,7 @@ namespace ProtoBuf.Grpc.Generator
             var original = node;
             List<TypeDeclarationSyntax>? types = null;
             List<NamespaceDeclarationSyntax>? namespaces = null;
+            CompilationUnitSyntax? file = null;
 
             while ((node = node?.Parent) is object)
             {
@@ -189,12 +187,15 @@ namespace ProtoBuf.Grpc.Generator
                         types ??= new List<TypeDeclarationSyntax>();
                         types.Add(type);
                         break;
+                    case CompilationUnitSyntax cus:
+                        file = cus;
+                        break;
                 }
             }
             types?.Reverse();
             namespaces?.Reverse();
 
-            return new FullyQualifiedName(original, types, namespaces);
+            return new FullyQualifiedName(original, types, namespaces, file);
         }
     }
 }
