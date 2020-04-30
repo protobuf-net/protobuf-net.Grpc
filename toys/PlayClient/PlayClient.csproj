@@ -5,6 +5,9 @@
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net472;netcoreapp3.0</TargetFrameworks>
     <LangVersion>preview</LangVersion>
+    <!--<DebugSymbols>false</DebugSymbols>
+    <DebugType>None</DebugType>
+    <EmbedUntrackedSources>false</EmbedUntrackedSources>-->
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <DefineConstants>$(DefineConstants);HTTPCLIENT</DefineConstants>
