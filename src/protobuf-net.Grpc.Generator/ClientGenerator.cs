@@ -103,7 +103,7 @@ namespace ProtoBuf.Grpc.Generator
             // add the generated content
             context.AddSource($"{service.Identifier}.Generated.cs", SourceText.From(sb.ToString()));
 #if DEBUG   // lazy hack to show what we did
-            File.WriteAllText(@"c:\code\generator_output.cs", sb.ToString());
+            // File.WriteAllText(@"c:\code\generator_output.cs", sb.ToString());
 #endif
 
             // utility methods for working with the generator
