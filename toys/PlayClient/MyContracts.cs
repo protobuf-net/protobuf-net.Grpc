@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.Threading.Tasks;
+
 namespace Shared_CS
 {
     [ServiceContract(Name = "Hyper.Calculator")]
@@ -35,7 +36,7 @@ namespace Shared_CS
     }
 
     [ServiceContract]
-    public interface IDuplex
+    public partial interface IDuplex
     {
         IAsyncEnumerable<MultiplyResult> SomeDuplexApiAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);
     }
