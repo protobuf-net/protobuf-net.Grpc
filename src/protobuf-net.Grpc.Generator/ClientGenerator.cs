@@ -72,7 +72,8 @@ namespace ProtoBuf.Grpc.Generator
                         sb.Append(" ").Append(arg.Identifier);
                     }
                     sb.Append(")");
-                    // call into gRPC
+
+                    // call into gRPC; don't worry about this bit for now
                     NewLine().Append("\t=> throw new global::System.NotImplementedException();");
                 }
                 // not too concerned about other interface member types
@@ -128,6 +129,8 @@ namespace ProtoBuf.Grpc.Generator
                 {
                     foreach (var attrib in attribList.Attributes)
                     {
+                        // TODO: probably create a new custom attribute for this, rather
+                        // than just detecting these and making assumptions
                         switch (attrib.Name.ToFullString())
                         {
                             case "ServiceContract":
