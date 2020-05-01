@@ -1,4 +1,5 @@
 ﻿using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.ServiceModel;
@@ -6,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Shared_CS
 {
-    [ServiceContract(Name = "Hyper.Calculator")]
+    [ServiceContract(Name = "Hyper.Calculator"), GenerateProxy]
     public interface ICalculator
     {
         ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
@@ -35,7 +36,7 @@ namespace Shared_CS
         public int Result { get; set; }
     }
 
-    [ServiceContract]
+    [ServiceContract, GenerateProxy]
     public partial interface IDuplex
     {
         IAsyncEnumerable<MultiplyResult> SomeDuplexApiAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);

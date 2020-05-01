@@ -161,18 +161,78 @@ namespace ProtoBuf.Grpc.Generator
                 {
                     foreach (var attrib in attribList.Attributes)
                     {
-                        // TODO: probably create a new custom attribute for this, rather
-                        // than just detecting these and making assumptions
-                        switch (attrib.Name.ToFullString())
+                        bool result = ShouldGenerateProxy(attrib);
+                        if (result)
                         {
-                            case "ServiceContract":
-                            case "ServiceContractAttribute":
-                            case "ServiceAttribute":
-                            case "Service":
-                                Service = iService;
-                                break;
+                            Service = iService;
+                            return; // we're done
                         }
                     }
+                }
+            }
+        }
+
+        private static bool ShouldGenerateProxy(AttributeSyntax attrib)
+        {
+            var name = attrib.Name.ToFullString();
+
+            SyntaxNode? node = attrib;
+            while (node is object)
+            {
+                switch (node)
+                {
+                    case NamespaceDeclarationSyntax ns:
+                        var result = CheckUsings(name, ns.Usings);
+                        if (result.HasValue) return result.Value;
+                        break;
+                    case CompilationUnitSyntax cus:
+                        result = CheckUsings(name, cus.Usings);
+                        if (result.HasValue) return result.Value;
+                        break;
+                }
+                node = node.Parent;
+            }
+
+            // finally, check the full name *without* namespaces (could be fully qualified)
+            return IsGenerateProxyAttribute(name);
+
+            static bool? CheckUsings(string name, SyntaxList<UsingDirectiveSyntax> usings)
+            {
+                foreach (var u in usings)
+                {
+                    var alias = u.Alias?.Name.Identifier.ValueText;
+                    var ns = u.Name.ToFullString();
+                    if (alias is string)
+                    {
+                        if (alias == name)
+                        {   // exact alias match; don't need to check other usings
+                            return IsGenerateProxyAttribute(ns);
+                        }
+                        else if (name.StartsWith(alias + "."))
+                        {   // partial alias match; alias is Foo, attribute could be Foo.Bar
+                            if (IsGenerateProxyAttribute(ns + name.Substring(alias.Length)))
+                                return true;
+                        }
+                    }
+                    else
+                    {
+                        if (IsGenerateProxyAttribute(ns + "." + name))
+                            return true;
+                    }
+                }
+                return default;
+            }
+            static bool IsGenerateProxyAttribute(string fullyQualifiedName)
+            {
+                int i = fullyQualifiedName.IndexOf("::"); // strip any root qualifier
+                if (i >= 0) fullyQualifiedName = fullyQualifiedName.Substring(i + 2);
+                switch (fullyQualifiedName)
+                {
+                    case "ProtoBuf.Grpc.Configuration.GenerateProxy":
+                    case "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute":
+                        return true;
+                    default:
+                        return false;
                 }
             }
         }
