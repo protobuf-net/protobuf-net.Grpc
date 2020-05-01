@@ -190,6 +190,7 @@ namespace ProtoBuf.Grpc.Generator
         }
         private static bool IsType(string localName, string fullyQualifiedName, SyntaxNode? node)
         {
+            // check the name respecting using directives (including aliases)
             while (node is object)
             {
                 switch (node)
