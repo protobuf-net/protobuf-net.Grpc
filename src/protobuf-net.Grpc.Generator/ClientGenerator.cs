@@ -1,6 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -19,6 +21,7 @@ namespace ProtoBuf.Grpc.Generator
             var service = (context.SyntaxReceiver as ServiceReceiver)?.Service;
             if (service is null) return;
 
+            var options = (CSharpParseOptions)service.SyntaxTree.Options;
             int indent = 0;
             var sb = new StringBuilder();
 
@@ -34,6 +37,9 @@ namespace ProtoBuf.Grpc.Generator
                 }
                 NewLine();
             }
+
+            sb.Append("// ").Append(string.Join(", ", options.PreprocessorSymbolNames));
+            NewLine();
 
             if (fqn.Namespaces?.Any() == true)
             {
@@ -59,36 +65,54 @@ namespace ProtoBuf.Grpc.Generator
 
             // add an attribute to the interface definition
             NewLine().Append($@"[global::ProtoBuf.Grpc.Configuration.Proxy(typeof(__{service.Identifier}__GeneratedProxy))]");
-            NewLine().Append($"partial interface {service.Identifier} {{}}");
-
-            // declare an internal type that implements the interface
-            NewLine().Append($"internal sealed class __{service.Identifier}__GeneratedProxy : {service.Identifier}");
-            
-            // write the actual service implementations
-            StartBlock();
-            foreach (var member in service.Members)
+            NewLine().Append($"partial interface {service.Identifier}");
+            //if (options.LanguageVersion >= LanguageVersion.CSharp8)
+            //{   // implementation can be nested - turns out this isn't a good idea because of TFM support for default interface implementation, which is what it needs
+            //    StartBlock();
+            //    WriteProxy();
+            //    NewLine().Append($"public static {service.Identifier} Create(global::Grpc.Core.ChannelBase channel) => new __{service.Identifier}__GeneratedProxy(channel);");
+            //    EndBlock();
+            //}
+            //else
             {
-                if (member is MethodDeclarationSyntax method)
-                {
-                    // write a method implementation; we'll use implicit implementation for simplicity
-                    NewLine().Append("public ").Append(method.ReturnType);
-                    sb.Append(" ").Append(method.Identifier).Append('(');
-                    bool first = true;
-                    foreach (var arg in method.ParameterList.Parameters)
-                    {
-                        if (first) first = false;
-                        else sb.Append(", ");
-                        sb.Append(arg.Type!).Append(" ").Append(arg.Identifier);
-                    }
-                    sb.Append(")");
-
-                    // call into gRPC; don't worry about this bit for now
-                    NewLine().Append("\t=> throw new global::System.NotImplementedException();");
-                }
-                // not too concerned about other interface member types
-                // TODO: pre-screen for validity?
+                StartBlock();
+                EndBlock();
+                WriteProxy();
             }
-            EndBlock();
+
+            void WriteProxy()
+            {
+                // declare an internal type that implements the interface
+                NewLine().Append($"internal sealed class __{service.Identifier}__GeneratedProxy : global::Grpc.Core.ClientBase, {service.Identifier}");
+
+                // write the actual service implementations
+                StartBlock();
+                NewLine().Append($"internal __{service.Identifier}__GeneratedProxy(global::Grpc.Core.ChannelBase channel) : base(channel) {{}}");
+
+                foreach (var member in service.Members)
+                {
+                    if (member is MethodDeclarationSyntax method)
+                    {
+                        // write a method implementation; we'll use implicit implementation for simplicity
+                        NewLine().Append("public ").Append(method.ReturnType);
+                        sb.Append(" ").Append(method.Identifier).Append('(');
+                        bool first = true;
+                        foreach (var arg in method.ParameterList.Parameters)
+                        {
+                            if (first) first = false;
+                            else sb.Append(", ");
+                            sb.Append(arg.Type!).Append(" ").Append(arg.Identifier);
+                        }
+                        sb.Append(")");
+
+                        // call into gRPC; don't worry about this bit for now
+                        NewLine().Append($"\t=> throw new global::System.NotImplementedException();");
+                    }
+                    // not too concerned about other interface member types
+                    // TODO: pre-screen for validity?
+                }
+                EndBlock();
+            }
 
             // get back out of the type/namespace hive
             if (fqn.Types?.Any() == true)
@@ -101,10 +125,11 @@ namespace ProtoBuf.Grpc.Generator
             }
 
             // add the generated content
-            context.AddSource($"{service.Identifier}.Generated.cs", SourceText.From(sb.ToString()));
-#if DEBUG   // lazy hack to show what we did
-            // File.WriteAllText(@"c:\code\generator_output.cs", sb.ToString());
-#endif
+            var code = sb.ToString();
+            context.AddSource($"{service.Identifier}.Generated.cs", SourceText.From(code, Encoding.UTF8));
+//#if DEBUG   // lazy hack to show what we did
+//            File.WriteAllText(@$"c:\code\generator_output_{Guid.NewGuid()}.cs", code, Encoding.UTF8);
+//#endif
 
             // utility methods for working with the generator
             StringBuilder NewLine()
@@ -130,7 +155,7 @@ namespace ProtoBuf.Grpc.Generator
 
         void ISyntaxReceiver.OnVisitSyntaxNode(SyntaxNode syntaxNode)
         {
-            if (syntaxNode is InterfaceDeclarationSyntax iService)
+            if (syntaxNode is InterfaceDeclarationSyntax iService) // note that this is explicitly a C# node
             {
                 foreach (var attribList in iService.AttributeLists)
                 {

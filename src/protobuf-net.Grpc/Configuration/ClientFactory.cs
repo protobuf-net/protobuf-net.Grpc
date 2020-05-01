@@ -51,7 +51,6 @@ namespace ProtoBuf.Grpc.Configuration
         // TODO: remove this, standardizing on SimpleClient (or LiteClientBase) and CallInvoker?
         internal abstract TService CreateClient<TBase, TService, TChannel>(TChannel channel) where TService : class;
 
-
         private sealed class ConfiguredClientFactory : ClientFactory
         {
             protected override BinderConfiguration BinderConfiguration { get; }

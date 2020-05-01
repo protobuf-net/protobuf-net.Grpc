@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
+		<LangVersion>preview</LangVersion>
+	</PropertyGroup>
+	<ItemGroup>
+		<Analyzer Include="../../src/protobuf-net.Grpc.Generator/bin/Debug/netstandard2.0/protobuf-net.Grpc.Generator.dll" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+	</ItemGroup>
+</Project>

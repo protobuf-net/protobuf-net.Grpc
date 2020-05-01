@@ -4,10 +4,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net472;netcoreapp3.0</TargetFrameworks>
-    <LangVersion>preview</LangVersion>
-    <!--<DebugSymbols>false</DebugSymbols>
-    <DebugType>None</DebugType>
-    <EmbedUntrackedSources>false</EmbedUntrackedSources>-->
+
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <DefineConstants>$(DefineConstants);HTTPCLIENT</DefineConstants>
@@ -15,10 +12,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
+    <ProjectReference Include="..\PlayContracts\PlayContracts.csproj" />
   </ItemGroup>
-  <ItemGroup>
-	<Analyzer Include="../../src/protobuf-net.Grpc.Generator/bin/Debug/netstandard2.0/protobuf-net.Grpc.Generator.dll" />
-  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.0'">
     <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>

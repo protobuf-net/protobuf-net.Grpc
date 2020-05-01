@@ -39,5 +39,6 @@ namespace Shared_CS
     public partial interface IDuplex
     {
         IAsyncEnumerable<MultiplyResult> SomeDuplexApiAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);
+        // bump
     }
 }
