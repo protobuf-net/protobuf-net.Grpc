@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using ProtoBuf.Grpc.Configuration;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -93,14 +94,35 @@ namespace ProtoBuf.Grpc.Internal
         static int _typeIndex;
         private static readonly MethodInfo s_marshallerCacheGenericMethodDef
             = typeof(MarshallerCache).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
-        internal static Func<TChannel, TService> CreateFactory<TChannel, TService>(Type baseType, BinderConfiguration binderConfig)
+        internal static Func<CallInvoker, TService> CreateFactory<TService>(BinderConfiguration binderConfig)
            where TService : class
         {
-            if (baseType == null) throw new ArgumentNullException(nameof(baseType));
-
             // front-load reflection discovery
             if (!typeof(TService).IsInterface)
                 throw new InvalidOperationException("Type is not an interface: " + typeof(TService).FullName);
+
+            if (binderConfig == BinderConfiguration.Default) // only use ProxyAttribute for default binder
+            {
+                var proxy = (typeof(TService).GetCustomAttribute(typeof(ProxyAttribute)) as ProxyAttribute)?.Type;
+                if (proxy is object) return CreateViaActivator<TService>(proxy);
+            }
+
+            return EmitFactory<TService>(binderConfig);
+        }
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static Func<CallInvoker, TService> CreateViaActivator<TService>(Type type)
+        {
+            return channel => (TService)Activator.CreateInstance(
+                        type,
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                        null,
+                        new object[] { channel },
+                        null);
+        }
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig)
+        {
+            Type baseType = typeof(ClientBase);
 
             var callInvoker = baseType.GetProperty("CallInvoker", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetGetMethod(true);
             if (callInvoker == null || callInvoker.ReturnType != typeof(CallInvoker) || callInvoker.GetParameters().Length != 0)
@@ -115,7 +137,7 @@ namespace ProtoBuf.Grpc.Internal
                 type.SetParent(baseType);
 
                 // public IFooProxy(CallInvoker callInvoker) : base(callInvoker) { }
-                var ctorCallInvoker = WritePassThruCtor<TChannel>(MethodAttributes.Public);
+                var ctorCallInvoker = WritePassThruCtor<CallInvoker>(MethodAttributes.Public);
 
                 // override ToString
                 {
@@ -124,7 +146,7 @@ namespace ProtoBuf.Grpc.Internal
                     typeof(string), Type.EmptyTypes);
                     var il = toString.GetILGenerator();
                     if (!binderConfig.Binder.IsServiceContract(typeof(TService), out var primaryServiceName)) primaryServiceName = typeof(TService).Name;
-                    il.Emit(OpCodes.Ldstr, primaryServiceName + " / " + typeof(TChannel).Name);
+                    il.Emit(OpCodes.Ldstr, primaryServiceName + " / " + typeof(CallInvoker).Name);
                     il.Emit(OpCodes.Ret);
                     type.DefineMethodOverride(toString, baseToString);
                 }
@@ -255,9 +277,9 @@ namespace ProtoBuf.Grpc.Internal
                 finalType.GetMethod(InitMethodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.Invoke(null, Array.Empty<object>());
 
                 // return the factory
-                var p = Expression.Parameter(typeof(TChannel), "channel");
-                return Expression.Lambda<Func<TChannel, TService>>(
-                    Expression.New(finalType.GetConstructor(new[] { typeof(TChannel) }), p), p).Compile();
+                var p = Expression.Parameter(typeof(CallInvoker), "channel");
+                return Expression.Lambda<Func<CallInvoker, TService>>(
+                    Expression.New(finalType.GetConstructor(new[] { typeof(CallInvoker) }), p), p).Compile();
 
                 ConstructorBuilder? WritePassThruCtor<T>(MethodAttributes accessibility)
                 {
