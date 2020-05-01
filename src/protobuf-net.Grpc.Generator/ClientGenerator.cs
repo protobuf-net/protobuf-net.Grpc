@@ -161,7 +161,8 @@ namespace ProtoBuf.Grpc.Generator
                 {
                     foreach (var attrib in attribList.Attributes)
                     {
-                        bool result = ShouldGenerateProxy(attrib);
+                        bool result = IsAttribute(attrib, "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute");
+                        // File.AppendAllText(@"c:\Code\thinking.log", $"{iService.Identifier} [{attrib.Name.ToFullString()}]: {result}{Environment.NewLine}");
                         if (result)
                         {
                             Service = iService;
@@ -172,21 +173,33 @@ namespace ProtoBuf.Grpc.Generator
             }
         }
 
-        private static bool ShouldGenerateProxy(AttributeSyntax attrib)
-        {
-            var name = attrib.Name.ToFullString();
+        //private static bool IsType(TypeSyntax type, string fullyQualifiedName)
+        //    => IsType(type.ToFullString(), fullyQualifiedName, type);
 
-            SyntaxNode? node = attrib;
+        private static bool IsAttribute(AttributeSyntax attribute, string fullyQualifiedName)
+        {
+            var localName = attribute.Name.ToFullString();
+            if (IsType(localName, fullyQualifiedName, attribute)) return true;
+
+            if (fullyQualifiedName.EndsWith("Attribute"))
+            {
+                fullyQualifiedName = fullyQualifiedName.Substring(0, fullyQualifiedName.Length - 9);
+                if (IsType(localName, fullyQualifiedName, attribute)) return true;
+            }
+            return false;
+        }
+        private static bool IsType(string localName, string fullyQualifiedName, SyntaxNode? node)
+        {
             while (node is object)
             {
                 switch (node)
                 {
                     case NamespaceDeclarationSyntax ns:
-                        var result = CheckUsings(name, ns.Usings);
+                        var result = CheckUsings(localName, ns.Usings, fullyQualifiedName);
                         if (result.HasValue) return result.Value;
                         break;
                     case CompilationUnitSyntax cus:
-                        result = CheckUsings(name, cus.Usings);
+                        result = CheckUsings(localName, cus.Usings, fullyQualifiedName);
                         if (result.HasValue) return result.Value;
                         break;
                 }
@@ -194,9 +207,9 @@ namespace ProtoBuf.Grpc.Generator
             }
 
             // finally, check the full name *without* namespaces (could be fully qualified)
-            return IsGenerateProxyAttribute(name);
+            return IsMatch(localName, fullyQualifiedName);
 
-            static bool? CheckUsings(string name, SyntaxList<UsingDirectiveSyntax> usings)
+            static bool? CheckUsings(string name, SyntaxList<UsingDirectiveSyntax> usings, string expected)
             {
                 foreach (var u in usings)
                 {
@@ -206,34 +219,27 @@ namespace ProtoBuf.Grpc.Generator
                     {
                         if (alias == name)
                         {   // exact alias match; don't need to check other usings
-                            return IsGenerateProxyAttribute(ns);
+                            return IsMatch(ns, expected);
                         }
                         else if (name.StartsWith(alias + "."))
                         {   // partial alias match; alias is Foo, attribute could be Foo.Bar
-                            if (IsGenerateProxyAttribute(ns + name.Substring(alias.Length)))
+                            if (IsMatch(ns + name.Substring(alias.Length), expected))
                                 return true;
                         }
                     }
                     else
                     {
-                        if (IsGenerateProxyAttribute(ns + "." + name))
+                        if (IsMatch(ns + "." + name, expected))
                             return true;
                     }
                 }
                 return default;
             }
-            static bool IsGenerateProxyAttribute(string fullyQualifiedName)
+            static bool IsMatch(string actual, string expected)
             {
-                int i = fullyQualifiedName.IndexOf("::"); // strip any root qualifier
-                if (i >= 0) fullyQualifiedName = fullyQualifiedName.Substring(i + 2);
-                switch (fullyQualifiedName)
-                {
-                    case "ProtoBuf.Grpc.Configuration.GenerateProxy":
-                    case "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute":
-                        return true;
-                    default:
-                        return false;
-                }
+                int i = actual.IndexOf("::"); // strip any root qualifier
+                if (i >= 0) actual = actual.Substring(i + 2);
+                return actual == expected;
             }
         }
     }
