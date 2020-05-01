@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,15 +12,41 @@ using System.Text;
 namespace ProtoBuf.Grpc.Generator
 {
     [Generator]
-    public class ClientGenerator : ISourceGenerator
+    public partial class ClientGenerator : ISourceGenerator
     {
+        [Conditional("DEBUG")]
+        internal static void DebugAppendLog(string message)
+        {
+//#if DEBUG
+//            try
+//            {
+//                File.AppendAllText(@"c:\Code\thinking.log", message + Environment.NewLine);
+//            }
+//            catch { }
+//#endif
+        }
+
         void ISourceGenerator.Initialize(InitializationContext context)
             => context.RegisterForSyntaxNotifications(() => new ServiceReceiver());
 
         void ISourceGenerator.Execute(SourceGeneratorContext context)
         {
-            var service = (context.SyntaxReceiver as ServiceReceiver)?.Service;
-            if (service is null) return;
+            try
+            {
+                var services = (context.SyntaxReceiver as ServiceReceiver)?.Services;
+                if (services is object)
+                {
+                    foreach(var service in services) Execute(context, service);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugAppendLog(ex.ToString());
+            }
+        }
+        private void Execute(in SourceGeneratorContext context, InterfaceDeclarationSyntax service)
+        {
+            DebugAppendLog($"generating {service.Identifier}");
 
             var options = (CSharpParseOptions)service.SyntaxTree.Options;
             int indent = 0;
@@ -70,7 +97,7 @@ namespace ProtoBuf.Grpc.Generator
             //{   // implementation can be nested - turns out this isn't a good idea because of TFM support for default interface implementation, which is what it needs
             //    StartBlock();
             //    WriteProxy();
-            //    NewLine().Append($"public static {service.Identifier} Create(global::Grpc.Core.ChannelBase channel) => new __{service.Identifier}__GeneratedProxy(channel);");
+            //    NewLine().Append($"public static {service.Identifier} Create(global::Grpc.Core.CallInvoker channel) => new __{service.Identifier}__GeneratedProxy(channel);");
             //    EndBlock();
             //}
             //else
@@ -87,7 +114,7 @@ namespace ProtoBuf.Grpc.Generator
 
                 // write the actual service implementations
                 StartBlock();
-                NewLine().Append($"internal __{service.Identifier}__GeneratedProxy(global::Grpc.Core.ChannelBase channel) : base(channel) {{}}");
+                NewLine().Append($"internal __{service.Identifier}__GeneratedProxy(global::Grpc.Core.CallInvoker channel) : base(channel) {{}}");
 
                 foreach (var member in service.Members)
                 {
@@ -128,7 +155,7 @@ namespace ProtoBuf.Grpc.Generator
             var code = sb.ToString();
             context.AddSource($"{service.Identifier}.Generated.cs", SourceText.From(code, Encoding.UTF8));
 //#if DEBUG   // lazy hack to show what we did
-//            File.WriteAllText(@$"c:\code\generator_output_{Guid.NewGuid()}.cs", code, Encoding.UTF8);
+//            File.WriteAllText(@$"c:\code\generator_output_{service.Identifier}_{Guid.NewGuid()}.cs", code, Encoding.UTF8);
 //#endif
 
             // utility methods for working with the generator
@@ -146,12 +173,12 @@ namespace ProtoBuf.Grpc.Generator
                 NewLine().Append("}");
                 return NewLine();
             }
-        }        
+        }
     }
 
     internal sealed class ServiceReceiver : ISyntaxReceiver
     {
-        public InterfaceDeclarationSyntax? Service { get; private set; }
+        public List<InterfaceDeclarationSyntax> Services { get; } = new List<InterfaceDeclarationSyntax>();
 
         void ISyntaxReceiver.OnVisitSyntaxNode(SyntaxNode syntaxNode)
         {
@@ -162,10 +189,10 @@ namespace ProtoBuf.Grpc.Generator
                     foreach (var attrib in attribList.Attributes)
                     {
                         bool result = IsAttribute(attrib, "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute");
-                        // File.AppendAllText(@"c:\Code\thinking.log", $"{iService.Identifier} [{attrib.Name.ToFullString()}]: {result}{Environment.NewLine}");
+                        ClientGenerator.DebugAppendLog($"{iService.Identifier} [{attrib.Name.ToFullString()}]: {result}");
                         if (result)
                         {
-                            Service = iService;
+                            Services.Add(iService);
                             return; // we're done
                         }
                     }

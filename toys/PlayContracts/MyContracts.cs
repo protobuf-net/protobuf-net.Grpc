@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace Shared_CS
 {
     [ServiceContract(Name = "Hyper.Calculator"), GenerateProxy]
-    public interface ICalculator
+    public partial interface ICalculator
     {
         ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
     }
