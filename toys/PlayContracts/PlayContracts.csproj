@@ -5,11 +5,15 @@
 		<LangVersion>preview</LangVersion>
 	</PropertyGroup>
 	<ItemGroup>
-		<Analyzer Include="../../src/protobuf-net.Grpc.Generator/bin/Debug/netstandard2.0/protobuf-net.Grpc.Generator.dll" />
-		<Analyzer Include="../../src/protobuf-net.Generator/bin/Debug/netstandard2.0/protobuf-net.Generator.dll" />
-	</ItemGroup>
-	<ItemGroup>
+		
+		<ProjectReference Include="..\..\src\protobuf-net.Generator\protobuf-net.Generator.csproj"
+			PrivateAssets="all" ReferenceOutputAssembly="false" OutputItemType="Analyzer"/>
+		<ProjectReference Include="..\..\src\protobuf-net.Grpc.Generator\protobuf-net.Grpc.Generator.csproj"
+			PrivateAssets="all" ReferenceOutputAssembly="false" OutputItemType="Analyzer"/>
+		
 		<ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
 		<PackageReference Include="System.ServiceModel.Primitives" Version="4.7.0" />
+
+		<AdditionalFiles Include="test.proto" />
 	</ItemGroup>
 </Project>

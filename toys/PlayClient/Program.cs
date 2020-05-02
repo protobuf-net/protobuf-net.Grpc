@@ -87,6 +87,7 @@ namespace PlayClient
             try
             {
                 var calculator = channel.CreateGrpcService<ICalculator>();
+                // Console.WriteLine(calculator.GetType().FullName);
                 await TestCalculator(calculator);
 
                 var duplex = channel.CreateGrpcService<IDuplex>();
