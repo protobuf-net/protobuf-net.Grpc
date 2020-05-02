@@ -8,6 +8,7 @@
 		<Analyzer Include="../../src/protobuf-net.Grpc.Generator/bin/Debug/netstandard2.0/protobuf-net.Grpc.Generator.dll" />
 	</ItemGroup>
 	<ItemGroup>
-	  <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+		<ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+		<PackageReference Include="System.ServiceModel.Primitives" Version="4.7.0" />
 	</ItemGroup>
 </Project>

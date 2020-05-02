@@ -2,10 +2,10 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using ProtoBuf.Grpc.Generator.Internal;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -17,13 +17,13 @@ namespace ProtoBuf.Grpc.Generator
         [Conditional("DEBUG")]
         internal static void DebugAppendLog(string message)
         {
-//#if DEBUG
-//            try
-//            {
-//                File.AppendAllText(@"c:\Code\thinking.log", message + Environment.NewLine);
-//            }
-//            catch { }
-//#endif
+            //#if DEBUG
+            //            try
+            //            {
+            //                File.AppendAllText(@"c:\Code\thinking.log", message + Environment.NewLine);
+            //            }
+            //            catch { }
+            //#endif
         }
 
         void ISourceGenerator.Initialize(InitializationContext context)
@@ -36,7 +36,7 @@ namespace ProtoBuf.Grpc.Generator
                 var services = (context.SyntaxReceiver as ServiceReceiver)?.Services;
                 if (services is object)
                 {
-                    foreach(var service in services) Execute(context, service);
+                    foreach (var service in services) Execute(context, service);
                 }
             }
             catch (Exception ex)
@@ -53,11 +53,11 @@ namespace ProtoBuf.Grpc.Generator
             var sb = new StringBuilder();
 
             // get into the correct location in the type/namespace hive
-            var fqn = FullyQualifiedName.For(service);
+            var typeContext = TypeContext.For(service, TypeContext.Order.OutermostFirst);
 
-            if (fqn.File?.Usings.Any() == true)
+            if (typeContext.CompilationUnit?.Usings.Any() == true)
             {
-                foreach (var item in fqn.File.Usings)
+                foreach (var item in typeContext.CompilationUnit.Usings)
                 {
                     sb.Append(item);
                     NewLine();
@@ -68,49 +68,46 @@ namespace ProtoBuf.Grpc.Generator
             sb.Append("// ").Append(string.Join(", ", options.PreprocessorSymbolNames));
             NewLine();
 
-            if (fqn.Namespaces?.Any() == true)
+            foreach (var item in typeContext.Namespaces)
             {
-                foreach (var item in fqn.Namespaces)
+                sb.Append("namespace ").Append(item.Name);
+                StartBlock();
+                foreach (var usingDirective in item.Usings)
                 {
-                    sb.Append("namespace ").Append(item.Name);
-                    StartBlock();
-                    foreach(var usingDirective in item.Usings)
-                    {
-                        NewLine().Append(usingDirective);
-                    }
+                    NewLine().Append(usingDirective);
                 }
             }
 
-            if (fqn.Types?.Any() == true)
+            foreach (var type in typeContext.Types)
             {
-                foreach (var type in fqn.Types)
-                {
-                    NewLine().Append("partial class ").Append(type.Identifier.Text);
-                    StartBlock();
-                }
+                NewLine().Append("partial class ").Append(type.Identifier.Text);
+                StartBlock();
             }
 
             // add an attribute to the interface definition
             NewLine().Append($@"[global::ProtoBuf.Grpc.Configuration.Proxy(typeof(__{service.Identifier}__GeneratedProxy))]");
             NewLine().Append($"partial interface {service.Identifier}");
-            //if (options.LanguageVersion >= LanguageVersion.CSharp8)
-            //{   // implementation can be nested - turns out this isn't a good idea because of TFM support for default interface implementation, which is what it needs
-            //    StartBlock();
-            //    WriteProxy();
-            //    NewLine().Append($"public static {service.Identifier} Create(global::Grpc.Core.CallInvoker channel) => new __{service.Identifier}__GeneratedProxy(channel);");
-            //    EndBlock();
-            //}
-            //else
+
+            if (options.LanguageVersion >= LanguageVersion.CSharp8
+                && context.Compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.RuntimeFeature")?.GetMembers("DefaultImplementationsOfInterfaces").Any() == true)
+            {   // implementation can be nested
+                StartBlock();
+                WriteProxy(Accessibility.Private);
+                NewLine().Append($"public static {service.Identifier} Create(global::Grpc.Core.CallInvoker callInvoker) => new __{service.Identifier}__GeneratedProxy(callInvoker);");
+                NewLine().Append($"public static {service.Identifier} Create(global::Grpc.Core.ChannelBase channel) => new __{service.Identifier}__GeneratedProxy(channel.CreateCallInvoker());");
+                EndBlock();
+            }
+            else
             {
                 StartBlock();
                 EndBlock();
-                WriteProxy();
+                WriteProxy(typeContext.Types.Any() ? Accessibility.Private : Accessibility.Internal);
             }
 
-            void WriteProxy()
+            void WriteProxy(Accessibility accessibility)
             {
                 // declare an internal type that implements the interface
-                NewLine().Append($"internal sealed class __{service.Identifier}__GeneratedProxy : global::Grpc.Core.ClientBase, {service.Identifier}");
+                NewLine().Append($"{ToSyntax(accessibility)} sealed class __{service.Identifier}__GeneratedProxy : global::Grpc.Core.ClientBase, {service.Identifier}");
 
                 // write the actual service implementations
                 StartBlock();
@@ -139,24 +136,29 @@ namespace ProtoBuf.Grpc.Generator
                     // TODO: pre-screen for validity?
                 }
                 EndBlock();
+
+                static string ToSyntax(Accessibility accessibility)
+                    => accessibility switch {
+                        Accessibility.Public => "public",
+                        Accessibility.Private => "private",
+                        Accessibility.ProtectedAndInternal => "private protected",
+                        Accessibility.Protected => "protected",
+                        Accessibility.Internal => "internal",
+                        Accessibility.ProtectedOrInternal => "protected internal",
+                        _ => throw new ArgumentException($"Invalid accessibility: {accessibility}", nameof(accessibility)),
+                    };
             }
 
             // get back out of the type/namespace hive
-            if (fqn.Types?.Any() == true)
-            {
-                foreach (var _ in fqn.Types) EndBlock();
-            }
-            if (fqn.Namespaces?.Any() == true)
-            {
-                foreach (var _ in fqn.Namespaces) EndBlock();
-            }
+            foreach (var _ in typeContext.Types) EndBlock();
+            foreach (var _ in typeContext.Namespaces) EndBlock();
 
             // add the generated content
             var code = sb.ToString();
             context.AddSource($"{service.Identifier}.Generated.cs", SourceText.From(code, Encoding.UTF8));
-//#if DEBUG   // lazy hack to show what we did
-//            File.WriteAllText(@$"c:\code\generator_output_{service.Identifier}_{Guid.NewGuid()}.cs", code, Encoding.UTF8);
-//#endif
+            //#if DEBUG   // lazy hack to show what we did
+            //            File.WriteAllText(@$"c:\code\generator_output_{service.Identifier}_{Guid.NewGuid()}.cs", code, Encoding.UTF8);
+            //#endif
 
             // utility methods for working with the generator
             StringBuilder NewLine()
@@ -182,13 +184,15 @@ namespace ProtoBuf.Grpc.Generator
 
         void ISyntaxReceiver.OnVisitSyntaxNode(SyntaxNode syntaxNode)
         {
-            if (syntaxNode is InterfaceDeclarationSyntax iService) // note that this is explicitly a C# node
+            if (syntaxNode is InterfaceDeclarationSyntax iService
+                && iService.AttributeLists.Any()) // note that this is explicitly a C# node
             {
+                var context = TypeContext.For(iService, TypeContext.Order.InnermostFirst);
                 foreach (var attribList in iService.AttributeLists)
                 {
                     foreach (var attrib in attribList.Attributes)
                     {
-                        bool result = IsAttribute(attrib, "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute");
+                        bool result = IsAttribute(context, attrib, "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute");
                         ClientGenerator.DebugAppendLog($"{iService.Identifier} [{attrib.Name.ToFullString()}]: {result}");
                         if (result)
                         {
@@ -203,35 +207,30 @@ namespace ProtoBuf.Grpc.Generator
         //private static bool IsType(TypeSyntax type, string fullyQualifiedName)
         //    => IsType(type.ToFullString(), fullyQualifiedName, type);
 
-        private static bool IsAttribute(AttributeSyntax attribute, string fullyQualifiedName)
+        private static bool IsAttribute(in TypeContext context, AttributeSyntax attribute, string fullyQualifiedName)
         {
             var localName = attribute.Name.ToFullString();
-            if (IsType(localName, fullyQualifiedName, attribute)) return true;
+            if (IsType(context, localName, fullyQualifiedName)) return true;
 
             if (fullyQualifiedName.EndsWith("Attribute"))
             {
                 fullyQualifiedName = fullyQualifiedName.Substring(0, fullyQualifiedName.Length - 9);
-                if (IsType(localName, fullyQualifiedName, attribute)) return true;
+                if (IsType(context, localName, fullyQualifiedName)) return true;
             }
             return false;
         }
-        private static bool IsType(string localName, string fullyQualifiedName, SyntaxNode? node)
+        private static bool IsType(in TypeContext context, string localName, string fullyQualifiedName)
         {
             // check the name respecting using directives (including aliases)
-            while (node is object)
+            foreach(var ns in context.Namespaces)
             {
-                switch (node)
-                {
-                    case NamespaceDeclarationSyntax ns:
-                        var result = CheckUsings(localName, ns.Usings, fullyQualifiedName);
-                        if (result.HasValue) return result.Value;
-                        break;
-                    case CompilationUnitSyntax cus:
-                        result = CheckUsings(localName, cus.Usings, fullyQualifiedName);
-                        if (result.HasValue) return result.Value;
-                        break;
-                }
-                node = node.Parent;
+                var result = CheckUsings(localName, ns.Usings, fullyQualifiedName);
+                if (result.HasValue) return result.Value;
+            }
+            if (context.CompilationUnit is object)
+            {
+                var result = CheckUsings(localName, context.CompilationUnit.Usings, fullyQualifiedName);
+                if (result.HasValue) return result.Value;
             }
 
             // finally, check the full name *without* namespaces (could be fully qualified)
@@ -270,51 +269,5 @@ namespace ProtoBuf.Grpc.Generator
                 return actual == expected;
             }
         }
-    }
-    internal readonly struct FullyQualifiedName
-    {
-        public SyntaxNode? Node { get; }
-        public List<TypeDeclarationSyntax>? Types { get; }
-        public List<NamespaceDeclarationSyntax>? Namespaces { get; }
-        public CompilationUnitSyntax? File { get; }
-
-        public FullyQualifiedName(SyntaxNode? original, List<TypeDeclarationSyntax>? types, List<NamespaceDeclarationSyntax>? namespaces, CompilationUnitSyntax? file)
-        {
-            Node = original;
-            Types = types;
-            Namespaces = namespaces;
-            File = file;
-        }
-
-        // need to get the correct namespace etc; some useful context here: https://stackoverflow.com/a/61409409/23354
-        public static FullyQualifiedName For(SyntaxNode? node)
-        {
-            var original = node;
-            List<TypeDeclarationSyntax>? types = null;
-            List<NamespaceDeclarationSyntax>? namespaces = null;
-            CompilationUnitSyntax? file = null;
-
-            while ((node = node?.Parent) is object)
-            {
-                switch (node)
-                {
-                    case NamespaceDeclarationSyntax ns:
-                        namespaces ??= new List<NamespaceDeclarationSyntax>();
-                        namespaces.Add(ns);
-                        break;
-                    case TypeDeclarationSyntax type:
-                        types ??= new List<TypeDeclarationSyntax>();
-                        types.Add(type);
-                        break;
-                    case CompilationUnitSyntax cus:
-                        file = cus;
-                        break;
-                }
-            }
-            types?.Reverse();
-            namespaces?.Reverse();
-
-            return new FullyQualifiedName(original, types, namespaces, file);
-        }
-    }
+    }    
 }
