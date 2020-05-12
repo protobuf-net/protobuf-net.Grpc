@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Linq;
 using System.Reflection;
-using System.ServiceModel;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -29,7 +28,30 @@ namespace ProtoBuf.Grpc.Configuration
             serviceName = contractType.Namespace + "." + serviceName; // Whatever.Foo
             serviceName = serviceName.Replace('+', '.'); // nested types
 
+            int cut;
+            if (contractType.IsGenericType && (cut = serviceName.IndexOf('`')) >= 0)
+            {
+                var parts = GetGenericParts(contractType);
+                serviceName = serviceName.Substring(0, cut)
+                    + "_" + string.Join("_", parts);
+            }
+
             return serviceName ?? "";
+        }
+
+        /// <summary>
+        /// Gets the default name for a potential data-contract
+        /// </summary>
+        protected virtual string GetDataContractName(Type contractType)
+        {
+            var attribs = Attribute.GetCustomAttributes(contractType, inherit: true);
+            var attrib = attribs.FirstOrDefault(x => x.GetType().FullName == "ProtoBuf.ProtoContractAttribute");
+            if (TryGetProperty(attrib, "Name", out string name) && !string.IsNullOrWhiteSpace(name)) return name;
+
+            attrib = attribs.FirstOrDefault(x => x.GetType().FullName == "System.Runtime.Serialization.DataContractAttribute");
+            if (TryGetProperty(attrib, "Name", out name) && !string.IsNullOrWhiteSpace(name)) return name;
+
+            return contractType.Name;
         }
 
         /// <summary>
@@ -75,9 +97,25 @@ namespace ProtoBuf.Grpc.Configuration
                 serviceName = sa.Name;
             }
             if (string.IsNullOrWhiteSpace(serviceName))
+            {
                 serviceName = GetDefaultName(contractType);
+            }
+            else if (contractType.IsGenericType)
+            {
+                var parts = GetGenericParts(contractType);
+                serviceName = string.Format(serviceName, parts);
+            }
             name = serviceName;
             return !string.IsNullOrWhiteSpace(name);
+        }
+
+        private string[] GetGenericParts(Type contractType)
+        {
+            var args = contractType.GetGenericArguments();
+            var parts = new string[args.Length];
+            for (int i = 0; i < parts.Length; i++)
+                parts[i] = GetDataContractName(args[i]);
+            return parts;
         }
 
         /// <summary>
