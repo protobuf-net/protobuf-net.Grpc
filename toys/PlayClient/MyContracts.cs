@@ -1,4 +1,6 @@
-﻿using ProtoBuf.Grpc;
+﻿using Grpc.Core;
+using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.ServiceModel;
@@ -38,5 +40,25 @@ namespace Shared_CS
     public interface IDuplex
     {
         IAsyncEnumerable<MultiplyResult> SomeDuplexApiAsync(IAsyncEnumerable<MultiplyRequest> bar, CallContext context = default);
+    }
+
+    [DataContract]
+    public class BidiStreamingRequest
+    {
+        [DataMember(Order = 1)]
+        public string? Payload { get; set; }
+    }
+
+    [DataContract]
+    public class BidiStreamingResponse
+    {
+        [DataMember(Order = 1)]
+        public string? Payload { get; set; }
+    }
+
+    [Service]
+    public interface IBidiStreamingService
+    {
+        IAsyncEnumerable<BidiStreamingResponse> TestAsync(IAsyncEnumerable<BidiStreamingRequest> request, CallContext options);
     }
 }

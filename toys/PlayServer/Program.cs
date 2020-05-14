@@ -30,7 +30,7 @@ namespace PlayServer
     }
 }
 
-internal class MyServer : ICalculator, IDuplex
+internal class MyServer : ICalculator, IDuplex, IBidiStreamingService
 {
     ValueTask<MultiplyResult> ICalculator.MultiplyAsync(MultiplyRequest request)
     {
@@ -78,5 +78,19 @@ internal class MyServer : ICalculator, IDuplex
     {
         Console.WriteLine($"[rec] {item.X}, {item.Y} from {context.ServerCallContext?.Peer}");
         return default;
+    }
+
+    public async IAsyncEnumerable<BidiStreamingResponse> TestAsync(IAsyncEnumerable<BidiStreamingRequest> requestStream,
+    CallContext context)
+    {
+        Console.WriteLine("STARTING. TestAsync method call received.");
+        if (Always()) throw new InvalidOperationException("oops");
+        for (int i = 0; i < 2; i++)
+        {
+            await Task.Delay(500, context.CancellationToken);
+            yield return new BidiStreamingResponse { Payload = $"response {i}" };
+        }
+
+        static bool Always() => true;
     }
 }

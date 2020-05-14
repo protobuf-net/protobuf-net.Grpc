@@ -86,11 +86,13 @@ namespace PlayClient
             var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
             try
             {
-                var calculator = channel.CreateGrpcService<ICalculator>();
-                await TestCalculator(calculator);
+                await CallBidiStreamingService(channel);
 
-                var duplex = channel.CreateGrpcService<IDuplex>();
-                await TestDuplex(duplex);
+                //var calculator = channel.CreateGrpcService<ICalculator>();
+                //await TestCalculator(calculator);
+
+                //var duplex = channel.CreateGrpcService<IDuplex>();
+                //await TestDuplex(duplex);
             }
             finally
             {
@@ -111,5 +113,64 @@ namespace PlayClient
             await TestDuplex(duplex);
         }
 #endif
+
+        private static async Task CallBidiStreamingService(ChannelBase channel)
+        {
+            var bidiStreamingClient = channel.CreateGrpcService<IBidiStreamingService>();
+            var options = new CallOptions();
+
+            //Read stream - processed on a background task
+            try
+            {
+                await foreach (var response in bidiStreamingClient.TestAsync(SendAsync(), options))
+                {
+                    Console.WriteLine($"Response received with payload: {response.Payload}");
+                }
+                Console.WriteLine("success exit of async enumeration");
+            }
+            catch (InvalidOperationException ioe) when (ioe.Message == "Can't write the message because the call is complete.")
+            {
+                Console.WriteLine($"IOE exit of async enumeration: {ioe.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"exception exit of async enumeration: {ex.Message}");
+            }
+            Console.WriteLine("reader is FINISHED; waiting a moment to see what happens with the writer");
+            await Task.Delay(10000);
+        }
+
+        static async IAsyncEnumerable<BidiStreamingRequest> SendAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var n = 0;
+                while (true)
+                {
+                    var request = new BidiStreamingRequest { Payload = $"Payload {n++}" };
+                    Console.WriteLine($"Sending request with payload: {request.Payload}");
+
+                    yield return request;
+
+                    //Look busy
+                    try
+                    {
+                        // important: depending on timing , we *might not get here*; this
+                        // will only be invoked if the CT isn't *already* cancelled when
+                        // MoveNextAsync gets invoked
+                        await Task.Delay(1000, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Delay exited: {ex.Message}");
+                    }
+                }
+            }
+            finally
+            {
+                Console.WriteLine("writer is FINISHED");
+            }
+        }
     }
 }
