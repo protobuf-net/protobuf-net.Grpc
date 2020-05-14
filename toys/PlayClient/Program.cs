@@ -140,6 +140,8 @@ namespace PlayClient
             await Task.Delay(10000);
         }
 
+        // I *want* this to be a local method inside CallBidiStreamingService, but C# does not
+        // currently allow parameter attributes on local methods; hoping that changes in vNext
         static async IAsyncEnumerable<BidiStreamingRequest> SendAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
