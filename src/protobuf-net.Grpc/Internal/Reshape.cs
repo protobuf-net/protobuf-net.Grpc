@@ -29,7 +29,7 @@ namespace ProtoBuf.Grpc.Internal
             return Awaited(task);
             static async Task<Empty> Awaited(ValueTask t)
             {
-                await t;
+                await t.ConfigureAwait(false);
                 return Empty.Instance;
             }
         }
@@ -51,7 +51,7 @@ namespace ProtoBuf.Grpc.Internal
             return Awaited(task);
             static async Task<Empty> Awaited(Task t)
             {
-                await t;
+                await t.ConfigureAwait(false);
                 return Empty.Instance;
             }
         }
@@ -67,10 +67,10 @@ namespace ProtoBuf.Grpc.Internal
                 var headersTask = result.ResponseHeadersAsync;
                 if (headersTask != null)
                 {
-                    var headers = await headersTask;
-                    if (headers != null) await context.WriteResponseHeadersAsync(headers);
+                    var headers = await headersTask.ConfigureAwait(false);
+                    if (headers != null) await context.WriteResponseHeadersAsync(headers).ConfigureAwait(false);
                 }
-                var value = await result;
+                var value = await result.ConfigureAwait(false);
                 var trailers = result.GetTrailers();
                 if (trailers != null)
                 {
@@ -90,17 +90,17 @@ namespace ProtoBuf.Grpc.Internal
                 var headersTask = result.ResponseHeadersAsync;
                 if (headersTask != null)
                 {
-                    var headers = await headersTask;
-                    if (headers != null) await context.WriteResponseHeadersAsync(headers);
+                    var headers = await headersTask.ConfigureAwait(false);
+                    if (headers != null) await context.WriteResponseHeadersAsync(headers).ConfigureAwait(false);
                 }
                 var reader = result.ResponseStream;
                 if (reader != null)
                 {
                     using (reader)
                     {
-                        while (await reader.MoveNext(context.CancellationToken))
+                        while (await reader.MoveNext(context.CancellationToken).ConfigureAwait(false))
                         {
-                            await writer.WriteAsync(reader.Current);
+                            await writer.WriteAsync(reader.Current).ConfigureAwait(false);
                         }
                     }
                 }
@@ -121,7 +121,7 @@ namespace ProtoBuf.Grpc.Internal
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static async IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IAsyncStreamReader<T> reader, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            while (await reader.MoveNext(cancellationToken))
+            while (await reader.MoveNext(cancellationToken).ConfigureAwait(false))
             {
                 yield return reader.Current;
             }
@@ -134,10 +134,9 @@ namespace ProtoBuf.Grpc.Internal
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static async Task WriteTo<T>(this IAsyncEnumerable<T> reader, IServerStreamWriter<T> writer, CancellationToken cancellationToken)
         {
-            await using var iter = reader.GetAsyncEnumerator(cancellationToken);
-            while (await iter.MoveNextAsync())
+            await foreach (var value in reader.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                await writer.WriteAsync(iter.Current);
+                await writer.WriteAsync(value).ConfigureAwait(false);
             }
         }
 
@@ -218,8 +217,8 @@ namespace ProtoBuf.Grpc.Internal
         {
             using (call)
             {
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
-                var value = await call;
+                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
+                var value = await call.ResponseAsync.ConfigureAwait(false);
                 if (metadata != null)
                 {
                     metadata.Trailers = call.GetTrailers();
@@ -248,10 +247,10 @@ namespace ProtoBuf.Grpc.Internal
         {
             using (call)
             {
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
+                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
                 var seq = call.ResponseStream;
-                while (await seq.MoveNext(default))
+                while (await seq.MoveNext(default).ConfigureAwait(false))
                 {
                     yield return seq.Current;
                 }
@@ -309,18 +308,15 @@ namespace ProtoBuf.Grpc.Internal
             using (call)
             {
                 var output = call.RequestStream;
-                await using (var iter = request.GetAsyncEnumerator(cancellationToken))
+                await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    while (await iter.MoveNextAsync())
-                    {
-                        await output.WriteAsync(iter.Current);
-                    }
+                    await output.WriteAsync(value).ConfigureAwait(false);
                 }
-                await output.CompleteAsync();
+                await output.CompleteAsync().ConfigureAwait(false);
 
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
+                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
-                var result = await call.ResponseAsync;
+                var result = await call.ResponseAsync.ConfigureAwait(false);
 
                 if (metadata != null)
                 {
@@ -353,14 +349,14 @@ namespace ProtoBuf.Grpc.Internal
                 // we'll run the "send" as a concurrent operation
                 var sendAll = Task.Run(() => SendAll(call.RequestStream, request, cancellationToken), cancellationToken);
 
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync;
+                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
                 var seq = call.ResponseStream;
-                while (await seq.MoveNext(default))
+                while (await seq.MoveNext(default).ConfigureAwait(false))
                 {
                     yield return seq.Current;
                 }
-                await sendAll; // observe any problems from sending
+                await sendAll.ConfigureAwait(false); // observe any problems from sending
 
                 if (metadata != null)
                 {
@@ -374,15 +370,11 @@ namespace ProtoBuf.Grpc.Internal
         {
             try
             {
-                await using (var iter = request.GetAsyncEnumerator(cancellationToken))
+                await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    while (await iter.MoveNextAsync())
-                    {
-                        var item = iter.Current;
-                        await output.WriteAsync(item);
-                    }
+                    await output.WriteAsync(value).ConfigureAwait(false);
                 }
-                await output.CompleteAsync();
+                await output.CompleteAsync().ConfigureAwait(false);
             }
             catch (TaskCanceledException) { }
         }

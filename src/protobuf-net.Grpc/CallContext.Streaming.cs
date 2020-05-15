@@ -26,14 +26,12 @@ namespace ProtoBuf.Grpc
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var consumed = Task.Run(() => consumer(source, context), cancellationToken); // note this shares a capture scope
-            await using (var iter = producer(context).GetAsyncEnumerator(cancellationToken))
+
+            await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                while (await iter.MoveNextAsync())
-                {
-                    yield return iter.Current;
-                }
+                yield return value;
             }
-            await consumed;
+            await consumed.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -55,20 +53,16 @@ namespace ProtoBuf.Grpc
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var consumed = Task.Run(async () => {// note this shares a capture scope
-                await using var cIter = source.GetAsyncEnumerator(cancellationToken);
-                while (await cIter.MoveNextAsync())
+                await foreach (var value in source.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    await consumer(cIter.Current, context);
+                    await consumer(value, context).ConfigureAwait(false);
                 }
             }, cancellationToken);
-            await using (var iter = producer(context).GetAsyncEnumerator(cancellationToken))
+            await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                while (await iter.MoveNextAsync())
-                {
-                    yield return iter.Current;
-                }
+                yield return value;
             }
-            await consumed;
+            await consumed.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -84,10 +78,9 @@ namespace ProtoBuf.Grpc
             var context = this;
             var consumed = Task.Run(async () =>
             {   // note this shares a capture scope
-                await using var cIter = source.GetAsyncEnumerator(context.CancellationToken);
-                while (await cIter.MoveNextAsync())
+                await foreach (var value in source.WithCancellation(context.CancellationToken).ConfigureAwait(false))
                 {
-                    await consumer(cIter.Current, context);
+                    await consumer(value, context).ConfigureAwait(false);
                 }
             }, context.CancellationToken);
             var produced = producer(context);
@@ -99,13 +92,13 @@ namespace ProtoBuf.Grpc
         {
             try
             {
-                await produced;
+                await produced.ConfigureAwait(false);
             }
             catch (Exception producerEx)
             {
                 try
                 {
-                    await consumed; // make sure we try and await both
+                    await consumed.ConfigureAwait(false); // make sure we try and await both
                 }
                 catch (Exception consumerEx)
                 {
@@ -116,7 +109,7 @@ namespace ProtoBuf.Grpc
             }
             // producer completed cleanly; we can just await the
             // consumer - if it throws, it throws
-            await consumed;
+            await consumed.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -139,10 +132,9 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public async ValueTask ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, CallContext, ValueTask> consumer)
         {
-            await using var iter = source.GetAsyncEnumerator(CancellationToken);
-            while (await iter.MoveNextAsync())
+            await foreach (var value in source.WithCancellation(CancellationToken).ConfigureAwait(false))
             {
-                await consumer(iter.Current, this);
+                await consumer(value, this).ConfigureAwait(false);
             }
         }
 
@@ -151,12 +143,9 @@ namespace ProtoBuf.Grpc
         ///// </summary>
         //public async ValueTask ConsumeAsync<TRequest>(IAsyncEnumerable<TRequest> source, Func<TRequest, ValueTask> consumer)
         //{
-        //    await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+        //    await foreach (var value in source.WithCancellation(CancellationToken).ConfigureAwait(false))
         //    {
-        //        while (await iter.MoveNextAsync())
-        //        {
-        //            await consumer(iter.Current);
-        //        }
+        //        await consumer(value).ConfigureAwait(false);
         //    }
         //}
 
@@ -166,12 +155,9 @@ namespace ProtoBuf.Grpc
         public async ValueTask<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
             Func<TValue, TRequest, CallContext, ValueTask<TValue>> aggregate, TValue seed)
         {
-            await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+            await foreach (var value in source.WithCancellation(CancellationToken).ConfigureAwait(false))
             {
-                while (await iter.MoveNextAsync())
-                {
-                    seed = await aggregate(seed, iter.Current, this);
-                }
+                seed = await aggregate(seed, value, this).ConfigureAwait(false);
             }
             return seed;
         }
@@ -182,12 +168,9 @@ namespace ProtoBuf.Grpc
         //public async ValueTask<TValue> AggregateAsync<TRequest, TValue>(IAsyncEnumerable<TRequest> source,
         //    Func<TValue, TRequest, ValueTask<TValue>> aggregate, TValue seed)
         //{
-        //    await using (var iter = source.GetAsyncEnumerator(CancellationToken))
+        //    await foreach (var value in source.WithCancellation(CancellationToken).ConfigureAwait(false))
         //    {
-        //        while (await iter.MoveNextAsync())
-        //        {
-        //            seed = await aggregate(seed, iter.Current);
-        //        }
+        //        seed = await aggregate(seed, iter.Current).ConfigureAwait(false);
         //    }
         //    return seed;
         //}

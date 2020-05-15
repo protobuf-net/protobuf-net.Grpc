@@ -71,15 +71,11 @@ namespace ProtoBuf.Grpc
             {
                 try
                 {
-                    await using (var iter = sequence.GetAsyncEnumerator(cancellationToken))
+                    await foreach (var value in sequence.WithCancellation(cancellationToken).ConfigureAwait(false))
                     {
-                        while (await iter.MoveNextAsync())
+                        while (!writer.TryWrite(value))
                         {
-                            var value = iter.Current;
-                            while (!writer.TryWrite(value))
-                            {
-                                await writer.WaitToWriteAsync(cancellationToken);
-                            }
+                            await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false);
                         }
                     }
                     writer.TryComplete();
