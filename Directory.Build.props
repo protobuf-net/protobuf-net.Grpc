@@ -27,9 +27,9 @@
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>0.0.3-alpha.54</PBGRPCLibVersion>
-    <GrpcDotNetVersion>2.27.0</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.11.4</GoogleProtobufVersion>
-    <GrpcVersion>2.27.0</GrpcVersion>
+    <GrpcDotNetVersion>2.28.0</GrpcDotNetVersion>
+    <GoogleProtobufVersion>3.12.0</GoogleProtobufVersion>
+    <GrpcVersion>2.29.0</GrpcVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -47,6 +47,6 @@
   
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
-    <PackageReference Include="Nerdbank.GitVersioning" Version="3.1.74" PrivateAssets="all" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.1.91" PrivateAssets="all" />
   </ItemGroup>
 </Project>
