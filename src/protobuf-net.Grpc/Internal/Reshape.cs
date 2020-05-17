@@ -183,7 +183,8 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare());
+            => UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request),
+                context.Prepare(), context.CancellationToken);
 
         /// <summary>
         /// Performs a gRPC asynchronous unary call
@@ -196,7 +197,9 @@ namespace ProtoBuf.Grpc.Internal
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
+            => new ValueTask<TResponse>(UnaryTaskAsyncImpl<TRequest, TResponse>(
+                invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request),
+                context.Prepare(), context.CancellationToken));
 
         /// <summary>
         /// Performs a gRPC asynchronous unary call
@@ -209,14 +212,16 @@ namespace ProtoBuf.Grpc.Internal
             Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare()));
+            => new ValueTask(UnaryTaskAsyncImpl<TRequest, TResponse>(invoker.AsyncUnaryCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare(), context.CancellationToken));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static async Task<TResponse> UnaryTaskAsyncImpl<TRequest, TResponse>(
-            AsyncUnaryCall<TResponse> call, MetadataContext? metadata)
+            AsyncUnaryCall<TResponse> call, MetadataContext? metadata, CancellationToken cancellationToken)
         {
             using (call)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
                 var value = await call.ResponseAsync.ConfigureAwait(false);
                 if (metadata != null)
@@ -243,14 +248,18 @@ namespace ProtoBuf.Grpc.Internal
 
         private static async IAsyncEnumerable<TResponse> ServerStreamingAsyncImpl<TRequest, TResponse>(
             AsyncServerStreamingCall<TResponse> call, MetadataContext? metadata,
-            [EnumeratorCancellation] CancellationToken _)
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            // note that the compiler/runtime will combine the context+consumer cancellation tokens as required;
+            // since we don't need to trigger our own cancellation, this is sufficient
             using (call)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
                 var seq = call.ResponseStream;
-                while (await seq.MoveNext(default).ConfigureAwait(false))
+                while (await seq.MoveNext(cancellationToken).ConfigureAwait(false))
                 {
                     yield return seq.Current;
                 }
@@ -307,6 +316,8 @@ namespace ProtoBuf.Grpc.Internal
         {
             using (call)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var output = call.RequestStream;
                 await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
@@ -342,20 +353,29 @@ namespace ProtoBuf.Grpc.Internal
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
             AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
-            [EnumeratorCancellation] CancellationToken cancellationToken, IAsyncEnumerable<TRequest> request)
+            CancellationToken contextCancel, IAsyncEnumerable<TRequest> request, [EnumeratorCancellation] CancellationToken consumerCancel = default)
         {
             using (call)
             {
+                contextCancel.ThrowIfCancellationRequested();
+                consumerCancel.ThrowIfCancellationRequested();
+                // create a linked CTS that can trigger cancellation when any of:
+                // - the context is cancelled
+                // - the consumer specified cancellation
+                // - the server indicates an end of the bidi stream
+                using var allDone = CancellationTokenSource.CreateLinkedTokenSource(contextCancel, consumerCancel);
+
                 // we'll run the "send" as a concurrent operation
-                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, cancellationToken), cancellationToken);
+                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token), allDone.Token);
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
                 var seq = call.ResponseStream;
-                while (await seq.MoveNext(default).ConfigureAwait(false))
+                while (await seq.MoveNext(allDone.Token).ConfigureAwait(false))
                 {
                     yield return seq.Current;
                 }
+                allDone.Cancel();
                 await sendAll.ConfigureAwait(false); // observe any problems from sending
 
                 if (metadata != null)
@@ -364,19 +384,19 @@ namespace ProtoBuf.Grpc.Internal
                     metadata.Status = call.GetStatus();
                 }
             }
-        }
 
-        private static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationToken cancellationToken)
-        {
-            try
+            static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationToken cancellationToken)
             {
-                await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
+                try
                 {
-                    await output.WriteAsync(value).ConfigureAwait(false);
+                    await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
+                    {
+                        await output.WriteAsync(value).ConfigureAwait(false);
+                    }
+                    await output.CompleteAsync().ConfigureAwait(false);
                 }
-                await output.CompleteAsync().ConfigureAwait(false);
+                catch (TaskCanceledException) { }
             }
-            catch (TaskCanceledException) { }
         }
     }
 }

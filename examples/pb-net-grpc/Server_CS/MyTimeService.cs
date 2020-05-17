@@ -11,13 +11,20 @@ namespace Server_CS
     public class MyTimeService : ITimeService
     {
         public IAsyncEnumerable<TimeResult> SubscribeAsync(CallContext context = default)
-            => SubscribeAsyncImpl(default); // context.CancellationToken);
+            => SubscribeAsyncImpl(context.CancellationToken);
 
         private async IAsyncEnumerable<TimeResult> SubscribeAsyncImpl([EnumeratorCancellation] CancellationToken cancel)
         {
             while (!cancel.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromSeconds(10));
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10), cancel);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
                 yield return new TimeResult { Time = DateTime.UtcNow };
             }
         }
