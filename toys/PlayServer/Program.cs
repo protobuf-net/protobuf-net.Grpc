@@ -83,14 +83,16 @@ internal class MyServer : ICalculator, IDuplex, IBidiStreamingService
     public async IAsyncEnumerable<BidiStreamingResponse> TestAsync(IAsyncEnumerable<BidiStreamingRequest> requestStream,
     CallContext context)
     {
+        await Task.Yield();
         Console.WriteLine("STARTING. TestAsync method call received.");
-        if (Always()) throw new InvalidOperationException("oops");
-        for (int i = 0; i < 2; i++)
-        {
-            await Task.Delay(500, context.CancellationToken);
-            yield return new BidiStreamingResponse { Payload = $"response {i}" };
-        }
+        //if (Always()) throw new InvalidOperationException("oops");
+        //for (int i = 0; i < 2; i++)
+        //{
+        //    await Task.Delay(500, context.CancellationToken);
+        //    yield return new BidiStreamingResponse { Payload = $"response {i}" };
+        //}
 
-        static bool Always() => true;
+        //static bool Always() => true;
+        yield break;
     }
 }

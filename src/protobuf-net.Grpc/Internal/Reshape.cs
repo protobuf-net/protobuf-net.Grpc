@@ -321,7 +321,14 @@ namespace ProtoBuf.Grpc.Internal
                 var output = call.RequestStream;
                 await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    await output.WriteAsync(value).ConfigureAwait(false);
+                    try
+                    {
+                        await output.WriteAsync(value).ConfigureAwait(false);
+                    }
+                    catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
+                    {
+                        throw new IncompleteSendRpcException(rpc);
+                    }
                 }
                 await output.CompleteAsync().ConfigureAwait(false);
 
@@ -375,6 +382,7 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     yield return seq.Current;
                 }
+
                 allDone.Cancel();
                 await sendAll.ConfigureAwait(false); // observe any problems from sending
 
@@ -391,12 +399,25 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
                     {
-                        await output.WriteAsync(value).ConfigureAwait(false);
+                        try
+                        {
+                            await output.WriteAsync(value).ConfigureAwait(false);
+                        }
+                        catch(RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
+                        {
+                            throw new IncompleteSendRpcException(rpc);
+                        }
                     }
                     await output.CompleteAsync().ConfigureAwait(false);
                 }
                 catch (TaskCanceledException) { }
             }
         }
+    }
+    internal sealed class IncompleteSendRpcException : Exception
+    {
+        public IncompleteSendRpcException(RpcException rpc) : base(
+            "A message could not be sent because the server had already terminated the connection", rpc)
+        { }
     }
 }

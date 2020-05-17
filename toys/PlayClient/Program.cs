@@ -135,6 +135,8 @@ namespace PlayClient
             catch (Exception ex)
             {
                 Console.WriteLine($"exception exit of async enumeration: {ex.Message}");
+                Console.WriteLine(ex.GetType().FullName);
+                Console.WriteLine(ex.Source);
             }
             Console.WriteLine("reader is FINISHED; waiting a moment to see what happens with the writer");
             await Task.Delay(10000);
