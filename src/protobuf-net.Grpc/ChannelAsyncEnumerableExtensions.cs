@@ -22,9 +22,9 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Consumes a channel as an asynchronous sequence
         /// </summary>
-        public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this Channel<T> channel, bool closeWriterOnCancellation, CancellationToken cancellationToken = default)
+        public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this Channel<T> channel, bool completeWriterOnCancellation, CancellationToken cancellationToken = default)
             // note: we can't check CanBeCancelled too early here, as the CT passed to the iterator can be *different*
-            => closeWriterOnCancellation ? AsAsyncEnumerableCloseWriter(channel, cancellationToken) : AsAsyncEnumerable(channel.Reader, cancellationToken);
+            => completeWriterOnCancellation ? AsAsyncEnumerableCompleteWriter(channel, cancellationToken) : AsAsyncEnumerable(channel.Reader, cancellationToken);
 
         /// <summary>
         /// Consumes a channel as an asynchronous sequence
@@ -50,9 +50,9 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Consumes a channel as an asynchronous sequence
         /// </summary>
-        public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this Channel<T> channel, bool closeWriterOnCancellation, CancellationToken cancellationToken = default)
+        public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this Channel<T> channel, bool completeWriterOnCancellation, CancellationToken cancellationToken = default)
             // note: we can't check CanBeCancelled too early here, as the CT passed to the iterator can be *different*
-            => closeWriterOnCancellation ? AsAsyncEnumerableCloseWriter(channel, cancellationToken) : AsAsyncEnumerable(channel.Reader, cancellationToken);
+            => completeWriterOnCancellation ? AsAsyncEnumerableCloseWriter(channel, cancellationToken) : AsAsyncEnumerable(channel.Reader, cancellationToken);
 
         /// <summary>
         /// Consumes a channel as an asynchronous sequence
@@ -62,21 +62,20 @@ namespace ProtoBuf.Grpc
             => reader.ReadAllAsync(cancellationToken);
 #endif
 
-        private static async IAsyncEnumerable<T> AsAsyncEnumerableCloseWriter<T>(this Channel<T> channel, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        private static async IAsyncEnumerable<T> AsAsyncEnumerableCompleteWriter<T>(this Channel<T> channel, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            static void TryCloseWriter(object state)
+            static void TryCompleteWriter(object state)
             {
                 try
                 {
                     if (state is Channel<T> channel)
                     {
-                        Console.WriteLine("completing writer");
                         channel.Writer.Complete();
                     }
                 }
                 catch { }
             }
-            using (cancellationToken.Register(s => TryCloseWriter(s), channel, false))
+            using (cancellationToken.Register(s => TryCompleteWriter(s), channel, false))
             {
                 while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
                 {

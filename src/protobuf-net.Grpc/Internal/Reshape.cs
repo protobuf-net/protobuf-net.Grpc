@@ -318,21 +318,29 @@ namespace ProtoBuf.Grpc.Internal
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var output = call.RequestStream;
-                await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
+                using var allDone = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, default);
+                try
                 {
-                    try
+                    await foreach (var value in request.WithCancellation(allDone.Token).ConfigureAwait(false))
                     {
-                        if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
-                        await output.WriteAsync(value).ConfigureAwait(false);
-                    }
-                    catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
-                    {
-                        if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
-                        throw new IncompleteSendRpcException(rpc);
+                        try
+                        {
+                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
+                            await call.RequestStream.WriteAsync(value).ConfigureAwait(false);
+                        }
+                        catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
+                        {
+                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
+                            throw new IncompleteSendRpcException(rpc);
+                        }
                     }
                 }
-                await output.CompleteAsync().ConfigureAwait(false);
+                finally
+                {
+                    // want to cancel the producer *however* we exit
+                    allDone.Cancel();
+                }
+                await call.RequestStream.CompleteAsync().ConfigureAwait(false);
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
@@ -368,24 +376,30 @@ namespace ProtoBuf.Grpc.Internal
             {
                 contextCancel.ThrowIfCancellationRequested();
                 consumerCancel.ThrowIfCancellationRequested();
+
                 // create a linked CTS that can trigger cancellation when any of:
                 // - the context is cancelled
                 // - the consumer specified cancellation
                 // - the server indicates an end of the bidi stream
+                Task? sendAll;
                 using var allDone = CancellationTokenSource.CreateLinkedTokenSource(contextCancel, consumerCancel);
-
-                // we'll run the "send" as a concurrent operation
-                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token, ignoreStreamTermination), allDone.Token);
-
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
-
-                var seq = call.ResponseStream;
-                while (await seq.MoveNext(allDone.Token).ConfigureAwait(false))
+                try
                 {
-                    yield return seq.Current;
-                }
+                    // we'll run the "send" as a concurrent operation
+                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token, ignoreStreamTermination), allDone.Token);
 
-                allDone.Cancel();
+                    if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
+
+                    var seq = call.ResponseStream;
+                    while (await seq.MoveNext(allDone.Token).ConfigureAwait(false))
+                    {
+                        yield return seq.Current;
+                    }
+                }
+                finally
+                {   // want to cancel the producer *however* we exit
+                    allDone.Cancel();
+                }
                 await sendAll.ConfigureAwait(false); // observe any problems from sending
 
                 if (metadata != null)
