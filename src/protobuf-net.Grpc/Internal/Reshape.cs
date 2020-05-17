@@ -282,7 +282,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request);
+            => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request);
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -295,7 +295,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request));
+            => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request));
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -308,11 +308,11 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request));
+            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request));
 
         private static async Task<TResponse> ClientStreamingTaskAsyncImpl<TRequest, TResponse>(
             AsyncClientStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
-            CancellationToken cancellationToken, IAsyncEnumerable<TRequest> request)
+            CancellationToken cancellationToken, bool ignoreStreamTermination, IAsyncEnumerable<TRequest> request)
         {
             using (call)
             {
@@ -323,12 +323,12 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     try
                     {
-                        if (cancellationToken.IsCancellationRequested) break;
+                        if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
                         await output.WriteAsync(value).ConfigureAwait(false);
                     }
                     catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
                     {
-                        if (cancellationToken.IsCancellationRequested) break;
+                        if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
                         throw new IncompleteSendRpcException(rpc);
                     }
                 }
@@ -358,11 +358,11 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, request);
+            => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request);
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
             AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
-            CancellationToken contextCancel, IAsyncEnumerable<TRequest> request, [EnumeratorCancellation] CancellationToken consumerCancel = default)
+            CancellationToken contextCancel, bool ignoreStreamTermination, IAsyncEnumerable<TRequest> request, [EnumeratorCancellation] CancellationToken consumerCancel = default)
         {
             using (call)
             {
@@ -375,7 +375,7 @@ namespace ProtoBuf.Grpc.Internal
                 using var allDone = CancellationTokenSource.CreateLinkedTokenSource(contextCancel, consumerCancel);
 
                 // we'll run the "send" as a concurrent operation
-                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token), allDone.Token);
+                var sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token, ignoreStreamTermination), allDone.Token);
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
@@ -395,7 +395,7 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
 
-            static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationToken cancellationToken)
+            static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationToken cancellationToken, bool ignoreStreamTermination)
             {
                 try
                 {
@@ -403,12 +403,12 @@ namespace ProtoBuf.Grpc.Internal
                     {
                         try
                         {
-                            if (cancellationToken.IsCancellationRequested) break;
+                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
                             await output.WriteAsync(value).ConfigureAwait(false);
                         }
                         catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
                         {
-                            if (cancellationToken.IsCancellationRequested) break;
+                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
                             throw new IncompleteSendRpcException(rpc);
                         }
                     }
@@ -421,7 +421,7 @@ namespace ProtoBuf.Grpc.Internal
     internal sealed class IncompleteSendRpcException : Exception
     {
         public IncompleteSendRpcException(RpcException rpc) : base(
-            "A message could not be sent because the server had already terminated the connection", rpc)
+            "A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying CallContextFlags.IgnoreStreamTermination on the call-context", rpc)
         { }
     }
 }

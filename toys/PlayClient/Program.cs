@@ -117,7 +117,7 @@ namespace PlayClient
         private static async Task CallBidiStreamingService(ChannelBase channel)
         {
             var bidiStreamingClient = channel.CreateGrpcService<IBidiStreamingService>();
-            var options = new CallOptions();
+            var options = new CallContext(flags: CallContextFlags.IgnoreStreamTermination);
 
             //Read stream - processed on a background task
             try
