@@ -323,10 +323,12 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     try
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         await output.WriteAsync(value).ConfigureAwait(false);
                     }
                     catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         throw new IncompleteSendRpcException(rpc);
                     }
                 }
@@ -401,16 +403,18 @@ namespace ProtoBuf.Grpc.Internal
                     {
                         try
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             await output.WriteAsync(value).ConfigureAwait(false);
                         }
-                        catch(RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
+                        catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             throw new IncompleteSendRpcException(rpc);
                         }
                     }
                     await output.CompleteAsync().ConfigureAwait(false);
                 }
-                catch (TaskCanceledException) { }
+                catch (OperationCanceledException) { }
             }
         }
     }

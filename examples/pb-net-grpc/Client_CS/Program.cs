@@ -32,7 +32,7 @@ namespace Client_CS
                 }
             }
             catch (RpcException) { }
-            catch (TaskCanceledException) { }
+            catch (OperationCanceledException) { }
         }
     }
 }

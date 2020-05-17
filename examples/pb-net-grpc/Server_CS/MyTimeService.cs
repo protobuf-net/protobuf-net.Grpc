@@ -21,7 +21,7 @@ namespace Server_CS
                 {
                     await Task.Delay(TimeSpan.FromSeconds(10), cancel);
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
                     break;
                 }
