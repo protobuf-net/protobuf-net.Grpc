@@ -381,7 +381,7 @@ namespace ProtoBuf.Grpc.Internal
                 // - the context is cancelled
                 // - the consumer specified cancellation
                 // - the server indicates an end of the bidi stream
-                Task? sendAll;
+                Task sendAll;
                 using var allDone = CancellationTokenSource.CreateLinkedTokenSource(contextCancel, consumerCancel);
                 try
                 {
