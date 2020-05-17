@@ -25,13 +25,24 @@ namespace ProtoBuf.Grpc
             Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            var consumed = Task.Run(() => consumer(source, context), cancellationToken); // note this shares a capture scope
-
-            await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
+            using var allDone = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, cancellationToken);
+            try
             {
-                yield return value;
+                context = new CallContext(context, allDone.Token);
+                var consumed = Task.Run(() => consumer(source, context), allDone.Token); // note this shares a capture scope
+
+                await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
+                {
+                    yield return value;
+                }
+
+                await consumed.ConfigureAwait(false);
             }
-            await consumed.ConfigureAwait(false);
+            finally
+            {
+                // stop the producer, in any exit scenario
+                allDone.Cancel();
+            }
         }
 
         /// <summary>
@@ -52,17 +63,28 @@ namespace ProtoBuf.Grpc
             Func<TRequest, CallContext, ValueTask> consumer,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            var consumed = Task.Run(async () => {// note this shares a capture scope
-                await foreach (var value in source.WithCancellation(cancellationToken).ConfigureAwait(false))
-                {
-                    await consumer(value, context).ConfigureAwait(false);
-                }
-            }, cancellationToken);
-            await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
+            using var allDone = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, cancellationToken);
+            try
             {
-                yield return value;
+                context = new CallContext(context, allDone.Token);
+                var consumed = Task.Run(async () =>
+                {// note this shares a capture scope
+                    await foreach (var value in source.WithCancellation(allDone.Token).ConfigureAwait(false))
+                    {
+                        await consumer(value, context).ConfigureAwait(false);
+                    }
+                }, allDone.Token);
+                await foreach (var value in producer(context).WithCancellation(allDone.Token).ConfigureAwait(false))
+                {
+                    yield return value;
+                }
+                await consumed.ConfigureAwait(false);
             }
-            await consumed.ConfigureAwait(false);
+            finally
+            {
+                // stop the producer, in any exit scenario
+                allDone.Cancel();
+            }
         }
 
         /// <summary>
@@ -74,18 +96,26 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<T, CallContext, ValueTask> consumer)
         {
-
-            var context = this;
-            var consumed = Task.Run(async () =>
-            {   // note this shares a capture scope
-                await foreach (var value in source.WithCancellation(context.CancellationToken).ConfigureAwait(false))
-                {
-                    await consumer(value, context).ConfigureAwait(false);
-                }
-            }, context.CancellationToken);
-            var produced = producer(context);
-            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-            return BothAsync(produced, consumed);
+            using var allDone = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, default);
+            try
+            {
+                var context = new CallContext(this, allDone.Token);
+                var consumed = Task.Run(async () =>
+                {   // note this shares a capture scope
+                    await foreach (var value in source.WithCancellation(context.CancellationToken).ConfigureAwait(false))
+                    {
+                        await consumer(value, context).ConfigureAwait(false);
+                    }
+                }, context.CancellationToken);
+                var produced = producer(context);
+                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+                return BothAsync(produced, consumed);
+            }
+            finally
+            {
+                // stop the producer, in any exit scenario
+                allDone.Cancel();
+            }
         }
 
         private static async ValueTask BothAsync(ValueTask produced, Task consumed)
@@ -120,11 +150,20 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
         {
-            var context = this;
-            var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
-            var produced = producer(context);
-            if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-            return BothAsync(produced, consumed);
+            using var allDone = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, default);
+            try
+            {
+                var context = new CallContext(this, allDone.Token);
+                var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
+                var produced = producer(context);
+                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
+                return BothAsync(produced, consumed);
+            }
+            finally
+            {
+                // stop the producer, in any exit scenario
+                allDone.Cancel();
+            }
         }
 
         /// <summary>

@@ -25,8 +25,10 @@ namespace ProtoBuf.Grpc
         public CallOptions CallOptions
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get;
+            get => _callOptions;
         }
+
+        private readonly CallOptions _callOptions;
 
         private readonly CallContextFlags _flags;
 
@@ -92,9 +94,17 @@ namespace ProtoBuf.Grpc
             _hybridContext = server;
             _flags = CallContextFlags.None;
             ServerCallContext = context;
-            CallOptions = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
+            _callOptions = context == null ? default : new CallOptions(context.RequestHeaders, context.Deadline, context.CancellationToken, context.WriteOptions);
 
             static void ThrowNoServerProvided() => throw new ArgumentNullException(nameof(server), "A server instance is required and was not provided");
+        }
+
+        internal CallContext(in CallContext parent, CancellationToken cancellationToken)
+        {
+            _hybridContext = parent._hybridContext;
+            _flags = parent._flags;
+            ServerCallContext = parent.ServerCallContext;
+            _callOptions = parent._callOptions.WithCancellationToken(cancellationToken);
         }
 
         /// <summary>
@@ -121,7 +131,7 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public CallContext(in CallOptions callOptions = default, CallContextFlags flags = CallContextFlags.None, object? state = null)
         {
-            CallOptions = callOptions;
+            _callOptions = callOptions;
             ServerCallContext = default;
             _hybridContext = (flags & CallContextFlags.CaptureMetadata) == 0 ? state : new MetadataContext(state);
             _flags = flags;
