@@ -4,7 +4,6 @@ using ProtoBuf.Grpc.Client;
 using Shared_CS;
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,7 +31,7 @@ namespace PlayClient
         static async Task TestDuplex(IDuplex duplex, [CallerMemberName] string? caller = null)
         {
             Console.WriteLine($"testing duplex ({caller}) - manual");
-            await foreach(var item in duplex.SomeDuplexApiAsync(Rand(10, TimeSpan.FromSeconds(1))))
+            await foreach (var item in duplex.SomeDuplexApiAsync(Rand(10, TimeSpan.FromSeconds(1))))
             {
                 Console.WriteLine($"[rec] {item.Result}");
             }
@@ -58,7 +57,8 @@ namespace PlayClient
                 }
                 writer.Complete();
                 Console.WriteLine("[d:client all done sending!]");
-            } catch(Exception ex) { writer.TryComplete(ex); }
+            }
+            catch (Exception ex) { writer.TryComplete(ex); }
         };
 
         static readonly Func<MultiplyResult, CallContext, ValueTask> s_handleResult = (result, ctx) =>
@@ -86,7 +86,8 @@ namespace PlayClient
             var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
             try
             {
-                await CallBidiStreamingService(channel);
+                // await CallBidiStreamingServiceViaEnumerator(channel);
+                await CallBidiStreamingServiceViaChannel(channel);
 
                 //var calculator = channel.CreateGrpcService<ICalculator>();
                 //await TestCalculator(calculator);
@@ -114,7 +115,7 @@ namespace PlayClient
         }
 #endif
 
-        private static async Task CallBidiStreamingService(ChannelBase channel)
+        private static async Task CallBidiStreamingServiceViaEnumerator(ChannelBase channel)
         {
             var bidiStreamingClient = channel.CreateGrpcService<IBidiStreamingService>();
             var options = new CallContext(flags: CallContextFlags.IgnoreStreamTermination);
@@ -142,8 +143,7 @@ namespace PlayClient
             await Task.Delay(10000);
         }
 
-        // I *want* this to be a local method inside CallBidiStreamingService, but C# does not
-        // currently allow parameter attributes on local methods; hoping that changes in vNext
+        // note this requires the preview compiler at the moment, for attribs on local method parameters
         static async IAsyncEnumerable<BidiStreamingRequest> SendAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -174,6 +174,71 @@ namespace PlayClient
             finally
             {
                 Console.WriteLine("writer is FINISHED");
+            }
+        }
+
+        private static async Task CallBidiStreamingServiceViaChannel(ChannelBase channel)
+        {
+            var bidiStreamingClient = channel.CreateGrpcService<IBidiStreamingService>();
+            var options = new CallContext(flags: CallContextFlags.IgnoreStreamTermination);
+
+            var pending = System.Threading.Channels.Channel.CreateBounded<BidiStreamingRequest>(5);
+
+            //Read stream - processed on a background task
+            var send = Task.Run(() => SendAsync(pending.Writer));
+            try
+            {
+                await foreach (var response in bidiStreamingClient.TestAsync(pending.AsAsyncEnumerable(true), options))
+                {
+                    Console.WriteLine($"Response received with payload: {response.Payload}");
+                }
+                Console.WriteLine("success exit of async enumeration");
+            }
+            catch (InvalidOperationException ioe) when (ioe.Message == "Can't write the message because the call is complete.")
+            {
+                Console.WriteLine($"IOE exit of async enumeration: {ioe.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"exception exit of async enumeration: {ex.Message}");
+                Console.WriteLine(ex.GetType().FullName);
+                Console.WriteLine(ex.Source);
+            }
+            Console.WriteLine("Seeing if our SendAsync exits...");
+            try
+            {
+                await send;
+                Console.WriteLine($"SendAsync exited cleanly");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SendAsync faulted: {ex.Message}");
+            }
+
+            static async Task SendAsync(System.Threading.Channels.ChannelWriter<BidiStreamingRequest> writer)
+            {
+                try
+                {
+                    var n = 0;
+                    while (true)
+                    {
+                        var request = new BidiStreamingRequest { Payload = $"Payload {n++}" };
+                        Console.WriteLine($"Sending request with payload: {request.Payload}");
+
+                        await writer.WriteAsync(request);
+
+                        //Look busy
+                        await Task.Delay(1000);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"SendAsync faulted: {ex.Message}");
+                }
+                finally
+                {
+                    Console.WriteLine("writer is FINISHED");
+                }
             }
         }
     }
