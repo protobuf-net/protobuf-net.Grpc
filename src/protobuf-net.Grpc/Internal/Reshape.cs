@@ -318,21 +318,11 @@ namespace ProtoBuf.Grpc.Internal
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                Task sendAll;
-                TResponse result;
                 using var allDone = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, default);
-                try
-                {
-                    // we'll run the "send" as a concurrent operation
-                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone, ignoreStreamTermination), allDone.Token);
 
-                    result = await call.ResponseAsync.ConfigureAwait(false);
-                }
-                finally
-                {
-                    // want to cancel the producer *however* we exit
-                    allDone.Cancel();
-                }
+                // send all the data *before* we check for a reply
+                await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination).ConfigureAwait(false);
+                var result = await call.ResponseAsync.ConfigureAwait(false);
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
@@ -421,7 +411,7 @@ namespace ProtoBuf.Grpc.Internal
                         if (ignoreStreamTermination && allDone.IsCancellationRequested) break;
                         throw new IncompleteSendRpcException(rpc);
                     }
-                    if (allDone.IsCancellationRequested) break;
+                    if (allDone.IsCancellationRequested) allDone.Token.ThrowIfCancellationRequested();
                 }
                 await output.CompleteAsync().ConfigureAwait(false);
             }
