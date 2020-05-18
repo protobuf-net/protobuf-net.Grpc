@@ -322,6 +322,8 @@ namespace ProtoBuf.Grpc.Internal
 
                 // send all the data *before* we check for a reply
                 await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination).ConfigureAwait(false);
+
+                allDone.Token.ThrowIfCancellationRequested();
                 var result = await call.ResponseAsync.ConfigureAwait(false);
 
                 if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
@@ -374,6 +376,7 @@ namespace ProtoBuf.Grpc.Internal
                     while (await seq.MoveNext(allDone.Token).ConfigureAwait(false))
                     {
                         yield return seq.Current;
+                        allDone.Token.ThrowIfCancellationRequested();
                     }
                 }
                 finally
