@@ -386,7 +386,7 @@ namespace ProtoBuf.Grpc.Internal
                 try
                 {
                     // we'll run the "send" as a concurrent operation
-                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token, ignoreStreamTermination), allDone.Token);
+                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone, ignoreStreamTermination), allDone.Token);
 
                     if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
 
@@ -400,7 +400,12 @@ namespace ProtoBuf.Grpc.Internal
                 {   // want to cancel the producer *however* we exit
                     allDone.Cancel();
                 }
-                await sendAll.ConfigureAwait(false); // observe any problems from sending
+                try
+                {
+                    await sendAll.ConfigureAwait(false); // observe any problems from sending
+                }
+                catch (OperationCanceledException)
+                { }
 
                 if (metadata != null)
                 {
@@ -409,26 +414,32 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
 
-            static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationToken cancellationToken, bool ignoreStreamTermination)
+            static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationTokenSource allDone, bool ignoreStreamTermination)
             {
                 try
                 {
-                    await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
+                    await foreach (var value in request.WithCancellation(allDone.Token).ConfigureAwait(false))
                     {
                         try
                         {
-                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
+                            if (ignoreStreamTermination && allDone.IsCancellationRequested) break;
                             await output.WriteAsync(value).ConfigureAwait(false);
                         }
                         catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
                         {
-                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
+                            if (ignoreStreamTermination && allDone.IsCancellationRequested) break;
                             throw new IncompleteSendRpcException(rpc);
                         }
+                        if (allDone.IsCancellationRequested) break;
                     }
                     await output.CompleteAsync().ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { }
+                catch
+                {
+                    allDone.Cancel();
+                    throw;
+                }
             }
         }
     }
