@@ -1,4 +1,6 @@
 ﻿using Grpc.Core;
+using System;
+using System.Globalization;
 
 namespace ProtoBuf.Grpc
 {
@@ -30,13 +32,37 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Gets a header's Value by key
         /// </summary>
-        public static string? GetValue(this Metadata? headers, string key)
+        public static string? GetString(this Metadata? headers, string key)
             => headers.GetEntry(key)?.Value;
 
         /// <summary>
         /// Gets a header's ValueBytes by key
         /// </summary>
-        public static byte[]? GetValueBytes(this Metadata? headers, string key)
+        public static byte[]? GetBytes(this Metadata? headers, string key)
             => headers.GetEntry(key)?.ValueBytes;
+
+        /// <summary>
+        /// Adds a header from an integer value using invariant formatting
+        /// </summary>
+        public static void Add(this Metadata headers, string key, int value)
+            => headers.Add(key, value.ToString(NumberFormatInfo.InvariantInfo));
+
+        /// <summary>
+        /// Reads a header as an integer value using invariant formatting
+        /// </summary>
+        public static int? GetInt32(this Metadata? headers, string key)
+        {
+            var value = headers.GetEntry(key)?.Value;
+            if (value is null) return null;
+            try
+            {
+                return int.Parse(value, NumberFormatInfo.InvariantInfo);
+            }
+            catch(Exception ex)
+            {
+                ex.Data?.Add(nameof(key), key);
+                throw;
+            }
+        }
     }
 }

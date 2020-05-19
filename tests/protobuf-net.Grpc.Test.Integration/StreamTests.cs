@@ -54,6 +54,9 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         IAsyncEnumerable<Foo> DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx = default);
 
+
+        IAsyncEnumerable<Foo> FullDuplex(IAsyncEnumerable<Foo> values, CallContext ctx = default);
+
         IAsyncEnumerable<Foo> ServerStreaming(Foo value, CallContext ctx = default);
 
         ValueTask<Foo> ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx = default);
@@ -86,7 +89,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
         static Scenario GetScenario(in CallContext ctx)
         {
-            var header = ctx.RequestHeaders.GetValue(nameof(Scenario));
+            var header = ctx.RequestHeaders.GetString(nameof(Scenario));
             return !string.IsNullOrWhiteSpace(header) && Enum.TryParse<Scenario>(header, out var tmp) ? tmp : Scenario.RunToCompletion;
         }
 
@@ -173,6 +176,58 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             throw new NotImplementedException();
         }
+
+        IAsyncEnumerable<Foo> IStreamAPI.FullDuplex(IAsyncEnumerable<Foo> values, CallContext ctx)
+        {
+            if (ctx.RequestHeaders.GetString("mode") == "byitem")
+                    return WrapByItem(values, ctx);
+            return ctx.FullDuplexAsync(Producer, values, Consumer);
+        }
+
+        async IAsyncEnumerable<Foo> WrapByItem(IAsyncEnumerable<Foo> values, CallContext ctx)
+        {
+            // this is a different "item by item callback" API
+            int count = 0, sum = 0;
+            await foreach(var item in ctx.FullDuplexAsync(Producer, values, (val, ctx) =>
+            {
+                count++;
+                sum += val.Bar;
+                return default;
+            }))
+            {
+                yield return item;
+            }
+            ctx.ServerCallContext?.ResponseTrailers.Add("count", count);
+            ctx.ServerCallContext?.ResponseTrailers.Add("sum", sum);
+        }
+
+        private async ValueTask Consumer(IAsyncEnumerable<Foo> source, CallContext ctx)
+        {
+            int sum = 0, count = 0;
+            int stop = ctx.RequestHeaders.GetInt32("stop") ?? -1;
+            if (stop != 0)
+            {
+                await foreach (var item in source.WithCancellation(ctx.CancellationToken))
+                {
+                    count++;
+                    sum += item.Bar;
+
+                    if (stop > 0 && --stop == 0) break;
+                }
+            }
+            ctx.ServerCallContext?.ResponseTrailers.Add("count", count);
+            ctx.ServerCallContext?.ResponseTrailers.Add("sum", sum);
+        }
+
+        private async IAsyncEnumerable<Foo> Producer(CallContext ctx)
+        {
+            var count = ctx.RequestHeaders.GetInt32("produce")!.Value;
+            for(int i = 0; i < count; i++)
+            {
+                yield return new Foo { Bar =  i  };
+                await Task.Delay(10, ctx.CancellationToken);
+            }
+        }
     }
 
     [ProtoContract]
@@ -235,7 +290,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
             {   // check trailers
-                Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
+                Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
 
                 var status = ctx.ResponseStatus();
                 Assert.Equal(StatusCode.OK, status.StatusCode);
@@ -257,7 +312,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 haveCheckedHeaders = true;
                 if ((flags & CallContextFlags.CaptureMetadata) != 0)
                 {
-                    Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                    Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
                 }
             }
         }
@@ -304,7 +359,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 haveCheckedHeaders = true;
                 if ((flags & CallContextFlags.CaptureMetadata) != 0)
                 {
-                    Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                    Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
                 }
             }
         }
@@ -336,7 +391,7 @@ namespace protobuf_net.Grpc.Test.Integration
             });
             Assert.Equal(StatusCode.Internal, rpc.Status.StatusCode);
             Assert.Equal(marker + " detail", rpc.Status.Detail);
-            Assert.Equal(marker + " faultval", rpc.Trailers.GetValue("faultkey"));
+            Assert.Equal(marker + " faultval", rpc.Trailers.GetString("faultkey"));
 
             _fixture?.Log("after await foreach");
             CheckHeaderState();
@@ -344,7 +399,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
             {   // check trailers
-                Assert.Equal(marker + " faultval", ctx.ResponseTrailers().GetValue("faultkey"));
+                Assert.Equal(marker + " faultval", ctx.ResponseTrailers().GetString("faultkey"));
 
                 var status = ctx.ResponseStatus();
                 Assert.Equal(StatusCode.Internal, status.StatusCode);
@@ -361,10 +416,10 @@ namespace protobuf_net.Grpc.Test.Integration
                     switch (scenario)
                     {
                         case Scenario.FaultBeforeHeaders:
-                            Assert.Null(ctx.ResponseHeaders().GetValue("prekey"));
+                            Assert.Null(ctx.ResponseHeaders().GetString("prekey"));
                             break;
                         default:
-                            Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                            Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
                             break;
                     }
                 }
@@ -432,13 +487,13 @@ namespace protobuf_net.Grpc.Test.Integration
             switch (scenario)
             {
                 case Scenario.FaultBeforeHeaders:
-                    Assert.Equal("before headers faultval", ex.Trailers.GetValue("faultkey"));
+                    Assert.Equal("before headers faultval", ex.Trailers.GetString("faultkey"));
                     break;
                 case Scenario.FaultBeforeTrailers:
-                    Assert.Equal("before trailers faultval", ex.Trailers.GetValue("faultkey"));
+                    Assert.Equal("before trailers faultval", ex.Trailers.GetString("faultkey"));
                     break;
                 case Scenario.FaultSuccessGoodProducer:
-                    Assert.Null(ex.Trailers.GetValue("faultkey"));
+                    Assert.Null(ex.Trailers.GetString("faultkey"));
                     break;
                 default:
                     throw new NotImplementedException();
@@ -470,19 +525,19 @@ namespace protobuf_net.Grpc.Test.Integration
                 switch (scenario)
                 {
                     case Scenario.FaultBeforeHeaders:
-                        Assert.Null(ctx.ResponseHeaders().GetValue("prekey"));
-                        Assert.Null(ctx.ResponseTrailers().GetValue("postkey"));
-                        Assert.Equal("before headers faultval", ctx.ResponseTrailers().GetValue("faultkey"));
+                        Assert.Null(ctx.ResponseHeaders().GetString("prekey"));
+                        Assert.Null(ctx.ResponseTrailers().GetString("postkey"));
+                        Assert.Equal("before headers faultval", ctx.ResponseTrailers().GetString("faultkey"));
                         break;
                     case Scenario.FaultBeforeTrailers:
-                        Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
-                        Assert.Null(ctx.ResponseTrailers().GetValue("postkey"));
-                        Assert.Equal("before trailers faultval", ctx.ResponseTrailers().GetValue("faultkey"));
+                        Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                        Assert.Null(ctx.ResponseTrailers().GetString("postkey"));
+                        Assert.Equal("before trailers faultval", ctx.ResponseTrailers().GetString("faultkey"));
                         break;
                     case Scenario.FaultSuccessGoodProducer:
-                        Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
-                        Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
-                        Assert.Null(ctx.ResponseTrailers().GetValue("faultkey"));
+                        Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                        Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
+                        Assert.Null(ctx.ResponseTrailers().GetString("faultkey"));
                         break;
                     default:
                         throw new NotImplementedException();
@@ -510,8 +565,8 @@ namespace protobuf_net.Grpc.Test.Integration
                 var status = ctx.ResponseStatus();
                 Assert.Equal(StatusCode.OK, status.StatusCode);
                 Assert.Equal("", status.Detail);
-                Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
-                Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
+                Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
             }
         }
 
@@ -534,13 +589,13 @@ namespace protobuf_net.Grpc.Test.Integration
             switch (scenario)
             {
                 case Scenario.FaultBeforeHeaders:
-                    Assert.Equal("before headers faultval", ex.Trailers.GetValue("faultkey"));
+                    Assert.Equal("before headers faultval", ex.Trailers.GetString("faultkey"));
                     break;
                 case Scenario.FaultBeforeTrailers:
-                    Assert.Equal("before trailers faultval", ex.Trailers.GetValue("faultkey"));
+                    Assert.Equal("before trailers faultval", ex.Trailers.GetString("faultkey"));
                     break;
                 case Scenario.FaultSuccessGoodProducer:
-                    Assert.Null(ex.Trailers.GetValue("faultkey"));
+                    Assert.Null(ex.Trailers.GetString("faultkey"));
                     break;
                 default:
                     throw new NotImplementedException();
@@ -594,6 +649,42 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal("", status.Detail);
                 // headers are not available via blocking unary success
             }
+        }
+
+        [Theory]
+        [InlineData(8, 10)]
+        [InlineData(8, 20, 15)]
+        [InlineData(0, 10)]
+        [InlineData(0, 20, 15)]
+        [InlineData(8, 10, -1, true)]
+        [InlineData(8, 20, 15, true)]
+        [InlineData(0, 10, -1, true)]
+        [InlineData(0, 20, 15, true)]
+        public async Task FullDuplexAsync(int send, int produce, int stopReadingAfter = -1, bool byItem = false)
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            var reqHeaders = new Metadata();
+            reqHeaders.Add("produce", produce);
+            if (byItem) reqHeaders.Add("mode", "byitem");
+            if (stopReadingAfter >= 0) reqHeaders.Add("stop", stopReadingAfter);
+
+            var ctx = new CallContext(new CallOptions(headers: reqHeaders), CallContextFlags.CaptureMetadata);
+
+            int got = 0;
+            await foreach(var reply in client.FullDuplex(For(Scenario.RunToCompletion, send), ctx))
+            {
+                got++;
+            }
+            Assert.Equal(produce, got);
+            var trailers = ctx.ResponseTrailers();
+
+            if (stopReadingAfter < 0) stopReadingAfter = send;
+            stopReadingAfter = Math.Min(send, stopReadingAfter);
+            Assert.Equal(stopReadingAfter, trailers.GetInt32("count"));
+            Assert.Equal(Enumerable.Range(0, stopReadingAfter).Sum(), trailers.GetInt32("sum"));
+
         }
     }
 }

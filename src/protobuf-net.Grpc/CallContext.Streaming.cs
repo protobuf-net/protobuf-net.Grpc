@@ -29,13 +29,12 @@ namespace ProtoBuf.Grpc
             try
             {
                 context = new CallContext(context, allDone.Token);
-                var consumed = Task.Run(() => consumer(source, context), allDone.Token); // note this shares a capture scope
+                var consumed = Task.Run(() => consumer(source, context).AsTask(), allDone.Token); // note this shares a capture scope
 
                 await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
                     yield return value;
                 }
-
                 await consumed.ConfigureAwait(false);
             }
             finally
@@ -154,7 +153,7 @@ namespace ProtoBuf.Grpc
             try
             {
                 var context = new CallContext(this, allDone.Token);
-                var consumed = Task.Run(() => consumer(source, context), context.CancellationToken); // note this shares a capture scope
+                var consumed = Task.Run(() => consumer(source, context).AsTask(), context.CancellationToken); // note this shares a capture scope
                 var produced = producer(context);
                 if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
                 return BothAsync(produced, consumed);
