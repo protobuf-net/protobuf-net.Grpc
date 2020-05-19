@@ -26,7 +26,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal MetadataContext Reset()
         {
-            Status = default;
+            Status = Status.DefaultSuccess;
             _headers = _trailers = null;
             return this;
         }
