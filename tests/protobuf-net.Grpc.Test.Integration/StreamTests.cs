@@ -145,11 +145,6 @@ namespace protobuf_net.Grpc.Test.Integration
             => throw new RpcException(new Status(StatusCode.Internal, state + " detail"),
             new Metadata { { "faultkey", state + " faultval" } }, state + " message");
 
-        IAsyncEnumerable<Foo> IStreamAPI.ServerStreaming(Foo value, CallContext ctx)
-        {
-            throw new NotImplementedException();
-        }
-
         async ValueTask<Foo> IStreamAPI.UnaryAsync(Foo value, CallContext ctx)
         {
             var scenario = GetScenario(ctx);
@@ -172,15 +167,44 @@ namespace protobuf_net.Grpc.Test.Integration
 
         Foo IStreamAPI.UnaryBlocking(Foo value, CallContext ctx) => ((IStreamAPI)this).UnaryAsync(value, ctx).Result; // sync-over-async for this test only
 
-        ValueTask<Foo> IStreamAPI.ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx)
+        async ValueTask<Foo> IStreamAPI.ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
-            throw new NotImplementedException();
+            int sum = 0;
+            await foreach (var item in values.WithCancellation(ctx.CancellationToken))
+            {
+                sum += item.Bar;
+            }
+            return new Foo { Bar = sum };
+        }
+
+        async IAsyncEnumerable<Foo> IStreamAPI.ServerStreaming(Foo value, CallContext ctx)
+        {
+            await ctx.ServerCallContext!.WriteResponseHeadersAsync(new Metadata { { "req", value.Bar } });
+            var fault = ctx.RequestHeaders.GetInt32("fault");
+            int sum = 0;
+            void AddSum(Metadata to) => to.Add("sum", sum);
+            for (int i = 0; i < value.Bar; i++)
+            {
+                if (i == fault)
+                {
+                    var faultTrailers = new Metadata();
+                    AddSum(ctx.ServerCallContext!.ResponseTrailers);
+                    AddSum(faultTrailers);
+                    throw new RpcException(new Status(StatusCode.Internal, "oops"), faultTrailers);
+                }
+                sum += i;
+                await Task.Yield();
+                yield return new Foo { Bar = i };
+                ctx.CancellationToken.ThrowIfCancellationRequested();
+            }
+
+            AddSum(ctx.ServerCallContext!.ResponseTrailers);
         }
 
         IAsyncEnumerable<Foo> IStreamAPI.FullDuplex(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
             if (ctx.RequestHeaders.GetString("mode") == "byitem")
-                    return WrapByItem(values, ctx);
+                return WrapByItem(values, ctx);
             return ctx.FullDuplexAsync(Producer, values, Consumer);
         }
 
@@ -188,12 +212,12 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             // this is a different "item by item callback" API
             int count = 0, sum = 0;
-            await foreach(var item in ctx.FullDuplexAsync(Producer, values, (val, ctx) =>
-            {
-                count++;
-                sum += val.Bar;
-                return default;
-            }))
+            await foreach (var item in ctx.FullDuplexAsync(Producer, values, (val, ctx) =>
+             {
+                 count++;
+                 sum += val.Bar;
+                 return default;
+             }))
             {
                 yield return item;
             }
@@ -222,9 +246,9 @@ namespace protobuf_net.Grpc.Test.Integration
         private async IAsyncEnumerable<Foo> Producer(CallContext ctx)
         {
             var count = ctx.RequestHeaders.GetInt32("produce")!.Value;
-            for(int i = 0; i < count; i++)
+            for (int i = 0; i < count; i++)
             {
-                yield return new Foo { Bar =  i  };
+                yield return new Foo { Bar = i };
                 await Task.Delay(10, ctx.CancellationToken);
             }
         }
@@ -673,7 +697,7 @@ namespace protobuf_net.Grpc.Test.Integration
             var ctx = new CallContext(new CallOptions(headers: reqHeaders), CallContextFlags.CaptureMetadata);
 
             int got = 0;
-            await foreach(var reply in client.FullDuplex(For(Scenario.RunToCompletion, send), ctx))
+            await foreach (var reply in client.FullDuplex(For(Scenario.RunToCompletion, send), ctx))
             {
                 got++;
             }
@@ -684,7 +708,60 @@ namespace protobuf_net.Grpc.Test.Integration
             stopReadingAfter = Math.Min(send, stopReadingAfter);
             Assert.Equal(stopReadingAfter, trailers.GetInt32("count"));
             Assert.Equal(Enumerable.Range(0, stopReadingAfter).Sum(), trailers.GetInt32("sum"));
+        }
 
+        [Fact]
+        public async Task ClientStreaming()
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            var result = await client.ClientStreaming(For(Scenario.RunToCompletion, 10));
+            Assert.Equal(Enumerable.Range(0, 10).Sum(), result.Bar);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task ServerStreaming(bool fault)
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            int count = 0;
+            var reqHeaders = new Metadata();
+            if (fault) reqHeaders.Add("fault", 5);
+            var ctx = new CallContext(new CallOptions(headers: reqHeaders), flags: CallContextFlags.CaptureMetadata);
+
+            var seq = client.ServerStreaming(new Foo { Bar = 10 }, ctx);
+            if (fault)
+            {
+                var ex = await Assert.ThrowsAsync<RpcException>(async () =>
+                {
+                    await foreach (var item in seq) { }
+                });
+                Assert.Equal("oops", ex.Status.Detail);
+                Assert.Equal(StatusCode.Internal, ex.Status.StatusCode);
+                Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
+                // don't seem to get fault trailers on server-streaming
+                // var expect = Enumerable.Range(0, 5).Sum();
+                // Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
+                // Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
+            }
+            else
+            {
+                await foreach (var item in seq)
+                {
+                    Assert.Equal(count, item.Bar);
+                    count++;
+                }
+                Assert.Equal(StatusCode.OK, ctx.ResponseStatus().StatusCode);
+                Assert.Equal("", ctx.ResponseStatus().Detail);
+                Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
+                Assert.Equal(10, count);
+                var expect = Enumerable.Range(0, 10).Sum();
+                Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
+            }
         }
     }
 }

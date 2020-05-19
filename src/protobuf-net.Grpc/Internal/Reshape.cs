@@ -282,10 +282,27 @@ namespace ProtoBuf.Grpc.Internal
                 if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
                 var seq = call.ResponseStream;
-                while (await seq.MoveNext(cancellationToken).ConfigureAwait(false))
+
+                bool haveMore;
+                do
                 {
-                    yield return seq.Current;
-                }
+                    try // this is a little awkward because we can't yield inside a try/catch,
+                    {   // but we want to catch the RpcException to capture the outbound headers
+                        haveMore = await seq.MoveNext(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (RpcException fault)
+                    {   // note: the RpcException doesn't seem to carry trailers in this case currently;
+                        // leaving this here so that it gets fixed transparently if that ever changes
+                        metadata?.SetTrailers(fault);
+                        throw;
+                    }
+
+                    if (haveMore)
+                    {
+                        yield return seq.Current;
+                    }
+                } while (haveMore);
+
                 metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
             }
         }
