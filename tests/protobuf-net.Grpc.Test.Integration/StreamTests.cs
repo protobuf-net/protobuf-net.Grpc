@@ -64,6 +64,8 @@ namespace protobuf_net.Grpc.Test.Integration
         FaultAfterYield,
         TakeNothingBadProducer,  // does not observe cancellation
         TakeNothingGoodProducer, // observes cancellation
+        FaultSuccessBadProducer,  // does not observe cancellation
+        FaultSuccessGoodProducer, // observes cancellation
     }
 
     class StreamServer : IStreamAPI
@@ -93,6 +95,9 @@ namespace protobuf_net.Grpc.Test.Integration
 
             switch (scenario)
             {
+                case Scenario.FaultSuccessBadProducer:
+                case Scenario.FaultSuccessGoodProducer:
+                    throw new RpcException(Status.DefaultSuccess); // another way of expressing yield break
                 case Scenario.TakeNothingBadProducer:
                 case Scenario.TakeNothingGoodProducer:
                     break;
@@ -153,8 +158,14 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.None)]
         [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        [InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.None)]
+        [InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination)]
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
         public async Task DuplexEcho(Scenario scenario, int expectedCount, CallContextFlags flags)
         {
             using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
@@ -164,7 +175,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             bool haveCheckedHeaders = false;
             var values = new List<int>(expectedCount);
-            await foreach (var item in client.DuplexEcho(For(DEFAULT_SIZE, checkForCancellation: scenario != Scenario.TakeNothingBadProducer), ctx))
+            await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
             {
                 CheckHeaderState();
                 values.Add(item.Bar);
@@ -179,7 +190,16 @@ namespace protobuf_net.Grpc.Test.Integration
 
                 var status = ctx.ResponseStatus();
                 Assert.Equal(StatusCode.OK, status.StatusCode);
-                Assert.Equal("resp detail", status.Detail);
+                switch (scenario)
+                {
+                    case Scenario.FaultSuccessGoodProducer:
+                    case Scenario.FaultSuccessBadProducer:
+                        Assert.Equal("", status.Detail);
+                        break;
+                    default:
+                        Assert.Equal("resp detail", status.Detail);
+                        break;
+                }
             }
 
             void CheckHeaderState()
@@ -196,6 +216,8 @@ namespace protobuf_net.Grpc.Test.Integration
         [Theory]
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.None)]
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.None)]
+        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.CaptureMetadata)]
         public async Task DuplexEchoBadProducer(Scenario scenario, int expectedCount, CallContextFlags flags)
         {
             using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
@@ -208,7 +230,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             var ex = await Assert.ThrowsAnyAsync<Exception>(async () =>
             {
-                await foreach (var item in client.DuplexEcho(For(DEFAULT_SIZE, checkForCancellation: scenario != Scenario.TakeNothingBadProducer), ctx))
+                await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
                 {
                     CheckHeaderState();
                     values.Add(item.Bar);
@@ -223,7 +245,16 @@ namespace protobuf_net.Grpc.Test.Integration
 
                 var status = ctx.ResponseStatus();
                 Assert.Equal(StatusCode.OK, status.StatusCode);
-                Assert.Equal("resp detail", status.Detail);
+                switch (scenario)
+                {
+                    case Scenario.FaultSuccessGoodProducer:
+                    case Scenario.FaultSuccessBadProducer:
+                        Assert.Equal("", status.Detail);
+                        break;
+                    default:
+                        Assert.Equal("resp detail", status.Detail);
+                        break;
+                }
             }
 
             void CheckHeaderState()
@@ -256,7 +287,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             var rpc = await Assert.ThrowsAsync<RpcException>(async () =>
             {
-                await foreach (var item in client.DuplexEcho(For(DEFAULT_SIZE), ctx))
+                await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
                 {
                     CheckHeaderState();
                     values.Add(item.Bar);
@@ -299,8 +330,13 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        IAsyncEnumerable<Foo> For(int count, int from = 0, int millisecondsDelay = 10, bool checkForCancellation = true)
-            => ForImpl(_fixture, count, from, millisecondsDelay, checkForCancellation, default);
+        IAsyncEnumerable<Foo> For(Scenario scenario, int count, int from = 0, int millisecondsDelay = 10)
+            => ForImpl(_fixture, count, from, millisecondsDelay, scenario switch
+            {
+                Scenario.FaultSuccessBadProducer => false,
+                Scenario.TakeNothingBadProducer => false,
+                _ => true
+            }, default);
         private static async IAsyncEnumerable<Foo> ForImpl(StreamTestsFixture fixture, int count, int from, int millisecondsDelay,
             bool checkForCancellation, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
