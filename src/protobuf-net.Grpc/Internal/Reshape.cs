@@ -152,8 +152,16 @@ namespace ProtoBuf.Grpc.Internal
             where TRequest : class
             where TResponse : class
         {
-            context.Prepare();
-            return invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
+            var metadata = context.Prepare();
+            try
+            {
+                return invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
+            }
+            catch (RpcException fault)
+            {
+                metadata?.SetTrailers(fault);
+                throw;
+            }
         }
 
         /// <summary>
@@ -168,8 +176,16 @@ namespace ProtoBuf.Grpc.Internal
             where TRequest : class
             where TResponse : class
         {
-            context.Prepare();
-            invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
+            var metadata = context.Prepare();
+            try
+            {
+                invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
+            }
+            catch(RpcException fault)
+            {
+                metadata?.SetTrailers(fault);
+                throw;
+            }
         }
 
         /// <summary>
@@ -326,13 +342,21 @@ namespace ProtoBuf.Grpc.Internal
                 if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
                 // send all the data *before* we check for a reply
-                await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination).ConfigureAwait(false);
+                try
+                {
+                    await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination).ConfigureAwait(false);
 
-                allDone.Token.ThrowIfCancellationRequested();
-                var result = await call.ResponseAsync.ConfigureAwait(false);
+                    allDone.Token.ThrowIfCancellationRequested();
+                    var result = await call.ResponseAsync.ConfigureAwait(false);
 
-                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
-                return result;
+                    metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                    return result;
+                }
+                catch (RpcException fault)
+                {
+                    metadata?.SetTrailers(fault);
+                    throw;
+                }
             }
         }
 
@@ -391,8 +415,6 @@ namespace ProtoBuf.Grpc.Internal
                             yield return seq.Current;
                         }
                     } while (haveMore);
-
-                    metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
                 }
                 finally
                 {   // want to cancel the producer *however* we exit
@@ -404,6 +426,12 @@ namespace ProtoBuf.Grpc.Internal
                     await sendAll.ConfigureAwait(false); // observe any problems from sending
                 }
                 catch (OperationCanceledException) { }
+                catch (RpcException fault)
+                {
+                    metadata?.SetTrailers(fault);
+                    throw;
+                }
+                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
             }
         }
 
