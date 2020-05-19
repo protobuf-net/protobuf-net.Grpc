@@ -97,6 +97,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 case Scenario.FaultSuccessBadProducer:
                 case Scenario.FaultSuccessGoodProducer:
+                    Log("server faulting with success");
                     throw new RpcException(Status.DefaultSuccess); // another way of expressing yield break
                 case Scenario.TakeNothingBadProducer:
                 case Scenario.TakeNothingGoodProducer:
@@ -117,8 +118,10 @@ namespace protobuf_net.Grpc.Test.Integration
                     }
                     break;
             }
-
+            Log("server is done yielding");
             if (scenario == Scenario.FaultAfterYield) Throw("after yield");
+
+            Log("server is complete");
 
             static void Throw(string state)
                 => throw new RpcException(new Status(StatusCode.Internal, state + " detail"),
