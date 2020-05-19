@@ -234,7 +234,7 @@ namespace ProtoBuf.Grpc.Internal
                     metadata?.SetTrailers(fault);
                     throw;
                 }
-                metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
+                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
 
                 return value;
             }
@@ -270,7 +270,7 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     yield return seq.Current;
                 }
-                metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
+                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
             }
         }
 
@@ -326,12 +326,12 @@ namespace ProtoBuf.Grpc.Internal
                 if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
                 // send all the data *before* we check for a reply
-                await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination, metadata).ConfigureAwait(false);
+                await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination).ConfigureAwait(false);
 
                 allDone.Token.ThrowIfCancellationRequested();
                 var result = await call.ResponseAsync.ConfigureAwait(false);
 
-                metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
+                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
                 return result;
             }
         }
@@ -367,7 +367,7 @@ namespace ProtoBuf.Grpc.Internal
                 try
                 {
                     // we'll run the "send" as a concurrent operation
-                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone, ignoreStreamTermination, metadata), allDone.Token);
+                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone, ignoreStreamTermination), allDone.Token);
 
                     if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
@@ -392,7 +392,7 @@ namespace ProtoBuf.Grpc.Internal
                         }
                     } while (haveMore);
 
-                    metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
+                    metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
                 }
                 finally
                 {   // want to cancel the producer *however* we exit
@@ -407,8 +407,9 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
-        static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationTokenSource allDone, bool ignoreStreamTermination, MetadataContext? metadata)
+        static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationTokenSource allDone, bool ignoreStreamTermination)
         {
+            if (allDone.IsCancellationRequested) allDone.Token.ThrowIfCancellationRequested();
             try
             {
                 await foreach (var value in request.WithCancellation(allDone.Token).ConfigureAwait(false))
@@ -420,10 +421,11 @@ namespace ProtoBuf.Grpc.Internal
                     }
                     catch (Exception ex)
                     {
-                        metadata?.SetTrailers(ex as RpcException);
                         if (ignoreStreamTermination) break;
                         throw new IncompleteSendRpcException(ex);
                     }
+
+                    // happy to bomb out, as long as we weren't holding a value at the time
                     if (allDone.IsCancellationRequested) allDone.Token.ThrowIfCancellationRequested();
                 }
                 await output.CompleteAsync().ConfigureAwait(false);

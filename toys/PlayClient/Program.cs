@@ -8,6 +8,8 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
+#pragma warning disable IDE0051 // unused members
+
 namespace PlayClient
 {
     static class Program

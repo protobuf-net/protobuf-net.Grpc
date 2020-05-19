@@ -31,7 +31,7 @@ namespace ProtoBuf.Grpc.Internal
             return this;
         }
 
-        internal void SetTrailers(RpcException? fault)
+        internal void SetTrailers(RpcException fault)
         {
             if (fault is object)
             {
@@ -40,10 +40,19 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
-        internal void SetTrailers(Metadata trailers, Status status)
+        internal void SetTrailers<T>(T call, Func<T, Status> getStatus, Func<T, Metadata> getMetadata)
+            where T : class
         {
-            _trailers = trailers ?? Metadata.Empty;
-            Status = status;
+            try
+            {
+                Status = getStatus(call);
+                _trailers = getMetadata(call) ?? Metadata.Empty;
+            }
+            catch (RpcException fault)
+            {
+                SetTrailers(fault);
+                throw;
+            }
         }
 
         internal ValueTask SetHeadersAsync(Task<Metadata> headers)
