@@ -222,13 +222,20 @@ namespace ProtoBuf.Grpc.Internal
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
-                var value = await call.ResponseAsync.ConfigureAwait(false);
-                if (metadata != null)
+                if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
+
+                TResponse value;
+                try
                 {
-                    metadata.Trailers = call.GetTrailers();
-                    metadata.Status = call.GetStatus();
+                    value = await call.ResponseAsync.ConfigureAwait(false);
                 }
+                catch (RpcException fault)
+                {
+                    metadata?.SetTrailers(fault);
+                    throw;
+                }
+                metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
+
                 return value;
             }
         }
@@ -256,18 +263,14 @@ namespace ProtoBuf.Grpc.Internal
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
+                if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
                 var seq = call.ResponseStream;
                 while (await seq.MoveNext(cancellationToken).ConfigureAwait(false))
                 {
                     yield return seq.Current;
                 }
-                if (metadata != null)
-                {
-                    metadata.Trailers = call.GetTrailers();
-                    metadata.Status = call.GetStatus();
-                }
+                metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
             }
         }
 
@@ -342,15 +345,11 @@ namespace ProtoBuf.Grpc.Internal
                 }
                 await call.RequestStream.CompleteAsync().ConfigureAwait(false);
 
-                if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
+                if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
                 var result = await call.ResponseAsync.ConfigureAwait(false);
 
-                if (metadata != null)
-                {
-                    metadata.Trailers = call.GetTrailers();
-                    metadata.Status = call.GetStatus();
-                }
+                metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
                 return result;
             }
         }
@@ -388,24 +387,43 @@ namespace ProtoBuf.Grpc.Internal
                     // we'll run the "send" as a concurrent operation
                     sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token, ignoreStreamTermination), allDone.Token);
 
-                    if (metadata != null) metadata.Headers = await call.ResponseHeadersAsync.ConfigureAwait(false);
+                    if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
                     var seq = call.ResponseStream;
-                    while (await seq.MoveNext(allDone.Token).ConfigureAwait(false))
+
+                    bool haveMore;
+                    do
                     {
-                        yield return seq.Current;
-                    }
+                        try // this is a little awkward because we can't yield inside a try/catch,
+                        {   // but we want to catch the RpcException to capture the outbound headers
+                            haveMore = await seq.MoveNext(allDone.Token).ConfigureAwait(false);
+                        }
+                        catch (RpcException fault)
+                        {
+                            metadata?.SetTrailers(fault);
+                            throw;
+                        }
+
+                        if (haveMore)
+                        {
+                            yield return seq.Current;
+                        }
+                    } while (haveMore);
                 }
                 finally
                 {   // want to cancel the producer *however* we exit
                     allDone.Cancel();
                 }
-                await sendAll.ConfigureAwait(false); // observe any problems from sending
-
-                if (metadata != null)
+                try
                 {
-                    metadata.Trailers = call.GetTrailers();
-                    metadata.Status = call.GetStatus();
+                    await sendAll.ConfigureAwait(false); // observe any problems from sending
+
+                    metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
+                }
+                catch (RpcException fault)
+                {
+                    metadata?.SetTrailers(fault);
+                    throw;
                 }
             }
 
