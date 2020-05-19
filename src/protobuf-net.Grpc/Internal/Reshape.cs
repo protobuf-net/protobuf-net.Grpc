@@ -42,11 +42,7 @@ namespace ProtoBuf.Grpc.Internal
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task<Empty> EmptyTask(Task task)
         {
-#if TASK_COMPLETED
-            if (task.IsCompletedSuccessfully) return Empty.InstanceTask;
-#else
-            if (task.Status == TaskStatus.RanToCompletion) return Empty.InstanceTask;
-#endif
+            if (task.RanToCompletion()) return Empty.InstanceTask;
 
             return Awaited(task);
             static async Task<Empty> Awaited(Task t)
