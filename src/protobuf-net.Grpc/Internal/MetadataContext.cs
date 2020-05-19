@@ -45,8 +45,8 @@ namespace ProtoBuf.Grpc.Internal
         {
             try
             {
-                Status = getStatus(call);
                 _trailers = getMetadata(call) ?? Metadata.Empty;
+                Status = getStatus(call);
             }
             catch (RpcException fault)
             {

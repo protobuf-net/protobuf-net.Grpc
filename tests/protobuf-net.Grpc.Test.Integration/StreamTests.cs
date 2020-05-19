@@ -53,6 +53,12 @@ namespace protobuf_net.Grpc.Test.Integration
     public interface IStreamAPI
     {
         IAsyncEnumerable<Foo> DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx = default);
+
+        IAsyncEnumerable<Foo> ServerStreaming(Foo value, CallContext ctx = default);
+
+        ValueTask<Foo> ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx = default);
+
+        ValueTask<Foo> Unary(Foo value, CallContext ctx = default);
     }
 
     public enum Scenario
@@ -60,6 +66,7 @@ namespace protobuf_net.Grpc.Test.Integration
         RunToCompletion,
         FaultBeforeYield,
         FaultBeforeHeaders,
+        FaultBeforeTrailers,
         YieldNothing,
         FaultAfterYield,
         TakeNothingBadProducer,  // does not observe cancellation
@@ -75,11 +82,16 @@ namespace protobuf_net.Grpc.Test.Integration
             => _fixture = fixture;
         public void Log(string message) => _fixture.Log(message);
 
+        static Scenario GetScenario(in CallContext ctx)
+        {
+            var header = ctx.RequestHeaders.GetValue(nameof(Scenario));
+            return !string.IsNullOrWhiteSpace(header) && Enum.TryParse<Scenario>(header, out var tmp) ? tmp : Scenario.RunToCompletion;
+        }
+
         async IAsyncEnumerable<Foo> IStreamAPI.DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
             Log("server checking scenario");
-            var header = ctx.RequestHeaders.GetValue(nameof(Scenario));
-            var scenario = !string.IsNullOrWhiteSpace(header) && Enum.TryParse<Scenario>(header, out var tmp) ? tmp : Scenario.RunToCompletion;
+            var scenario = GetScenario(ctx);
 
             if (scenario == Scenario.FaultBeforeHeaders) Throw("before headers");
 
@@ -122,10 +134,40 @@ namespace protobuf_net.Grpc.Test.Integration
             if (scenario == Scenario.FaultAfterYield) Throw("after yield");
 
             Log("server is complete");
+        }
 
-            static void Throw(string state)
-                => throw new RpcException(new Status(StatusCode.Internal, state + " detail"),
-                new Metadata { { "faultkey", state + " faultval" } }, state + " message");
+        static void Throw(string state)
+            => throw new RpcException(new Status(StatusCode.Internal, state + " detail"),
+            new Metadata { { "faultkey", state + " faultval" } }, state + " message");
+
+        IAsyncEnumerable<Foo> IStreamAPI.ServerStreaming(Foo value, CallContext ctx)
+        {
+            throw new NotImplementedException();
+        }
+
+        async ValueTask<Foo> IStreamAPI.Unary(Foo value, CallContext ctx)
+        {
+            var scenario = GetScenario(ctx);
+            var sCtx = ctx.ServerCallContext!;
+
+            Log($"unary scenario {scenario}, value {value.Bar}");
+
+            if (scenario == Scenario.FaultBeforeHeaders) Throw("before headers");
+            await sCtx.WriteResponseHeadersAsync(new Metadata { { "prekey", "preval" } });
+
+            if (scenario == Scenario.FaultBeforeTrailers) Throw("before trailers");
+            sCtx.ResponseTrailers.Add("postkey", "postval");
+
+            if (scenario == Scenario.FaultSuccessGoodProducer)
+                throw new RpcException(Status.DefaultSuccess);
+
+            Log("server is complete");
+            return value;
+        }
+
+        ValueTask<Foo> IStreamAPI.ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx)
+        {
+            throw new NotImplementedException();
         }
     }
 
@@ -372,6 +414,108 @@ namespace protobuf_net.Grpc.Test.Integration
             finally
             {
                 Log("exiting producer");
+            }
+        }
+
+        [Theory]
+        [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.None)]
+        [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.None)]
+        [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultSuccessGoodProducer, CallContextFlags.None)]
+        [InlineData(Scenario.FaultSuccessGoodProducer, CallContextFlags.CaptureMetadata)]
+        public async Task UnaryFault(Scenario scenario, CallContextFlags flags)
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.Unary(new Foo { Bar = 42 }, ctx));
+            CheckStatus(ex.Status);
+            switch (scenario)
+            {
+                case Scenario.FaultBeforeHeaders:
+                    Assert.Equal("before headers faultval", ex.Trailers.GetValue("faultkey"));
+                    break;
+                case Scenario.FaultBeforeTrailers:
+                    Assert.Equal("before trailers faultval", ex.Trailers.GetValue("faultkey"));
+                    break;
+                case Scenario.FaultSuccessGoodProducer:
+                    Assert.Null(ex.Trailers.GetValue("faultkey"));
+                    break;
+                default:
+                    throw new NotImplementedException();
+            }
+
+            void CheckStatus(Status status)
+            {
+                switch (scenario)
+                {
+                    case Scenario.FaultBeforeHeaders:
+                        Assert.Equal(StatusCode.Internal, status.StatusCode);
+                        Assert.Equal("before headers detail", status.Detail);
+                        break;
+                    case Scenario.FaultBeforeTrailers:
+                        Assert.Equal(StatusCode.Internal, status.StatusCode);
+                        Assert.Equal("before trailers detail", status.Detail);
+                        break;
+                    case Scenario.FaultSuccessGoodProducer:
+                        Assert.Equal(StatusCode.OK, status.StatusCode);
+                        Assert.Equal("", status.Detail);
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+            }
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {
+                CheckStatus(ctx.ResponseStatus());
+                switch (scenario)
+                {
+                    case Scenario.FaultBeforeHeaders:
+                        Assert.Null(ctx.ResponseHeaders().GetValue("prekey"));
+                        Assert.Null(ctx.ResponseHeaders().GetValue("postkey"));
+                        Assert.Equal("before headers faultval", ctx.ResponseTrailers().GetValue("faultkey"));
+                        break;
+                    case Scenario.FaultBeforeTrailers:
+                        Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                        Assert.Null(ctx.ResponseHeaders().GetValue("postkey"));
+                        Assert.Equal("before trailers faultval", ctx.ResponseTrailers().GetValue("faultkey"));
+                        break;
+                    case Scenario.FaultSuccessGoodProducer:
+                        Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                        Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
+                        Assert.Null(ctx.ResponseTrailers().GetValue("faultkey"));
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+            }
+
+        }
+
+        [Theory]
+        [InlineData(Scenario.RunToCompletion, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
+
+        public async Task UnarySuccess(Scenario scenario, CallContextFlags flags)
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            var result = await client.Unary(new Foo { Bar = 42 }, ctx);
+            Assert.Equal(42, result.Bar);
+
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {
+                var status = ctx.ResponseStatus();
+                Assert.Equal(StatusCode.OK, status.StatusCode);
+                Assert.Equal("", status.Detail);
+                Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
             }
         }
     }
