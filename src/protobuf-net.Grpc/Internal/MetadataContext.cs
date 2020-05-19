@@ -31,10 +31,13 @@ namespace ProtoBuf.Grpc.Internal
             return this;
         }
 
-        internal void SetTrailers(RpcException fault)
+        internal void SetTrailers(RpcException? fault)
         {
-            _trailers = fault.Trailers ?? Metadata.Empty;
-            Status = fault.Status;
+            if (fault is object)
+            {
+                _trailers = fault.Trailers ?? Metadata.Empty;
+                Status = fault.Status;
+            }
         }
 
         internal void SetTrailers(Metadata trailers, Status status)

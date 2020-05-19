@@ -1,18 +1,18 @@
 ﻿using Grpc.Core;
+using Grpc.Net.Client;
+using ProtoBuf;
+using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Client;
+using ProtoBuf.Grpc.Configuration;
+using ProtoBuf.Grpc.Server;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-using ProtoBuf.Grpc.Server;
-using ProtoBuf;
-using System.Collections.Generic;
-using ProtoBuf.Grpc;
-using Grpc.Net.Client;
-using ProtoBuf.Grpc.Client;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Linq;
-using ProtoBuf.Grpc.Configuration;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -29,7 +29,7 @@ namespace protobuf_net.Grpc.Test.Integration
             var tmp = Output;
             if (tmp is object)
             {
-                lock(tmp)
+                lock (tmp)
                 {
                     tmp.WriteLine(message);
                 }
@@ -42,7 +42,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
-            _server.Services.AddCodeFirst(new StreamServer());
+            _server.Services.AddCodeFirst(new StreamServer(this));
             _server.Start();
         }
 
@@ -59,26 +59,65 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         RunToCompletion,
         FaultBeforeYield,
+        FaultBeforeHeaders,
         YieldNothing,
         FaultAfterYield,
+        TakeNothingBadProducer,  // does not observe cancellation
+        TakeNothingGoodProducer, // observes cancellation
     }
 
     class StreamServer : IStreamAPI
     {
+        readonly StreamTestsFixture _fixture;
+        internal StreamServer(StreamTestsFixture fixture)
+            => _fixture = fixture;
+        public void Log(string message) => _fixture.Log(message);
+
         async IAsyncEnumerable<Foo> IStreamAPI.DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
+            Log("server checking scenario");
             var header = ctx.RequestHeaders.GetValue(nameof(Scenario));
             var scenario = !string.IsNullOrWhiteSpace(header) && Enum.TryParse<Scenario>(header, out var tmp) ? tmp : Scenario.RunToCompletion;
 
-            if (scenario == Scenario.YieldNothing) yield break;
-            if (scenario == Scenario.FaultBeforeYield) throw new InvalidOperationException("before yield");
+            if (scenario == Scenario.FaultBeforeHeaders) Throw("before headers");
 
-            await foreach (var value in values.WithCancellation(ctx.CancellationToken))
+            var sCtx = ctx.ServerCallContext!;
+            Log("server yielding response headers");
+            await sCtx.WriteResponseHeadersAsync(new Metadata { { "prekey", "preval" } });
+
+            Log("server setting response status in advance");
+            sCtx.Status = new Status(StatusCode.OK, "resp detail");
+            sCtx.ResponseTrailers.Add("postkey", "postval");
+
+            if (scenario == Scenario.FaultBeforeYield) Throw("before yield");
+
+            switch (scenario)
             {
-                yield return value;
+                case Scenario.TakeNothingBadProducer:
+                case Scenario.TakeNothingGoodProducer:
+                    break;
+                default:
+                    await foreach (var value in values.WithCancellation(ctx.CancellationToken))
+                    {
+                        Log($"server received {value.Bar}");
+                        switch (scenario)
+                        {
+                            case Scenario.YieldNothing:
+                                break;
+                            default:
+                                Log($"server yielding {value.Bar}");
+                                yield return value;
+                                break;
+                        }
+                    }
+                    break;
             }
 
-            if (scenario == Scenario.FaultAfterYield) throw new InvalidOperationException("after yield");
+            if (scenario == Scenario.FaultAfterYield) Throw("after yield");
+
+            static void Throw(string state)
+                => throw new RpcException(new Status(StatusCode.Internal, state + " detail"),
+                new Metadata { { "faultkey", state + " faultval" } }, state + " message");
         }
     }
 
@@ -102,32 +141,172 @@ namespace protobuf_net.Grpc.Test.Integration
 
         public void Dispose() => _fixture?.SetOutput(null);
 
+        const int DEFAULT_SIZE = 20;
         [Theory]
-        [InlineData(Scenario.RunToCompletion, 10, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination)]
-        [InlineData(Scenario.FaultBeforeYield, 0, CallContextFlags.IgnoreStreamTermination)]
-        [InlineData(Scenario.FaultAfterYield, 10, CallContextFlags.None)]
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.None)]
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.None)]
+        [InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
         public async Task DuplexEcho(Scenario scenario, int expectedCount, CallContextFlags flags)
         {
             using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
             var client = http.CreateGrpcService<IStreamAPI>();
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
-            var values = new List<int>(10);
-            await foreach(var item in client.DuplexEcho(For(10), ctx))
+
+            bool haveCheckedHeaders = false;
+            var values = new List<int>(expectedCount);
+            await foreach (var item in client.DuplexEcho(For(DEFAULT_SIZE, checkForCancellation: scenario != Scenario.TakeNothingBadProducer), ctx))
             {
+                CheckHeaderState();
                 values.Add(item.Bar);
             }
+            _fixture?.Log("after await foreach");
+            CheckHeaderState();
             Assert.Equal(string.Join(',', Enumerable.Range(0, expectedCount)), string.Join(',', values));
+
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {   // check trailers
+                Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
+
+                var status = ctx.ResponseStatus();
+                Assert.Equal(StatusCode.OK, status.StatusCode);
+                Assert.Equal("resp detail", status.Detail);
+            }
+
+            void CheckHeaderState()
+            {
+                if (haveCheckedHeaders) return;
+                haveCheckedHeaders = true;
+                if ((flags & CallContextFlags.CaptureMetadata) != 0)
+                {
+                    Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                }
+            }
         }
 
-        IAsyncEnumerable<Foo> For(int count, int from = 0, int millisecondsDelay = 10)
-            => ForImpl(_fixture, count, from, millisecondsDelay, default);
-        private static async IAsyncEnumerable<Foo> ForImpl(StreamTestsFixture fixture, int count, int from, int millisecondsDelay, [EnumeratorCancellation] CancellationToken cancellationToken)
+        [Theory]
+        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.None)]
+        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.CaptureMetadata)]
+        public async Task DuplexEchoBadProducer(Scenario scenario, int expectedCount, CallContextFlags flags)
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            bool haveCheckedHeaders = false;
+            var values = new List<int>(expectedCount);
+
+            var ex = await Assert.ThrowsAnyAsync<Exception>(async () =>
+            {
+                await foreach (var item in client.DuplexEcho(For(DEFAULT_SIZE, checkForCancellation: scenario != Scenario.TakeNothingBadProducer), ctx))
+                {
+                    CheckHeaderState();
+                    values.Add(item.Bar);
+                }
+            });
+            Assert.Equal("A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying the IgnoreStreamTermination flag when creating the CallContext", ex.Message);
+            Assert.Equal(string.Join(',', Enumerable.Range(0, expectedCount)), string.Join(',', values));
+
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {   // check trailers
+                Assert.Equal("postval", ctx.ResponseTrailers().GetValue("postkey"));
+
+                var status = ctx.ResponseStatus();
+                Assert.Equal(StatusCode.OK, status.StatusCode);
+                Assert.Equal("resp detail", status.Detail);
+            }
+
+            void CheckHeaderState()
+            {
+                if (haveCheckedHeaders) return;
+                haveCheckedHeaders = true;
+                if ((flags & CallContextFlags.CaptureMetadata) != 0)
+                {
+                    Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.None)]
+        [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeYield, 0, "before yield", CallContextFlags.None)]
+        [InlineData(Scenario.FaultBeforeYield, 0, "before yield", CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeHeaders, 0, "before headers", CallContextFlags.None)]
+        [InlineData(Scenario.FaultBeforeHeaders, 0, "before headers", CallContextFlags.CaptureMetadata)]
+        public async Task DuplexEchoFault(Scenario scenario, int expectedCount, string marker, CallContextFlags flags)
+        {
+            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
+            var client = http.CreateGrpcService<IStreamAPI>();
+
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            bool haveCheckedHeaders = false;
+            var values = new List<int>(expectedCount);
+
+            var rpc = await Assert.ThrowsAsync<RpcException>(async () =>
+            {
+                await foreach (var item in client.DuplexEcho(For(DEFAULT_SIZE), ctx))
+                {
+                    CheckHeaderState();
+                    values.Add(item.Bar);
+                }
+            });
+            Assert.Equal(StatusCode.Internal, rpc.Status.StatusCode);
+            Assert.Equal(marker + " detail", rpc.Status.Detail);
+            Assert.Equal(marker + " faultval", rpc.Trailers.GetValue("faultkey"));
+
+            _fixture?.Log("after await foreach");
+            CheckHeaderState();
+            Assert.Equal(string.Join(',', Enumerable.Range(0, expectedCount)), string.Join(',', values));
+
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {   // check trailers
+                Assert.Equal(marker + " faultval", ctx.ResponseTrailers().GetValue("faultkey"));
+
+                var status = ctx.ResponseStatus();
+                Assert.Equal(StatusCode.Internal, status.StatusCode);
+                Assert.Equal(marker + " detail", status.Detail);
+            }
+
+            void CheckHeaderState()
+            {
+                if (haveCheckedHeaders) return;
+                haveCheckedHeaders = true;
+
+                if ((flags & CallContextFlags.CaptureMetadata) != 0)
+                {
+                    switch (scenario)
+                    {
+                        case Scenario.FaultBeforeHeaders:
+                            Assert.Null(ctx.ResponseHeaders().GetValue("prekey"));
+                            break;
+                        default:
+                            Assert.Equal("preval", ctx.ResponseHeaders().GetValue("prekey"));
+                            break;
+                    }
+                }
+            }
+        }
+
+        IAsyncEnumerable<Foo> For(int count, int from = 0, int millisecondsDelay = 10, bool checkForCancellation = true)
+            => ForImpl(_fixture, count, from, millisecondsDelay, checkForCancellation, default);
+        private static async IAsyncEnumerable<Foo> ForImpl(StreamTestsFixture fixture, int count, int from, int millisecondsDelay,
+            bool checkForCancellation, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             void CheckForCancellation(string when)
             {
-                if (cancellationToken.IsCancellationRequested)
+                if (checkForCancellation && cancellationToken.IsCancellationRequested)
                 {
                     fixture.Log("cancellation detected in producer " + when);
                     cancellationToken.ThrowIfCancellationRequested();

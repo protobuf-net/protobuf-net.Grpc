@@ -322,31 +322,13 @@ namespace ProtoBuf.Grpc.Internal
                 cancellationToken.ThrowIfCancellationRequested();
 
                 using var allDone = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, default);
-                try
-                {
-                    await foreach (var value in request.WithCancellation(allDone.Token).ConfigureAwait(false))
-                    {
-                        try
-                        {
-                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
-                            await call.RequestStream.WriteAsync(value).ConfigureAwait(false);
-                        }
-                        catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
-                        {
-                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
-                            throw new IncompleteSendRpcException(rpc);
-                        }
-                    }
-                }
-                finally
-                {
-                    // want to cancel the producer *however* we exit
-                    allDone.Cancel();
-                }
-                await call.RequestStream.CompleteAsync().ConfigureAwait(false);
 
                 if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
+                // send all the data *before* we check for a reply
+                await SendAll(call.RequestStream, request, allDone, ignoreStreamTermination, metadata).ConfigureAwait(false);
+
+                allDone.Token.ThrowIfCancellationRequested();
                 var result = await call.ResponseAsync.ConfigureAwait(false);
 
                 metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
@@ -385,7 +367,7 @@ namespace ProtoBuf.Grpc.Internal
                 try
                 {
                     // we'll run the "send" as a concurrent operation
-                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone.Token, ignoreStreamTermination), allDone.Token);
+                    sendAll = Task.Run(() => SendAll(call.RequestStream, request, allDone, ignoreStreamTermination, metadata), allDone.Token);
 
                     if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
 
@@ -409,51 +391,54 @@ namespace ProtoBuf.Grpc.Internal
                             yield return seq.Current;
                         }
                     } while (haveMore);
+
+                    metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
                 }
                 finally
                 {   // want to cancel the producer *however* we exit
                     allDone.Cancel();
                 }
+
                 try
                 {
                     await sendAll.ConfigureAwait(false); // observe any problems from sending
-
-                    metadata?.SetTrailers(call.GetTrailers(), call.GetStatus());
-                }
-                catch (RpcException fault)
-                {
-                    metadata?.SetTrailers(fault);
-                    throw;
-                }
-            }
-
-            static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationToken cancellationToken, bool ignoreStreamTermination)
-            {
-                try
-                {
-                    await foreach (var value in request.WithCancellation(cancellationToken).ConfigureAwait(false))
-                    {
-                        try
-                        {
-                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
-                            await output.WriteAsync(value).ConfigureAwait(false);
-                        }
-                        catch (RpcException rpc) when (rpc.StatusCode == StatusCode.OK)
-                        {
-                            if (ignoreStreamTermination && cancellationToken.IsCancellationRequested) break;
-                            throw new IncompleteSendRpcException(rpc);
-                        }
-                    }
-                    await output.CompleteAsync().ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { }
+            }
+        }
+
+        static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationTokenSource allDone, bool ignoreStreamTermination, MetadataContext? metadata)
+        {
+            try
+            {
+                await foreach (var value in request.WithCancellation(allDone.Token).ConfigureAwait(false))
+                {
+                    try
+                    {
+                        if (ignoreStreamTermination && allDone.IsCancellationRequested) break;
+                        await output.WriteAsync(value).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        metadata?.SetTrailers(ex as RpcException);
+                        if (ignoreStreamTermination) break;
+                        throw new IncompleteSendRpcException(ex);
+                    }
+                    if (allDone.IsCancellationRequested) allDone.Token.ThrowIfCancellationRequested();
+                }
+                await output.CompleteAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                allDone.Cancel();
+                throw;
             }
         }
     }
     internal sealed class IncompleteSendRpcException : Exception
     {
-        public IncompleteSendRpcException(RpcException rpc) : base(
-            "A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying CallContextFlags.IgnoreStreamTermination on the call-context", rpc)
+        public IncompleteSendRpcException(Exception fault) : base(
+            $"A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying the {nameof(CallContextFlags.IgnoreStreamTermination)} flag when creating the {nameof(CallContext)}", fault)
         { }
     }
 }

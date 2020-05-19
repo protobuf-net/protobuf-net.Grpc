@@ -177,7 +177,7 @@ namespace ProtoBuf.Grpc
         private T ThrowNoContext<T>()
         {
             if (ServerCallContext != null) throw new InvalidOperationException("Response metadata is not available for server contexts");
-            throw new InvalidOperationException("The CaptureMetadata flag must be specified when creating the CallContext to enable response metadata");
+            throw new InvalidOperationException($"The {nameof(CallContextFlags.CaptureMetadata)} flag must be specified when creating the {nameof(CallContext)} to enable response metadata");
         }
     }
 
