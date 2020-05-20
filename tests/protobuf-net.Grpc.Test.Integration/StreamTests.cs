@@ -207,6 +207,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 {
                     var faultTrailers = new Metadata();
                     AddSum(faultTrailers);
+                    AddSum(ctx.ServerCallContext!.ResponseTrailers);
                     throw new RpcException(new Status(StatusCode.Internal, "oops"), faultTrailers);
                 }
                 sum += i;
@@ -604,7 +605,7 @@ namespace protobuf_net.Grpc.Test.Integration
                             Assert.Equal("", status.Detail);
                         }
                         else
-                        {   // see https://github.com/grpc/grpc-dotnet/issues/915
+                        {   // see https://github.com/grpc/grpc-dotnet/issues/916
                             Assert.Equal(StatusCode.Internal, status.StatusCode);
                             Assert.Equal("Failed to deserialize response message.", status.Detail);
                         }
@@ -817,9 +818,17 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
 
                 // managed client doesn't seem to get fault trailers on server-streaming
-                var expect = Enumerable.Range(0, 5).Sum();
-                Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
-                Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
+                if (IsManagedClient)
+                {
+                    Assert.Null(ctx.ResponseTrailers().GetInt32("sum"));
+                    Assert.Null(ex.Trailers.GetInt32("sum"));
+                }
+                else
+                {
+                    var expect = Enumerable.Range(0, 5).Sum();
+                    Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
+                    Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
+                }
             }
             else
             {
