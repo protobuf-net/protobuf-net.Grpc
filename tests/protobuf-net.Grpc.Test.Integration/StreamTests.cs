@@ -195,7 +195,6 @@ namespace protobuf_net.Grpc.Test.Integration
                 if (i == fault)
                 {
                     var faultTrailers = new Metadata();
-                    AddSum(ctx.ServerCallContext!.ResponseTrailers);
                     AddSum(faultTrailers);
                     throw new RpcException(new Status(StatusCode.Internal, "oops"), faultTrailers);
                 }
@@ -269,9 +268,9 @@ namespace protobuf_net.Grpc.Test.Integration
     }
 
 
-    public class NativeStreamTestsFixture : StreamTests
+    public class NativeStreamTests : StreamTests
     {
-        public NativeStreamTestsFixture(StreamTestsFixture fixture, ITestOutputHelper log) : base(10043, fixture, log) { }
+        public NativeStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(10043, fixture, log) { }
         protected override IAsyncDisposable CreateClient(out IStreamAPI client)
         {
             var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
@@ -288,9 +287,9 @@ namespace protobuf_net.Grpc.Test.Integration
     }
 
 #if NETCOREAPP3_1
-    public class ManagedStreamTestsFixture : StreamTests
+    public class ManagedStreamTests : StreamTests
     {
-        public ManagedStreamTestsFixture(StreamTestsFixture fixture, ITestOutputHelper log) : base(10044, fixture, log) { }
+        public ManagedStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(10044, fixture, log) { }
         protected override IAsyncDisposable CreateClient(out IStreamAPI client)
         {
             var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");

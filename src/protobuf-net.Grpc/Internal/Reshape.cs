@@ -287,8 +287,8 @@ namespace ProtoBuf.Grpc.Internal
                         haveMore = await seq.MoveNext(cancellationToken).ConfigureAwait(false);
                     }
                     catch (RpcException fault)
-                    {   // note: the RpcException doesn't seem to carry trailers in this case currently;
-                        // leaving this here so that it gets fixed transparently if that ever changes
+                    {   // note: the RpcException doesn't seem to carry trailers in the managed
+                        // client; see https://github.com/grpc/grpc-dotnet/issues/915
                         metadata?.SetTrailers(fault);
                         throw;
                     }
