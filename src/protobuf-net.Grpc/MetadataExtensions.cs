@@ -58,9 +58,13 @@ namespace ProtoBuf.Grpc
             {
                 return int.Parse(value, NumberFormatInfo.InvariantInfo);
             }
-            catch(Exception ex)
+            catch(FormatException ex)
             {
-                ex.Data?.Add(nameof(key), key);
+                ex.Data?.Add("key", key);
+                ex.Data?.Add("value", value);
+#if DEBUG
+                throw new FormatException($"key '{key}', value '{value}' could not be parsed as an integer", ex);
+#endif
                 throw;
             }
         }

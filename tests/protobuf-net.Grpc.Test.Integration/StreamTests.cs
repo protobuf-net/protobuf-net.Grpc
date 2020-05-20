@@ -818,14 +818,19 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
 
                 // managed client doesn't seem to get fault trailers on server-streaming
+                var expect = Enumerable.Range(0, 5).Sum();
                 if (IsManagedClient)
                 {
-                    Assert.Null(ctx.ResponseTrailers().GetInt32("sum"));
-                    Assert.Null(ex.Trailers.GetInt32("sum"));
+                    void Check(string? value)
+                    {   // null or duplicated
+                        _fixture.Log($"trailer value: '{value ?? "(null)"}'");
+                        if (value != null) Assert.Equal($"{expect},{expect}", value);
+                    }
+                    Check(ctx.ResponseTrailers().GetString("sum"));
+                    Check(ex.Trailers.GetString("sum"));
                 }
                 else
                 {
-                    var expect = Enumerable.Range(0, 5).Sum();
                     Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
                     Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
                 }
