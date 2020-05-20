@@ -1,3 +1,4 @@
+# if NETCOREAPP3_1
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
@@ -269,3 +270,4 @@ namespace protobuf_net.Grpc.Test.Integration
         }
     }
 }
+#endif

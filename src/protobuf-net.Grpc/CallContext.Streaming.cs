@@ -8,6 +8,13 @@ namespace ProtoBuf.Grpc
 {
     public readonly partial struct CallContext
     {
+        /// <inheritdoc/>
+        public override bool Equals(object obj) => throw new NotSupportedException();
+        /// <inheritdoc/>
+        public override int GetHashCode() => throw new NotSupportedException();
+        /// <inheritdoc/>
+        public override string ToString() => nameof(CallContext);
+
         /// <summary>
         /// Performs a full-duplex operation that will await both the producer and consumer streams
         /// </summary>

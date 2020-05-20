@@ -7,7 +7,7 @@ namespace ProtoBuf.Grpc
     /// <summary>
     /// Provides auxiliary helper methods to Grpc.Core features
     /// </summary>
-    public static class GrpcCoreExtensions
+    public static class MetadataExtensions
     {
         /// <summary>
         /// Gets a header Entry by key
@@ -20,7 +20,7 @@ namespace ProtoBuf.Grpc
                 for (int i = 0; i < count; i++)
                 {
                     var header = headers[i];
-                    if (string.Equals(header.Key, key, System.StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(header.Key, key, StringComparison.OrdinalIgnoreCase))
                     {
                         return header;
                     }

@@ -1,5 +1,4 @@
 ﻿using Grpc.Core;
-using Grpc.Net.Client;
 using ProtoBuf;
 using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Client;
@@ -16,11 +15,9 @@ using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
-
     public class StreamTestsFixture : IAsyncDisposable
     {
-        public const int Port = 10043;
-        private readonly Server _server;
+        private Server? _server;
 
         public ITestOutputHelper? Output { get; private set; }
         public void SetOutput(ITestOutputHelper? output) => Output = output;
@@ -35,18 +32,28 @@ namespace protobuf_net.Grpc.Test.Integration
                 }
             }
         }
-        public StreamTestsFixture()
-        {
+        public StreamTestsFixture() { }
 
-            _server = new Server
+        public int Port { get; private set; }
+        public void Init(int port)
+        {
+            if (_server == null)
             {
-                Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
-            };
-            _server.Services.AddCodeFirst(new StreamServer(this));
-            _server.Start();
+                Port = port;
+                _server = new Server
+                {
+                    Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
+                };
+                _server.Services.AddCodeFirst(new StreamServer(this));
+                _server.Start();
+            }
+            else if (Port != port)
+            {
+                throw new InvalidOperationException("Cannot change port on the fixture instance");
+            }
         }
 
-        public ValueTask DisposeAsync() => new ValueTask(_server.ShutdownAsync());
+        public ValueTask DisposeAsync() => _server == null ? default : new ValueTask(_server.ShutdownAsync());
     }
 
     [Service]
@@ -261,18 +268,64 @@ namespace protobuf_net.Grpc.Test.Integration
         public int Bar { get; set; }
     }
 
-    public class StreamTests : IClassFixture<StreamTestsFixture>, IDisposable
-    {
-        private readonly StreamTestsFixture _fixture;
 
-        public StreamTests(StreamTestsFixture fixture, ITestOutputHelper log)
+    public class NativeStreamTestsFixture : StreamTests
+    {
+        public NativeStreamTestsFixture(StreamTestsFixture fixture, ITestOutputHelper log) : base(10043, fixture, log) { }
+        protected override IAsyncDisposable CreateClient(out IStreamAPI client)
+        {
+            var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
+            client = channel.CreateGrpcService<IStreamAPI>();
+            return new DisposableChannel(channel);
+        }
+        sealed class DisposableChannel : IAsyncDisposable
+        {
+            private readonly Channel _channel;
+            public DisposableChannel(Channel channel)
+                => _channel = channel;
+            public ValueTask DisposeAsync() => new ValueTask(_channel.ShutdownAsync());
+        }
+    }
+
+#if NETCOREAPP3_1
+    public class ManagedStreamTestsFixture : StreamTests
+    {
+        public ManagedStreamTestsFixture(StreamTestsFixture fixture, ITestOutputHelper log) : base(10044, fixture, log) { }
+        protected override IAsyncDisposable CreateClient(out IStreamAPI client)
+        {
+            var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
+            client = http.CreateGrpcService<IStreamAPI>();
+            return new DisposableChannel(http);
+        }
+        sealed class DisposableChannel : IAsyncDisposable
+        {
+            private readonly global::Grpc.Net.Client.GrpcChannel _channel;
+            public DisposableChannel(global::Grpc.Net.Client.GrpcChannel channel)
+                => _channel = channel;
+            public async ValueTask DisposeAsync()
+            {
+                await _channel.ShutdownAsync();
+                _channel.Dispose();
+            }
+        }
+    }
+#endif
+
+    public abstract class StreamTests : IClassFixture<StreamTestsFixture>, IDisposable
+    {
+        protected int Port => _fixture.Port;
+        private readonly StreamTestsFixture _fixture;
+        public StreamTests(int port, StreamTestsFixture fixture, ITestOutputHelper log)
         {
             _fixture = fixture;
+            fixture.Init(port);
             fixture?.SetOutput(log);
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
         public void Dispose() => _fixture?.SetOutput(null);
+
+        protected abstract IAsyncDisposable CreateClient(out IStreamAPI client);
 
         const int DEFAULT_SIZE = 20;
         [Theory]
@@ -296,8 +349,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
         public async Task DuplexEcho(Scenario scenario, int expectedCount, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -310,7 +362,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
             _fixture?.Log("after await foreach");
             CheckHeaderState();
-            Assert.Equal(string.Join(',', Enumerable.Range(0, expectedCount)), string.Join(',', values));
+            Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
             {   // check trailers
@@ -348,8 +400,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.CaptureMetadata)]
         public async Task DuplexEchoBadProducer(Scenario scenario, int expectedCount, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -365,7 +416,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 }
             });
             Assert.Equal("A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying the IgnoreStreamTermination flag when creating the CallContext", ex.Message);
-            Assert.Equal(string.Join(',', Enumerable.Range(0, expectedCount)), string.Join(',', values));
+            Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
             {   // check trailers
@@ -397,8 +448,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.FaultBeforeHeaders, 0, "before headers", CallContextFlags.CaptureMetadata)]
         public async Task DuplexEchoFault(Scenario scenario, int expectedCount, string marker, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -419,7 +469,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             _fixture?.Log("after await foreach");
             CheckHeaderState();
-            Assert.Equal(string.Join(',', Enumerable.Range(0, expectedCount)), string.Join(',', values));
+            Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
             {   // check trailers
@@ -501,8 +551,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.FaultSuccessGoodProducer, CallContextFlags.CaptureMetadata)]
         public async Task AsyncUnaryFault(Scenario scenario, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -576,8 +625,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
         public async Task AsyncUnarySuccess(Scenario scenario, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -601,10 +649,9 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultSuccessGoodProducer, CallContextFlags.None)]
         [InlineData(Scenario.FaultSuccessGoodProducer, CallContextFlags.CaptureMetadata)]
-        public void BlockingUnaryFault(Scenario scenario, CallContextFlags flags)
+        public async Task BlockingUnaryFault(Scenario scenario, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -656,10 +703,9 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.RunToCompletion, CallContextFlags.None)]
         [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
 
-        public void BlockingUnarySuccess(Scenario scenario, CallContextFlags flags)
+        public async Task BlockingUnarySuccess(Scenario scenario, CallContextFlags flags)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
@@ -686,8 +732,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(0, 20, 15, true)]
         public async Task FullDuplexAsync(int send, int produce, int stopReadingAfter = -1, bool byItem = false)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var reqHeaders = new Metadata();
             reqHeaders.Add("produce", produce);
@@ -713,8 +758,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [Fact]
         public async Task ClientStreaming()
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             var result = await client.ClientStreaming(For(Scenario.RunToCompletion, 10));
             Assert.Equal(Enumerable.Range(0, 10).Sum(), result.Bar);
@@ -725,8 +769,7 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(false)]
         public async Task ServerStreaming(bool fault)
         {
-            using var http = GrpcChannel.ForAddress($"http://localhost:{StreamTestsFixture.Port}");
-            var client = http.CreateGrpcService<IStreamAPI>();
+            await using var svc = CreateClient(out var client);
 
             int count = 0;
             var reqHeaders = new Metadata();
@@ -743,10 +786,11 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal("oops", ex.Status.Detail);
                 Assert.Equal(StatusCode.Internal, ex.Status.StatusCode);
                 Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
-                // don't seem to get fault trailers on server-streaming
-                // var expect = Enumerable.Range(0, 5).Sum();
-                // Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
-                // Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
+                
+                // managed client doesn't seem to get fault trailers on server-streaming
+                var expect = Enumerable.Range(0, 5).Sum();
+                Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
+                Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
             }
             else
             {
