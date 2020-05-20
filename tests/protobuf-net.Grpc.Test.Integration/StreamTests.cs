@@ -817,10 +817,9 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal(StatusCode.Internal, ex.Status.StatusCode);
                 Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
 
-                // managed client doesn't seem to get fault trailers on server-streaming
                 var expect = Enumerable.Range(0, 5).Sum();
                 if (IsManagedClient)
-                {
+                {   // see https://github.com/grpc/grpc-dotnet/issues/915
                     void Check(string? value)
                     {   // null or duplicated
                         _fixture.Log($"trailer value: '{value ?? "(null)"}'");
