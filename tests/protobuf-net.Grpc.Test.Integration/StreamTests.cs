@@ -172,7 +172,18 @@ namespace protobuf_net.Grpc.Test.Integration
             return value;
         }
 
-        Foo IStreamAPI.UnaryBlocking(Foo value, CallContext ctx) => ((IStreamAPI)this).UnaryAsync(value, ctx).Result; // sync-over-async for this test only
+        Foo IStreamAPI.UnaryBlocking(Foo value, CallContext ctx)
+        {
+            try
+            {
+                return ((IStreamAPI)this).UnaryAsync(value, ctx).Result; // sync-over-async for this test only
+            }
+            catch (RpcException ex)
+            {
+                Log($"RpcException: {ex.StatusCode}, '{ex.Message}', {ex.Trailers?.Count ?? 0} trailers");
+                throw;
+            }
+        }
 
         async ValueTask<Foo> IStreamAPI.ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
@@ -289,6 +300,7 @@ namespace protobuf_net.Grpc.Test.Integration
 #if NETCOREAPP3_1
     public class ManagedStreamTests : StreamTests
     {
+        public override bool IsManagedClient => true;
         public ManagedStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(10044, fixture, log) { }
         protected override IAsyncDisposable CreateClient(out IStreamAPI client)
         {
@@ -321,6 +333,8 @@ namespace protobuf_net.Grpc.Test.Integration
             fixture?.SetOutput(log);
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
+
+        public virtual bool IsManagedClient => false;
 
         public void Dispose() => _fixture?.SetOutput(null);
 
@@ -584,8 +598,16 @@ namespace protobuf_net.Grpc.Test.Integration
                         Assert.Equal("before trailers detail", status.Detail);
                         break;
                     case Scenario.FaultSuccessGoodProducer:
-                        Assert.Equal(StatusCode.OK, status.StatusCode);
-                        Assert.Equal("", status.Detail);
+                        if (IsManagedClient)
+                        {
+                            Assert.Equal(StatusCode.OK, status.StatusCode);
+                            Assert.Equal("", status.Detail);
+                        }
+                        else
+                        {   // see https://github.com/grpc/grpc-dotnet/issues/915
+                            Assert.Equal(StatusCode.Internal, status.StatusCode);
+                            Assert.Equal("Failed to deserialize response message.", status.Detail);
+                        }
                         break;
                     default:
                         throw new NotImplementedException();
@@ -684,8 +706,16 @@ namespace protobuf_net.Grpc.Test.Integration
                         Assert.Equal("before trailers detail", status.Detail);
                         break;
                     case Scenario.FaultSuccessGoodProducer:
-                        Assert.Equal(StatusCode.OK, status.StatusCode);
-                        Assert.Equal("", status.Detail);
+                        if (IsManagedClient)
+                        {
+                            Assert.Equal(StatusCode.OK, status.StatusCode);
+                            Assert.Equal("", status.Detail);
+                        }
+                        else
+                        {   // see https://github.com/grpc/grpc-dotnet/issues/916
+                            Assert.Equal(StatusCode.Internal, status.StatusCode);
+                            Assert.Equal("Failed to deserialize response message.", status.Detail);
+                        }
                         break;
                     default:
                         throw new NotImplementedException();
@@ -785,7 +815,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal("oops", ex.Status.Detail);
                 Assert.Equal(StatusCode.Internal, ex.Status.StatusCode);
                 Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
-                
+
                 // managed client doesn't seem to get fault trailers on server-streaming
                 var expect = Enumerable.Range(0, 5).Sum();
                 Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
