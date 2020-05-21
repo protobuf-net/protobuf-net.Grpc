@@ -7,7 +7,10 @@
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
-
+  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.1'">
+    <DefineConstants>$(DefineConstants);CLIENT_FACTORY</DefineConstants>
+  </PropertyGroup>
+  
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.6.1" />
     <PackageReference Include="xunit" Version="2.4.1" />
@@ -15,11 +18,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!--<ProjectReference Include="..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />-->
-    <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.1'">
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="3.1.4" />
   </ItemGroup>
 
 </Project>
