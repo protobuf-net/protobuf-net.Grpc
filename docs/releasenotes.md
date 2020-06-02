@@ -1,5 +1,15 @@
 # Release Notes
 
+## 1.0.75
+
+- addition of [`ClientFactory`](https://www.nuget.org/packages/protobuf-net.Grpc.ClientFactory) support
+- improvements to streaming (client/server/duplex) orchestration
+- improvements to metadata (headers/trailers) collection
+
+## 1.0.21 - 1.0.37
+
+- (untracked)
+
 ## 1.0.13
 
 - add API to allow additional configuration when calling `AddCodeFirstGrpc`
