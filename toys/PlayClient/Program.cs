@@ -89,7 +89,8 @@ namespace PlayClient
             try
             {
                 // await CallBidiStreamingServiceViaEnumerator(channel);
-                await CallBidiStreamingServiceViaChannel(channel);
+                // await CallBidiStreamingServiceViaChannel(channel);
+                await CallBidiStreamingServiceViaChannelPush(channel);
 
                 //var calculator = channel.CreateGrpcService<ICalculator>();
                 //await TestCalculator(calculator);
@@ -176,6 +177,71 @@ namespace PlayClient
             finally
             {
                 Console.WriteLine("writer is FINISHED");
+            }
+        }
+
+        private static async Task CallBidiStreamingServiceViaChannelPush(ChannelBase channel)
+        {
+            var bidiStreamingClient = channel.CreateGrpcService<IBidiStreamingService>();
+            var options = new CallContext(flags: CallContextFlags.IgnoreStreamTermination);
+
+            var data = PushAsyncEnumerable.Create<BidiStreamingRequest>();
+
+            //Read stream - processed on a background task
+            var send = Task.Run(() => SendAsync(data));
+            try
+            {
+                await foreach (var response in bidiStreamingClient.TestAsync(data, options))
+                {
+                    Console.WriteLine($"Response received with payload: {response.Payload}");
+                }
+                Console.WriteLine("success exit of async enumeration");
+            }
+            catch (InvalidOperationException ioe) when (ioe.Message == "Can't write the message because the call is complete.")
+            {
+                Console.WriteLine($"IOE exit of async enumeration: {ioe.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"exception exit of async enumeration: {ex.Message}");
+                Console.WriteLine(ex.GetType().FullName);
+                Console.WriteLine(ex.Source);
+            }
+            Console.WriteLine("Seeing if our SendAsync exits...");
+            try
+            {
+                await send;
+                Console.WriteLine($"SendAsync exited cleanly");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SendAsync faulted: {ex.Message}");
+            }
+
+            static async Task SendAsync(IPushAsyncEnumerable<BidiStreamingRequest> target)
+            {
+                try
+                {
+                    var n = 0;
+                    while (!target.IsCompleted)
+                    {
+                        var request = new BidiStreamingRequest { Payload = $"Payload {n++}" };
+                        Console.WriteLine($"Sending request with payload: {request.Payload}");
+
+                        await target.PushAsync(request);
+
+                        //Look busy
+                        await Task.Delay(1000);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"SendAsync faulted: {ex.Message}");
+                }
+                finally
+                {
+                    Console.WriteLine("writer is FINISHED");
+                }
             }
         }
 
