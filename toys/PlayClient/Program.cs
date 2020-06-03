@@ -224,7 +224,9 @@ namespace PlayClient
                 {
                     var n = 0;
                     while (!target.IsCompleted)
-                    {
+                    {   // note: normally the caller would also use .Complete etc,
+                        // but in this example we're looping until we're told not to
+
                         var request = new BidiStreamingRequest { Payload = $"Payload {n++}" };
                         Console.WriteLine($"Sending request with payload: {request.Payload}");
 
