@@ -1,5 +1,5 @@
-﻿using System;
-using System.Linq;
+﻿using ProtoBuf.Grpc.Internal;
+using System;
 using System.Reflection;
 
 namespace ProtoBuf.Grpc.Configuration
@@ -44,13 +44,13 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected virtual string GetDataContractName(Type contractType)
         {
-            var attribs = Attribute.GetCustomAttributes(contractType, inherit: true);
-            var attrib = attribs.FirstOrDefault(x => x.GetType().FullName == "ProtoBuf.ProtoContractAttribute");
-            if (TryGetProperty(attrib, "Name", out string name) && !string.IsNullOrWhiteSpace(name)) return name;
+            var attribs = AttributeHelper.For(contractType, inherit: false);
 
-            attrib = attribs.FirstOrDefault(x => x.GetType().FullName == "System.Runtime.Serialization.DataContractAttribute");
-            if (TryGetProperty(attrib, "Name", out name) && !string.IsNullOrWhiteSpace(name)) return name;
-
+            if (attribs.TryGetAnyNonWhitespaceString("ProtoBuf.ProtoContractAttribute", "Name", out var name)
+                || attribs.TryGetAnyNonWhitespaceString("System.Runtime.Serialization.DataContractAttribute", "Name", out name))
+            {
+                return name;
+            }
             return contractType.Name;
         }
 
@@ -61,9 +61,11 @@ namespace ProtoBuf.Grpc.Configuration
         {
             var opName = method.Name;
             if (opName.EndsWith("Async"))
+            {
 #pragma warning disable IDE0057 // not on all frameworks
-            opName = opName.Substring(0, opName.Length - 5);
+                opName = opName.Substring(0, opName.Length - 5);
 #pragma warning restore IDE0057
+            }
             return opName ?? "";
         }
 
@@ -79,22 +81,19 @@ namespace ProtoBuf.Grpc.Configuration
             }
 
             string? serviceName = null;
-            var attribs = Attribute.GetCustomAttributes(contractType, inherit: true);
-            var sa = attribs.OfType<ServiceAttribute>().FirstOrDefault();
-            if (sa == null)
+            var attribs = AttributeHelper.For(contractType, inherit: true);
+            if (attribs.IsDefined("ProtoBuf.Grpc.Configuration.ServiceAttribute"))
             {
-                // note: uses runtime discovery instead of hard ref because of bind/load problems
-                var sca = attribs.FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.ServiceContractAttribute");
-                if (sca == null)
-                {
-                    name = default;
-                    return false;
-                }
-                TryGetProperty(sca, "Name", out serviceName);
+                attribs.TryGetAnyNonWhitespaceString("ProtoBuf.Grpc.Configuration.ServiceAttribute", "Name", out serviceName);
+            }
+            else if (attribs.IsDefined("System.ServiceModel.ServiceContractAttribute"))
+            {
+                attribs.TryGetAnyNonWhitespaceString("System.ServiceModel.ServiceContractAttribute", "Name", out serviceName);
             }
             else
             {
-                serviceName = sa.Name;
+                name = default;
+                return false;
             }
             if (string.IsNullOrWhiteSpace(serviceName))
             {
@@ -130,41 +129,19 @@ namespace ProtoBuf.Grpc.Configuration
             }
 
             string? opName = null;
-            var attribs = Attribute.GetCustomAttributes(method, inherit: true);
-            var oa = attribs.OfType<OperationAttribute>().FirstOrDefault();
-            if (oa == null)
+            var attribs = AttributeHelper.For(method, inherit: true);
+            if (attribs.IsDefined("ProtoBuf.Grpc.Configuration.OperationAttribute"))
             {
-                // note: uses runtime discovery instead of hard ref because of bind/load problems
-                var oca = attribs
-                    .FirstOrDefault(x => x.GetType().FullName == "System.ServiceModel.OperationContractAttribute");
-                TryGetProperty(oca, "Name", out opName);
+                attribs.TryGetAnyNonWhitespaceString("ProtoBuf.Grpc.Configuration.OperationAttribute", "Name", out opName);
             }
-            else
+            else if (attribs.IsDefined("System.ServiceModel.OperationContractAttribute"))
             {
-                opName = oa.Name;
+                attribs.TryGetAnyNonWhitespaceString("System.ServiceModel.OperationContractAttribute", "Name", out opName);
             }
             if (string.IsNullOrWhiteSpace(opName))
                 opName = GetDefaultName(method);
             name = opName;
             return !string.IsNullOrWhiteSpace(name);
-        }
-
-        static bool TryGetProperty<T>(Attribute obj, string name, out T value)
-        {
-            value = default!;
-            if (obj != null)
-            {
-                var prop = obj.GetType().GetProperty(name);
-                if (prop != null)
-                {
-                    if (prop.GetValue(obj) is T typed)
-                    {
-                        value = typed;
-                        return true;
-                    }
-                }
-            }
-            return false;
         }
     }
 }
