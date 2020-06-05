@@ -265,7 +265,7 @@ namespace ProtoBuf.Grpc.Internal
         }
         public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType, IBindContext? bindContext)
         {
-            var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
             var ops = new List<ContractOperation>(all.Length);
             foreach (var method in all)
             {
