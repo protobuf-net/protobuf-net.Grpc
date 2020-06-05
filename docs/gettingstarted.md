@@ -115,6 +115,18 @@ public interface ICalculator
 }
 ```
 
+If you wish to allow optional cancellation in a general purpose way, and do *not* require access to headers/trailers/etc, then you can use `CancellationToken` in
+place of `CallContext`:
+
+``` c#
+[ServiceContract(Name = "Hyper.Calculator")]
+public interface ICalculator
+{
+    ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request, CancellationToken cancellationToken = default);
+}
+```
+
+
 If you want to use client/server-streaming or duplex communication, then instead of using `T`, `Task<T>` etc, you can use `IAsyncEnumerable<T>` for
 either the data parameter or the return type. For example, we could subscribe to a speaking clock via:
 

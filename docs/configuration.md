@@ -70,3 +70,5 @@ var options = new CallOptions(...);
 // invoke the RPC call
 var result = await client.SearchAsync(request, options);
 ```
+
+(note that a `CancellationToken` can be used in place of `CallContext` above to express optional cancellation; this is a more general purpose API, but does not permit access to headers/trailers/etc).

@@ -71,6 +71,7 @@ namespace protobuf_net.Grpc.Test.Integration
         ValueTask<Foo> UnaryAsync(Foo value, CallContext ctx = default);
 
         Foo UnaryBlocking(Foo value, CallContext ctx = default);
+        ValueTask TakeFive(CancellationToken cancellationToken = default);
     }
 
     public enum Scenario
@@ -98,6 +99,21 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             var header = ctx.RequestHeaders.GetString(nameof(Scenario));
             return !string.IsNullOrWhiteSpace(header) && Enum.TryParse<Scenario>(header, out var tmp) ? tmp : Scenario.RunToCompletion;
+        }
+
+        async ValueTask IStreamAPI.TakeFive(CancellationToken cancellationToken)
+        {
+            var start = DateTime.UtcNow;
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                Log($"server: delay ran to completion: {DateTime.UtcNow - start}");
+            }
+            catch(OperationCanceledException)
+            {
+                Log($"server: delay cancelled: {DateTime.UtcNow - start}");
+                throw;
+            }
         }
 
         async IAsyncEnumerable<Foo> IStreamAPI.DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx)
@@ -848,6 +864,24 @@ namespace protobuf_net.Grpc.Test.Integration
                 var expect = Enumerable.Range(0, 10).Sum();
                 Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
             }
+        }
+
+        [Fact]
+        public async Task UnaryCancelViaToken()
+        {
+            await using var svc = CreateClient(out var client);
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            var start = DateTime.UtcNow;
+
+            try
+            {
+                await client.TakeFive(cts.Token);
+            }
+            catch (RpcException rpc) when (rpc.StatusCode == StatusCode.Cancelled)
+            { }
+            var taken = DateTime.UtcNow - start;
+            _fixture.Log($"client: {taken}");
+            Assert.True(taken < TimeSpan.FromSeconds(1.5));
         }
     }
 }
