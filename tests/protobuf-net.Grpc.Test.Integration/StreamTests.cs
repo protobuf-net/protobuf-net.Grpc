@@ -867,7 +867,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
 
         [Fact]
-        public async Task UnaryCancelViaToken()
+        public async Task UnaryDelayCancelViaToken()
         {
             await using var svc = CreateClient(out var client);
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
@@ -881,7 +881,19 @@ namespace protobuf_net.Grpc.Test.Integration
             { }
             var taken = DateTime.UtcNow - start;
             _fixture.Log($"client: {taken}");
-            Assert.True(taken < TimeSpan.FromSeconds(1.5));
+            Assert.True(taken > TimeSpan.FromSeconds(0.8) && taken < TimeSpan.FromSeconds(1.5));
+        }
+
+        [Fact]
+        public async Task UnaryDelayCompletionWithoutToken()
+        {
+            await using var svc = CreateClient(out var client);
+            var start = DateTime.UtcNow;
+
+            await client.TakeFive();
+            var taken = DateTime.UtcNow - start;
+            _fixture.Log($"client: {taken}");
+            Assert.True(taken > TimeSpan.FromSeconds(4.8) && taken < TimeSpan.FromSeconds(5.5));
         }
     }
 }
