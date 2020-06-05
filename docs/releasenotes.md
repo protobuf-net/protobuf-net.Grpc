@@ -1,5 +1,9 @@
 # Release Notes
 
+## (unreleased)
+
+- support `CancellationToken` in service signatures in place of `CallContext` (#95)
+
 ## 1.0.75
 
 - addition of [`ClientFactory`](https://www.nuget.org/packages/protobuf-net.Grpc.ClientFactory) support
