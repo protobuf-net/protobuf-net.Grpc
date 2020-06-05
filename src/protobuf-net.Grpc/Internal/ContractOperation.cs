@@ -316,18 +316,11 @@ namespace ProtoBuf.Grpc.Internal
             {(MethodType.Unary, ResultKind.Sync, VoidKind.Response), nameof(Reshape.UnarySyncVoid) },
         };
 #pragma warning restore CS0618
-        private string? GetClientHelperName()
+        private string? GetClientHelperName() => Context switch
         {
-            switch (Context)
-            {
-                case ContextKind.CallContext:
-                case ContextKind.NoContext:
-                case ContextKind.CancellationToken:
-                    return _clientResponseMap.TryGetValue((MethodType, Result, Void & VoidKind.Response), out var helper) ? helper : null;
-                default:
-                    return null;
-            }
-        }
+            ContextKind.CallContext or ContextKind.NoContext or ContextKind.CancellationToken => _clientResponseMap.TryGetValue((MethodType, Result, Void & VoidKind.Response), out var helper) ? helper : null,
+            _ => null,
+        };
 
 
         internal bool IsSyncT()

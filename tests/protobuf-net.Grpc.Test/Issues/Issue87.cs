@@ -17,9 +17,9 @@ namespace protobuf_net.Grpc.Test.Issues
             return true;
         }
         protected internal override void OnWarn(string message, object?[]? args = null)
-            => Warnings.Add(string.Format(message, args));
+            => Warnings.Add(string.Format(message, args ?? Array.Empty<object>()));
         protected internal override void OnError(string message, object?[]? args = null)
-            => Errors.Add(string.Format(message, args));
+            => Errors.Add(string.Format(message, args ?? Array.Empty<object>()));
     }
 
     public class Issue87

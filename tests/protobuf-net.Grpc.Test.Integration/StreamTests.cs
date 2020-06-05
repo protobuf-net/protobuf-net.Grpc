@@ -780,8 +780,10 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             await using var svc = CreateClient(out var client);
 
-            var reqHeaders = new Metadata();
-            reqHeaders.Add("produce", produce);
+            var reqHeaders = new Metadata
+            {
+                { "produce", produce }
+            };
             if (byItem) reqHeaders.Add("mode", "byitem");
             if (stopReadingAfter >= 0) reqHeaders.Add("stop", stopReadingAfter);
 
