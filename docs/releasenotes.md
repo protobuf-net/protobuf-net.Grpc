@@ -3,6 +3,7 @@
 ## (unreleased)
 
 - support `CancellationToken` in service signatures in place of `CallContext` (#95)
+- service discovery correctly considers method accessibility (#87)
 
 ## 1.0.75
 
