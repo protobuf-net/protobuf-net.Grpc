@@ -316,12 +316,20 @@ namespace ProtoBuf.Grpc.Internal
             {(MethodType.Unary, ResultKind.Sync, VoidKind.Response), nameof(Reshape.UnarySyncVoid) },
         };
 #pragma warning restore CS0618
-        private string? GetClientHelperName() => Context switch
-        {
-            ContextKind.CallContext or ContextKind.NoContext or ContextKind.CancellationToken => _clientResponseMap.TryGetValue((MethodType, Result, Void & VoidKind.Response), out var helper) ? helper : null,
-            _ => null,
-        };
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0066:Convert switch statement to expression", Justification = "Isn't actually C# 8.0 (but works on preview compiler)")]
+        private string? GetClientHelperName()
+        {
+            switch (Context)
+            {
+                case ContextKind.CallContext:
+                case ContextKind.NoContext:
+                case ContextKind.CancellationToken:
+                    return _clientResponseMap.TryGetValue((MethodType, Result, Void & VoidKind.Response), out var helper) ? helper : null;
+                default:
+                    return null;
+            };
+        }
 
         internal bool IsSyncT()
         {

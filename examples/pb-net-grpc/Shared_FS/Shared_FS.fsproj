@@ -4,6 +4,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <SignAssembly>false</SignAssembly>
+    <LangVersion>4.7</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
