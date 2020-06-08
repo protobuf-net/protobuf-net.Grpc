@@ -342,11 +342,24 @@ namespace protobuf_net.Grpc.Test.Integration
 
     public abstract class StreamTests : IClassFixture<StreamTestsFixture>, IDisposable
     {
-#if DEBUG
-        public const string SkipConst = "";
-#else
-        public const string SkipConst = "Streaming tests are timing sensitive and brittle; useful for debug, but skipping here";
+        public class DebugTheoryAttribute : TheoryAttribute
+        {
+            public DebugTheoryAttribute()
+            {
+#if !DEBUG
+                Skip = "Streaming tests are timing sensitive and brittle; useful for debug, but skipping here";
 #endif
+            }
+        }
+        public class DebugFactAttribute : FactAttribute
+        {
+            public DebugFactAttribute()
+            {
+#if !DEBUG
+                Skip = "Streaming tests are timing sensitive and brittle; useful for debug, but skipping here";
+#endif
+            }
+        }
 
         protected int Port => _fixture.Port;
         private readonly StreamTestsFixture _fixture;
@@ -375,7 +388,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public void FooHasMarshaller()
             => Assert.NotNull(BinderConfiguration.Default.GetMarshaller<Foo>());
 
-        [Theory(Skip = SkipConst)]
+        [DebugTheory]
         [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.None)]
         [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination)]
@@ -440,7 +453,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        [Theory(Skip = SkipConst)]
+        [DebugTheory]
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.None)]
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.None)]
@@ -486,7 +499,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        [Theory(Skip = SkipConst)]
+        [DebugTheory]
         [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.None)]
         [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultBeforeYield, 0, "before yield", CallContextFlags.None)]
@@ -784,7 +797,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        [Theory(Skip = SkipConst)]
+        [DebugTheory]
         [InlineData(8, 10)]
         [InlineData(8, 20, 15)]
         [InlineData(0, 10)]
@@ -829,7 +842,7 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(Enumerable.Range(0, 10).Sum(), result.Bar);
         }
 
-        [Theory(Skip = SkipConst)]
+        [DebugTheory]
         [InlineData(true)]
         [InlineData(false)]
         public async Task ServerStreaming(bool fault)
