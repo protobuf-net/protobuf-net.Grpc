@@ -74,7 +74,7 @@ namespace ProtoBuf.Grpc.Configuration
                 _ => new SerializationContext { Context = userState }
             };
 
-            if (UseContextualSerializer)
+            if (!HasSingle(Options.DisableContextualSerializer))
             {
                 // test these once rather than every time
                 _measuredWriterModel = model as IMeasuredProtoOutput<IBufferWriter<byte>>;
@@ -82,18 +82,16 @@ namespace ProtoBuf.Grpc.Configuration
             }
         }
 
-        private bool UseContextualSerializer => (_options & Options.DisableContextualSerializer) == 0;
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool Has(Options option) => (_options & option) == option;
+        private bool HasSingle(Options option) => (_options & option) != 0;
 
         /// <summary>
         /// Deserializes an object from a payload
         /// </summary>
         protected internal override global::Grpc.Core.Marshaller<T> CreateMarshaller<T>()
-            => UseContextualSerializer
-            ? new global::Grpc.Core.Marshaller<T>(ContextualSerialize<T>, ContextualDeserialize<T>)
-            : base.CreateMarshaller<T>();
+            => HasSingle(Options.DisableContextualSerializer)
+            ? base.CreateMarshaller<T>()
+            : new global::Grpc.Core.Marshaller<T>(ContextualSerialize<T>, ContextualDeserialize<T>);
 
 #if DEBUG
         private int _uplevelBufferReadCount, _uplevelBufferWriteCount;
@@ -179,7 +177,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// Indicates whether a type should be considered as a serializable data type
         /// </summary>
         protected internal override bool CanSerialize(Type type)
-            => Has(Options.ContractTypesOnly)
+            => HasSingle(Options.ContractTypesOnly)
                 ? _model.CanSerializeContractType(type)
                 : _model.CanSerialize(type);
 
