@@ -602,7 +602,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        [Theory]
+        [DebugTheory]
         [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.None)]
         [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.None)]
@@ -687,7 +687,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
         }
 
-        [Theory]
+        [DebugTheory]
         [InlineData(Scenario.RunToCompletion, CallContextFlags.None)]
         [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
 
@@ -710,7 +710,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        [Theory]
+        [DebugTheory]
         [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.None)]
         [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.None)]
@@ -775,7 +775,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
         }
 
-        [Theory]
+        [DebugTheory]
         [InlineData(Scenario.RunToCompletion, CallContextFlags.None)]
         [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
 
@@ -833,7 +833,7 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(Enumerable.Range(0, stopReadingAfter).Sum(), trailers.GetInt32("sum"));
         }
 
-        [Fact]
+        [DebugFact]
         public async Task ClientStreaming()
         {
             await using var svc = CreateClient(out var client);
@@ -898,7 +898,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        [Fact]
+        [DebugFact]
         public async Task UnaryDelayCancelViaToken()
         {
             await using var svc = CreateClient(out var client);
@@ -916,7 +916,7 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.True(taken > TimeSpan.FromSeconds(0.8) && taken < TimeSpan.FromSeconds(1.5));
         }
 
-        [Fact]
+        [DebugFact]
         public async Task UnaryDelayCompletionWithoutToken()
         {
             await using var svc = CreateClient(out var client);
