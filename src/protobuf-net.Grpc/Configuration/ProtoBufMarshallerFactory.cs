@@ -47,10 +47,6 @@ namespace ProtoBuf.Grpc.Configuration
         private readonly IMeasuredProtoOutput<IBufferWriter<byte>>? _measuredWriterModel;
         private readonly IProtoInput<ReadOnlySequence<byte>>? _squenceReaderModel;
 
-#if ARRAY_BUFFER_WRITER
-        private readonly IProtoOutput<IBufferWriter<byte>>? _bufferWriterModel;
-#endif
-
         /// <summary>
         /// Create a new factory using a specific protobuf-net model
         /// </summary>
@@ -84,10 +80,6 @@ namespace ProtoBuf.Grpc.Configuration
                 _measuredWriterModel = model as IMeasuredProtoOutput<IBufferWriter<byte>>;
                 _squenceReaderModel = model as IProtoInput<ReadOnlySequence<byte>>;
             }
-
-#if ARRAY_BUFFER_WRITER
-            _bufferWriterModel = model as IProtoOutput<IBufferWriter<byte>>;
-#endif
         }
 
         private bool UseContextualSerializer => (_options & Options.DisableContextualSerializer) == 0;
@@ -213,35 +205,12 @@ namespace ProtoBuf.Grpc.Configuration
         private byte[] Serialize<T>(T value, int length)
         {
             if (length == 0) return Array.Empty<byte>();
-
-#if ARRAY_BUFFER_WRITER
-            if (_bufferWriterModel is object)
-            {
-                var abw = new ArrayBufferWriter<byte>(length);
-                _bufferWriterModel.Serialize<T>(abw, value, userState: _userState);
-                AssertLength(abw.WrittenCount);
-                if (!(MemoryMarshal.TryGetArray(abw.WrittenMemory, out var segment)
-                    && segment.Offset == 0 && segment.Count == segment.Array.Length))
-                {
-                    InvalidBufferWriter();
-                }
-                return segment.Array;
-
-                static void InvalidBufferWriter()
-                    => throw new InvalidOperationException($"After writing to {nameof(ArrayBufferWriter<byte>)}, the array was unavailable or invalid");
-            }
-#endif
             var arr = new byte[length];
             using var ms = new MemoryStream(arr);
             _model.Serialize(ms, value, context: null);
-            AssertLength(ms.Length);
+            if (length != ms.Length) throw new InvalidOperationException(
+                    $"Length miscalculated; expected {length}, got {ms.Length}");
             return arr;
-
-            void AssertLength(long actual)
-            {
-                if (length != actual) throw new InvalidOperationException(
-                    $"Length miscalculated; expected {length}, got {actual}");
-            }
         }
     }
 }
