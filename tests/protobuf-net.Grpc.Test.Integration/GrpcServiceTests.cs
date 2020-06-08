@@ -12,6 +12,7 @@ using Xunit;
 using Grpc.Core.Interceptors;
 using Xunit.Abstractions;
 using System.Runtime.CompilerServices;
+using ProtoBuf.Meta;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -115,7 +116,7 @@ namespace protobuf_net.Grpc.Test.Integration
             };
             _server.Services.AddCodeFirst(new ApplyServices());
             _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
-            _server.Services.AddCodeFirst(new InterceptedService() , interceptors: new[] { _interceptor });
+            _server.Services.AddCodeFirst(new InterceptedService(), interceptors: new[] { _interceptor });
             _server.Start();
         }
 
@@ -149,21 +150,36 @@ namespace protobuf_net.Grpc.Test.Integration
             if (fixture != null) fixture.Output = log;
         }
 
+        private void Log(string message) => _fixture?.Log(message);
+
         public void Dispose()
         {
             if (_fixture != null) _fixture.Output = null;
         }
 
-        [Fact]
-        public async Task CanCallAllApplyServicesUnaryAsync()
+        private static readonly ProtoBufMarshallerFactory
+            EnableContextualSerializer = (ProtoBufMarshallerFactory)ProtoBufMarshallerFactory.Create(userState: new object()),
+            DisableContextualSerializer = (ProtoBufMarshallerFactory)ProtoBufMarshallerFactory.Create(options: ProtoBufMarshallerFactory.Options.DisableContextualSerializer, userState: new object());
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task CanCallAllApplyServicesUnaryAsync(bool disableContextual)
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            var client = new GrpcClient(http, nameof(ApplyServices));
+            var marshaller = disableContextual ? DisableContextualSerializer : EnableContextualSerializer;
+            var client = new GrpcClient(http, nameof(ApplyServices), BinderConfiguration.Create(new[] { marshaller }));
 
             Assert.Equal(nameof(ApplyServices), client.ToString());
+
+#if DEBUG
+            var uplevelReadsBefore = marshaller.UplevelBufferReadCount;
+            var uplevelWritesBefore = marshaller.UplevelBufferWriteCount;
+            Log($"Buffer usage before: {uplevelReadsBefore}/{uplevelWritesBefore}");
+#endif
 
             var response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Add));
             Assert.Equal(9, response.Result);
@@ -173,6 +189,30 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(3, response.Result);
             response = await client.UnaryAsync<Apply, ApplyResponse>(request, nameof(ApplyServices.Div));
             Assert.Equal(2, response.Result);
+
+#if DEBUG
+            var uplevelReadsAfter = marshaller.UplevelBufferReadCount;
+            var uplevelWritesAfter = marshaller.UplevelBufferWriteCount;
+            Log($"Buffer usage after: {uplevelReadsAfter}/{uplevelWritesAfter}");
+
+#if PROTOBUFNET_BUFFERS
+            bool expectContextual = true;
+#else
+            bool expectContextual = false;
+#endif
+            if (disableContextual) expectContextual = false;
+
+            if (expectContextual)
+            {
+                Assert.True(uplevelReadsBefore < uplevelReadsAfter);
+                Assert.True(uplevelWritesBefore < uplevelWritesAfter);
+            }
+            else
+            {
+                Assert.Equal(uplevelReadsBefore, uplevelReadsAfter);
+                Assert.Equal(uplevelWritesBefore, uplevelWritesAfter);
+            }
+#endif
         }
 
         [Fact]
