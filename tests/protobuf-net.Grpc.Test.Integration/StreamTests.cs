@@ -340,6 +340,18 @@ namespace protobuf_net.Grpc.Test.Integration
     }
 #endif
 
+    public class StreamMarshallerTests
+    {
+        [Fact]
+        public void FooIsContractType()
+           => Assert.True(RuntimeTypeModel.Default.IsDefined(typeof(Foo)));
+
+
+        [Fact]
+        public void FooHasMarshaller()
+            => Assert.NotNull(BinderConfiguration.Default.GetMarshaller<Foo>());
+    }
+
     public abstract class StreamTests : IClassFixture<StreamTestsFixture>, IDisposable
     {
         public class DebugTheoryAttribute : TheoryAttribute
@@ -378,15 +390,6 @@ namespace protobuf_net.Grpc.Test.Integration
         protected abstract IAsyncDisposable CreateClient(out IStreamAPI client);
 
         const int DEFAULT_SIZE = 20;
-
-        [Fact]
-        public void FooIsContractType()
-            => Assert.True(RuntimeTypeModel.Default.IsDefined(typeof(Foo)));
-
-
-        [Fact]
-        public void FooHasMarshaller()
-            => Assert.NotNull(BinderConfiguration.Default.GetMarshaller<Foo>());
 
         [DebugTheory]
         [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.None)]
