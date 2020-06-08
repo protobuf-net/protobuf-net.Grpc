@@ -28,8 +28,8 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             ContractTypesOnly = 1 << 0,
             /// <summary>
-            /// Disable 'contextual' serializer usage (this means serializers that use <see cref="ReadOnlySequence{byte}"/> or <see cref="IBufferWriter{byte}"/>),
-            /// using the legacy <see cref="byte[]"/> APIs.
+            /// Disable 'contextual' serializer usage (this means serializers that use <see cref="ReadOnlySequence{T}"/> or <see cref="IBufferWriter{T}"/>),
+            /// using the legacy <see cref="T:byte[]" /> APIs.
             /// </summary>
             DisableContextualSerializer = 1 << 1,
         }

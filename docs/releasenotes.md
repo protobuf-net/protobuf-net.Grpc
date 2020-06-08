@@ -1,5 +1,9 @@
 # Release Notes
 
+## 1.0.**
+
+- make use of the contextual (buffer rather than `byte[]`) APIs when possible (i.e. when protobuf-net v3 is targeted)
+
 ## 1.0.81
 
 - support `CancellationToken` in service signatures in place of `CallContext` (#95)
