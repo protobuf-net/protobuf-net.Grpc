@@ -46,5 +46,12 @@ namespace ProtoBuf.Grpc.Configuration
         /// Gets a typed marshaller associated with this configuration
         /// </summary>
         public Marshaller<T> GetMarshaller<T>() => MarshallerCache.GetMarshaller<T>();
+
+
+        /// <summary>
+        /// Sets (or resets) a typed marshalled against this configuration
+        /// </summary>
+        /// <param name="marshaller">The marshaller to use - if null, the cache is reset for this type</param>
+        public void SetMarshaller<T>(Marshaller<T>? marshaller) => MarshallerCache.SetMarshaller<T>(marshaller);
     }
 }

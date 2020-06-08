@@ -1,12 +1,9 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Collections.Concurrent;
 using System.Reflection;
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -40,6 +37,18 @@ namespace ProtoBuf.Grpc.Internal
                 ? (Marshaller<T>?)obj : CreateAndAdd<T>()) ?? Throw();
 
             static Marshaller<T> Throw() => throw new InvalidOperationException("No marshaller available for " + typeof(T).FullName);
+        }
+
+        internal void SetMarshaller<T>(Marshaller<T>? marshaller)
+        {
+            if (marshaller is null)
+            {
+                _marshallers.TryRemove(typeof(T), out _);
+            }
+            else
+            {
+                _marshallers[typeof(T)] = marshaller;
+            }
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
