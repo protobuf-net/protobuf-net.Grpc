@@ -116,7 +116,7 @@ namespace protobuf_net.Grpc.Test.Integration
             };
             _server.Services.AddCodeFirst(new ApplyServices());
             _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
-            _server.Services.AddCodeFirst(new InterceptedService() , interceptors: new[] { _interceptor });
+            _server.Services.AddCodeFirst(new InterceptedService(), interceptors: new[] { _interceptor });
             _server.Start();
         }
 
@@ -157,8 +157,9 @@ namespace protobuf_net.Grpc.Test.Integration
             if (_fixture != null) _fixture.Output = null;
         }
 
-        private static readonly BinderConfiguration DisableContextualSerializer = BinderConfiguration.Create(
-            new[] { ProtoBufMarshallerFactory.Create(options: ProtoBufMarshallerFactory.Options.DisableContextualSerializer) });
+        private static readonly ProtoBufMarshallerFactory
+            EnableContextualSerializer = (ProtoBufMarshallerFactory)ProtoBufMarshallerFactory.Create(userState: new object()),
+            DisableContextualSerializer = (ProtoBufMarshallerFactory)ProtoBufMarshallerFactory.Create(options: ProtoBufMarshallerFactory.Options.DisableContextualSerializer, userState: new object());
 
         [Theory]
         [InlineData(true)]
@@ -169,13 +170,14 @@ namespace protobuf_net.Grpc.Test.Integration
             using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
 
             var request = new Apply { X = 6, Y = 3 };
-            var client = new GrpcClient(http, nameof(ApplyServices), disableContextual ? DisableContextualSerializer : null);
+            var marshaller = disableContextual ? DisableContextualSerializer : EnableContextualSerializer;
+            var client = new GrpcClient(http, nameof(ApplyServices), BinderConfiguration.Create(new[] { marshaller }));
 
             Assert.Equal(nameof(ApplyServices), client.ToString());
 
 #if DEBUG
-            var uplevelReadsBefore = ProtoBufMarshallerFactory.UplevelBufferReadCount;
-            var uplevelWritesBefore = ProtoBufMarshallerFactory.UplevelBufferWriteCount;
+            var uplevelReadsBefore = marshaller.UplevelBufferReadCount;
+            var uplevelWritesBefore = marshaller.UplevelBufferWriteCount;
             Log($"Buffer usage before: {uplevelReadsBefore}/{uplevelWritesBefore}");
 #endif
 
@@ -189,8 +191,8 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(2, response.Result);
 
 #if DEBUG
-            var uplevelReadsAfter = ProtoBufMarshallerFactory.UplevelBufferReadCount;
-            var uplevelWritesAfter = ProtoBufMarshallerFactory.UplevelBufferWriteCount;
+            var uplevelReadsAfter = marshaller.UplevelBufferReadCount;
+            var uplevelWritesAfter = marshaller.UplevelBufferWriteCount;
             Log($"Buffer usage after: {uplevelReadsAfter}/{uplevelWritesAfter}");
 
 #if PROTOBUFNET_BUFFERS

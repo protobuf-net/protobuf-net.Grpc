@@ -2,7 +2,6 @@
 using System;
 using System.Buffers;
 using System.IO;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -38,7 +37,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Uses the default protobuf-net serializer
         /// </summary>
-        public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None);
+        public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None, default);
 
         private readonly TypeModel _model;
         private readonly SerializationContext? _userState;
@@ -58,7 +57,7 @@ namespace ProtoBuf.Grpc.Configuration
         public static MarshallerFactory Create(TypeModel? model = null, Options options = Options.None, object? userState = null)
         {
             model ??= RuntimeTypeModel.Default;
-            if (options == Options.None && model == RuntimeTypeModel.Default) return Default;
+            if (options == Options.None && model == RuntimeTypeModel.Default && userState is null) return Default;
             return new ProtoBufMarshallerFactory(model, options, userState);
         }
 
@@ -105,15 +104,15 @@ namespace ProtoBuf.Grpc.Configuration
             : base.CreateMarshaller<T>();
 
 #if DEBUG
-        private static int _uplevelBufferReadCount, _uplevelBufferWriteCount;
-        public static int UplevelBufferReadCount => Volatile.Read(ref _uplevelBufferReadCount);
-        public static int UplevelBufferWriteCount => Volatile.Read(ref _uplevelBufferWriteCount);
+        private int _uplevelBufferReadCount, _uplevelBufferWriteCount;
+        public int UplevelBufferReadCount => Volatile.Read(ref _uplevelBufferReadCount);
+        public int UplevelBufferWriteCount => Volatile.Read(ref _uplevelBufferWriteCount);
 
-        static partial void RecordUplevelBufferRead() => Interlocked.Increment(ref _uplevelBufferReadCount);
-        static partial void RecordUplevelBufferWrite() => Interlocked.Increment(ref _uplevelBufferWriteCount);
+        partial void RecordUplevelBufferRead() => Interlocked.Increment(ref _uplevelBufferReadCount);
+        partial void RecordUplevelBufferWrite() => Interlocked.Increment(ref _uplevelBufferWriteCount);
 #endif
-        static partial void RecordUplevelBufferRead();
-        static partial void RecordUplevelBufferWrite();
+        partial void RecordUplevelBufferRead();
+        partial void RecordUplevelBufferWrite();
 
         private bool TryGetBufferWriter(global::Grpc.Core.SerializationContext context, out IBufferWriter<byte>? writer)
         {
