@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
@@ -24,7 +26,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Sends an element to the sequence and awaits its consumption
         /// </summary>
-        ValueTask PushAsync(T value, CancellationToken cancellationToken = default);
+        ValueTask PushAsync(T value);
     }
 
     /// <summary>
@@ -38,8 +40,8 @@ namespace ProtoBuf.Grpc
         public static IPushAsyncEnumerable<T> Create<T>() => new PushAsyncEnumerableCore<T>();
 
         static readonly Exception
-            s_DisposedSentinel = new ObjectDisposedException(nameof(PushAsyncEnumerable)),
-            s_CanceledSentinel = new TaskCanceledException();
+            s_CanceledSentinel = new OperationCanceledException(),
+            s_CompletedSentinel = new InvalidOperationException();
 
         private static readonly Action<object> s_CancelCallback = s => (s as ICancellableInner)?.Cancel();
 
@@ -49,44 +51,35 @@ namespace ProtoBuf.Grpc
         }
         private sealed class PushAsyncEnumerableCore<T> : ICancellableInner,
             IPushAsyncEnumerable<T>, IAsyncEnumerator<T>,
-            IValueTaskSource<bool>, IValueTaskSource<int>
+            IValueTaskSource<bool>, IValueTaskSource
         {
             ManualResetValueTaskSourceCore<bool> _moveNext;
             ManualResetValueTaskSourceCore<int> _consumed;
             CancellationTokenRegistration _cancellationTokenRegistration;
-            private bool _isCompleted;
-            public bool IsCompleted => _isCompleted;
 
-            private void SetCompleted([CallerMemberName] string caller = "")
-            {
-                if (!_isCompleted)
-                {
-                    Debug.WriteLine($"{nameof(PushAsyncEnumerable)}<{typeof(T).Name}> completed by {caller}");
-                }
-                _isCompleted = true;
-            }
+            public bool IsCompleted { get; private set; }
+
             public PushAsyncEnumerableCore()
             {
-                _current = default!;
+                _current = _next = default!;
                 _moveNext.RunContinuationsAsynchronously = false;
             }
 
-            private T _current;
+            private T _current, _next;
             T IAsyncEnumerator<T>.Current => _current;
 
+            void ICancellableInner.Cancel() => Complete(s_CanceledSentinel);
             ValueTask IAsyncDisposable.DisposeAsync()
             {
-                SetCompleted();
-                try
-                {
-                    _moveNext.SetException(s_DisposedSentinel);
-                }
-                catch { }
-                try
-                {
-                    _consumed.SetResult(0);
-                }
-                catch { }
+                Complete(s_CompletedSentinel);
+                return default;
+            }
+
+            public void Complete(Exception? error = null)
+            {
+                if (IsCompleted) return;
+
+                // unregister from cancellation
                 var tmp = _cancellationTokenRegistration;
                 _cancellationTokenRegistration = default;
                 try
@@ -94,68 +87,55 @@ namespace ProtoBuf.Grpc
                     tmp.Dispose();
                 }
                 catch { }
-                return default;
-            }
 
-            public void Complete(Exception? error = null)
-            {
-                SetCompleted();
+                // set outcomes
                 if (error is null)
                 {
                     _moveNext.SetResult(false);
-                    _consumed.SetResult(0);
+                    TrySetException(ref _consumed, s_CompletedSentinel);
                 }
                 else
                 {
-                    try { _moveNext.SetException(error); }
-                    catch { }
-                    try { _consumed.SetException(error); }
-                    catch { }
+                    TrySetException(ref _moveNext, error);
+                    TrySetException(ref _consumed, error);
                 }
+                IsCompleted = true;
             }
 
-            void ICancellableInner.Cancel()
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static void TrySetException<TCore>(ref ManualResetValueTaskSourceCore<TCore> source, Exception exception)
             {
-                SetCompleted();
                 try
                 {
-                    _moveNext.SetException(s_CanceledSentinel);
-                }
-                catch { }
-                try
-                {
-                    _consumed.SetException(s_CanceledSentinel);
+                    source.SetException(exception);
                 }
                 catch { }
             }
 
-            public ValueTask PushAsync(T value, CancellationToken cancellationToken = default)
-            {
-                _consumed.Reset();
-                var consumed = new ValueTask<int>(this, _consumed.Version);
-                _current = value;
-                _moveNext.SetResult(true);
-                return consumed.IsCompletedSuccessfully ? default
-                    : AwaitConsumed(consumed, cancellationToken);
-            }
 
-            private async ValueTask AwaitConsumed(ValueTask<int> consumed, CancellationToken cancellationToken)
+            public ValueTask PushAsync(T value)
             {
-                using (cancellationToken.Register(s_CancelCallback, this, false))
+                if (!IsCompleted) // in any scenario where we are completed, we've already set a fault on the VT
                 {
-                    try
-                    {
-                        await consumed.ConfigureAwait(false);
-                    }
-                    catch(ObjectDisposedException ode) when (ReferenceEquals(ode, s_DisposedSentinel))
-                    {
-                        ThrowDisposed();
-                    }
+                    _next = value;
+                    _moveNext.SetResult(true);
                 }
+                return new ValueTask(this, _consumed.Version);
             }
 
-            private void ThrowDisposed()
-                => throw new ObjectDisposedException(nameof(PushAsyncEnumerable));
+
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static void HideSentinels(Exception ex)
+            {
+                if (ReferenceEquals(ex, s_CanceledSentinel)) ThrowCancelled();
+                if (ReferenceEquals(ex, s_CompletedSentinel)) ThrowCompleted();
+
+                [MethodImpl(MethodImplOptions.NoInlining)]
+                static void ThrowCancelled() => throw new OperationCanceledException();
+                [MethodImpl(MethodImplOptions.NoInlining)]
+                static void ThrowCompleted() => throw new InvalidOperationException("Cannot push to a sequence that has been completed");
+            }
 
             IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
             {
@@ -168,26 +148,31 @@ namespace ProtoBuf.Grpc
             }
 
             ValueTask<bool> IAsyncEnumerator<T>.MoveNextAsync()
-            {
-                _consumed.SetResult(0);
-                _moveNext.Reset();
-                return new ValueTask<bool>(this, _moveNext.Version);
-            }
+                => new ValueTask<bool>(this, _moveNext.Version);
 
             bool IValueTaskSource<bool>.GetResult(short token)
             {
                 try
                 {
-                    return _moveNext.GetResult(token);
+                    var result = _moveNext.GetResult(token);
+                    if (result)
+                    {
+                        _current = _next;
+                        _next = default!;
+                        try { _consumed.SetResult(0); }
+                        catch { }
+                    }
+                    else
+                    {
+                        _current = _next = default!;
+                    }
+                    _moveNext.Reset();
+                    return result;
                 }
-                catch (TaskCanceledException tce) when (ReferenceEquals(tce, s_CanceledSentinel))
-                {   // don't want to expose the singletons we used earlier
-                    throw new TaskCanceledException();
-                }
-                catch (ObjectDisposedException ode) when (ReferenceEquals(ode, s_DisposedSentinel))
-                {   // don't want to expose the singletons we used earlier
-                    ThrowDisposed();
-                    return default; // for compiler
+                catch (Exception ex)
+                {
+                    HideSentinels(ex);
+                    throw;
                 }
             }
 
@@ -196,11 +181,23 @@ namespace ProtoBuf.Grpc
             void IValueTaskSource<bool>.OnCompleted(Action<object> continuation, object state, short token, ValueTaskSourceOnCompletedFlags flags)
                 => _moveNext.OnCompleted(continuation, state, token, flags);
 
-            int IValueTaskSource<int>.GetResult(short token) => _consumed.GetResult(token);
+            void IValueTaskSource.GetResult(short token)
+            {
+                try
+                {
+                    _consumed.GetResult(token);
+                    _consumed.Reset();
+                }
+                catch (Exception ex)
+                {
+                    HideSentinels(ex);
+                    throw;
+                }
+            }
 
-            ValueTaskSourceStatus IValueTaskSource<int>.GetStatus(short token) => _consumed.GetStatus(token);
+            ValueTaskSourceStatus IValueTaskSource.GetStatus(short token) => _consumed.GetStatus(token);
 
-            void IValueTaskSource<int>.OnCompleted(Action<object> continuation, object state, short token, ValueTaskSourceOnCompletedFlags flags)
+            void IValueTaskSource.OnCompleted(Action<object> continuation, object state, short token, ValueTaskSourceOnCompletedFlags flags)
                 => _consumed.OnCompleted(continuation, state, token, flags);
         }
     }
