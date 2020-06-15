@@ -25,6 +25,51 @@ namespace ProtoBuf.Grpc
             Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer)
             => FullDuplexImpl<TRequest, TResponse>(this, producer, source, consumer, CancellationToken);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public IAsyncEnumerable<TResponse> FullDuplexAsync<TRequest, TResponse>(
+            Func<IPushAsync<TResponse>, CallContext, ValueTask> producer,
+            IAsyncEnumerable<TRequest> source,
+            Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer)
+        {
+            return Impl(this, producer, source, consumer);
+            static IAsyncEnumerable<TResponse> Impl(
+                CallContext ctx,
+                Func<IPushAsync<TResponse>, CallContext, ValueTask> producer,
+                IAsyncEnumerable<TRequest> source,
+                Func<IAsyncEnumerable<TRequest>, CallContext, ValueTask> consumer)
+            {
+                var push = PushAsyncEnumerable.Create<TResponse>(cancellationToken: ctx.CancellationToken);
+
+                // run producer
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await producer(push, ctx).ConfigureAwait(false);
+                        push.Complete();
+                    }
+                    catch (Exception ex)
+                    {
+                        push.Complete(ex);
+                    }
+                });
+
+                // run consumer
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await consumer(source, ctx).ConfigureAwait(false);
+                    }
+                    catch(Exception ex)
+                    {
+                        push.Complete(ex);
+                    }
+                });
+                return push;
+            }
+        }
+
         private static async IAsyncEnumerable<TResponse> FullDuplexImpl<TRequest, TResponse>(
             CallContext context,
             Func<CallContext, IAsyncEnumerable<TResponse>> producer,

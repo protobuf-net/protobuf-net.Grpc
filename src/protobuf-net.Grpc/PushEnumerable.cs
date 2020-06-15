@@ -10,7 +10,7 @@ namespace ProtoBuf.Grpc
     /// <summary>
     /// Defines a non-buffered push API that represents async enumerable data
     /// </summary>
-    public interface IPushAsyncEnumerable<T> : IAsyncEnumerable<T>
+    public interface IPushAsync<T>
     {
         /// <summary>
         /// Indicates whether this sequence is completed
@@ -27,7 +27,12 @@ namespace ProtoBuf.Grpc
     }
 
     /// <summary>
-    /// Controls the behavior of the <see cref="PushAsyncEnumerable"/> instance
+    /// Combines <see cref="IPushAsync{T}"/> and <see cref="IAsyncEnumerable{T}"/> to represent a producer/consumer flow.
+    /// </summary>
+    public interface IPushAsyncEnumerable<T> : IPushAsync<T>, IAsyncEnumerable<T> { }
+
+    /// <summary>
+    /// Optional control flags for push-async
     /// </summary>
     [Flags]
     public enum PushAsyncFlags
