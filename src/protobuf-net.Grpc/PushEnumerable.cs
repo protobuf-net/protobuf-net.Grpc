@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
@@ -30,6 +27,28 @@ namespace ProtoBuf.Grpc
     }
 
     /// <summary>
+    /// Controls the behavior of the <see cref="PushAsyncEnumerable"/> instance
+    /// </summary>
+    [Flags]
+    public enum PushAsyncFlags
+    {
+        /// <summary>
+        /// Default options
+        /// </summary>
+        None = 0,
+        /// <summary>
+        /// Allows <see cref="IPushAsyncEnumerable{T}.PushAsync(T)"/> to synchronously reactivate the
+        /// consumer, rather than queueing the reactivation asynchronously (the default)
+        /// </summary>
+        InlineProducerToConsumer = 1 << 0,
+        /// <summary>
+        /// Allos <see cref="IAsyncEnumerator{T}.MoveNextAsync"/> to synchrously reactivate the
+        /// producer, rather than queueing the reactivation asynchronously (the default)
+        /// </summary>
+        InlineConsumerToProducer = 1 << 1,
+    }
+
+    /// <summary>
     /// Allows construction of <see cref="IPushAsyncEnumerable{T}"/> instances
     /// </summary>
     public static class PushAsyncEnumerable
@@ -37,35 +56,122 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Create a new <see cref="IPushAsyncEnumerable{T}"/> instance
         /// </summary>
-        public static IPushAsyncEnumerable<T> Create<T>() => new PushAsyncEnumerableCore<T>();
+        public static IPushAsyncEnumerable<T> Create<T>(PushAsyncFlags flags = PushAsyncFlags.None, CancellationToken cancellationToken = default) => new PushAsyncEnumerableCore<T>(flags, cancellationToken);
 
-        static readonly Exception
+        private static readonly Exception
             s_CanceledSentinel = new OperationCanceledException(),
             s_CompletedSentinel = new InvalidOperationException();
 
         private static readonly Action<object> s_CancelCallback = s => (s as ICancellableInner)?.Cancel();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void TrySetException<T>(ref ManualResetValueTaskSourceCore<T> source, Exception exception)
+        {
+            try
+            {
+                source.SetException(exception);
+            }
+            catch { }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void HideSentinels(Exception ex)
+        {
+            if (ReferenceEquals(ex, s_CanceledSentinel)) ThrowCancelled();
+            if (ReferenceEquals(ex, s_CompletedSentinel)) ThrowCompleted();
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            static void ThrowCancelled() => throw new OperationCanceledException();
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            static void ThrowCompleted() => throw new InvalidOperationException("Cannot push to a sequence that has been completed");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowSingleEnumerator() => throw new NotSupportedException(nameof(IAsyncEnumerable<int>.GetAsyncEnumerator) + " should only be called once per instance");
+
         private interface ICancellableInner
         {
             void Cancel();
         }
+
+        private static CancellationTokenRegistration RegisterForCancellation(ICancellableInner obj, CancellationToken cancellationToken)
+        {
+            if (!cancellationToken.CanBeCanceled) return default;
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                obj.Cancel();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            return cancellationToken.Register(s_CancelCallback, obj, false);
+        }
+
+        private static void UnregisterForCancellation(ref CancellationTokenRegistration field)
+        {
+            var tmp = field;
+            field = default;
+            try { tmp.Dispose(); }
+            catch { }
+        }
+
+        [Flags]
+        private enum StateFlags
+        {
+            None = 0,
+            IsCompleted = 1 << 0,
+            HasActiveEnumerator = 1 << 1,
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool HasStateFlag(ref int state, StateFlags flag)
+            => (Volatile.Read(ref state) & (int)flag) != 0;
+
+        private static bool SetStateFlag(ref int state, StateFlags flag)
+        {
+            int oldValue = Volatile.Read(ref state);
+            while (true)
+            {
+                // find the new value; if it is already that: we didn't make the change
+                var newValue = oldValue | (int)flag;
+                if (newValue == oldValue) return false;
+
+                // if we can make a sweap, and the old value hasn't changed: we made the change
+                var was = Interlocked.CompareExchange(ref state, newValue, oldValue);
+                if (was == oldValue) return true;
+
+                // retry, with our new knowledge
+                oldValue = was;
+            }
+        }
+
         private sealed class PushAsyncEnumerableCore<T> : ICancellableInner,
             IPushAsyncEnumerable<T>, IAsyncEnumerator<T>,
             IValueTaskSource<bool>, IValueTaskSource
         {
-            ManualResetValueTaskSourceCore<bool> _moveNext;
-            ManualResetValueTaskSourceCore<int> _consumed;
-            CancellationTokenRegistration _cancellationTokenRegistration;
-
-            public bool IsCompleted { get; private set; }
-
-            public PushAsyncEnumerableCore()
-            {
-                _current = _next = default!;
-                _moveNext.RunContinuationsAsynchronously = false;
-            }
+            private ManualResetValueTaskSourceCore<bool> _moveNext;
+            private ManualResetValueTaskSourceCore<int> _consumed;
+            private CancellationToken _globalCancellationToken;
+            private CancellationTokenRegistration _globalCancellationTokenRegistration, _iteratorCancellationTokenRegistration;
+            private int _stateFlags; // actually a StateFlags, but: Interlocked doesn't like that
 
             private T _current, _next;
+
+            public bool IsCompleted
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => HasStateFlag(ref _stateFlags, StateFlags.IsCompleted);
+            }
+
+            public PushAsyncEnumerableCore(PushAsyncFlags flags, CancellationToken cancellationToken)
+            {
+                _current = _next = default!;
+                _consumed.RunContinuationsAsynchronously = (flags & PushAsyncFlags.InlineConsumerToProducer) == 0;
+                _moveNext.RunContinuationsAsynchronously = (flags & PushAsyncFlags.InlineProducerToConsumer) == 0;
+
+                _globalCancellationTokenRegistration = RegisterForCancellation(this, cancellationToken);
+            }
+
             T IAsyncEnumerator<T>.Current => _current;
 
             void ICancellableInner.Cancel() => Complete(s_CanceledSentinel);
@@ -80,18 +186,14 @@ namespace ProtoBuf.Grpc
                 if (IsCompleted) return;
 
                 // unregister from cancellation
-                var tmp = _cancellationTokenRegistration;
-                _cancellationTokenRegistration = default;
-                try
-                {
-                    tmp.Dispose();
-                }
-                catch { }
+                UnregisterForCancellation(ref _globalCancellationTokenRegistration);
+                UnregisterForCancellation(ref _iteratorCancellationTokenRegistration);
+                _globalCancellationToken = default;
 
                 // set outcomes
                 if (error is null)
                 {
-                    _moveNext.SetResult(false);
+                    try { _moveNext.SetResult(false); } catch { }
                     TrySetException(ref _consumed, s_CompletedSentinel);
                 }
                 else
@@ -99,17 +201,7 @@ namespace ProtoBuf.Grpc
                     TrySetException(ref _moveNext, error);
                     TrySetException(ref _consumed, error);
                 }
-                IsCompleted = true;
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static void TrySetException<TCore>(ref ManualResetValueTaskSourceCore<TCore> source, Exception exception)
-            {
-                try
-                {
-                    source.SetException(exception);
-                }
-                catch { }
+                SetStateFlag(ref _stateFlags, StateFlags.IsCompleted);
             }
 
 
@@ -123,26 +215,15 @@ namespace ProtoBuf.Grpc
                 return new ValueTask(this, _consumed.Version);
             }
 
-
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static void HideSentinels(Exception ex)
-            {
-                if (ReferenceEquals(ex, s_CanceledSentinel)) ThrowCancelled();
-                if (ReferenceEquals(ex, s_CompletedSentinel)) ThrowCompleted();
-
-                [MethodImpl(MethodImplOptions.NoInlining)]
-                static void ThrowCancelled() => throw new OperationCanceledException();
-                [MethodImpl(MethodImplOptions.NoInlining)]
-                static void ThrowCompleted() => throw new InvalidOperationException("Cannot push to a sequence that has been completed");
-            }
-
             IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
             {
-                if (cancellationToken.CanBeCanceled)
+                if (!SetStateFlag(ref _stateFlags, StateFlags.HasActiveEnumerator))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    _cancellationTokenRegistration = cancellationToken.Register(s_CancelCallback, this, false);
+                    ThrowSingleEnumerator();
+                }
+                if (cancellationToken != _globalCancellationToken)
+                {
+                    _iteratorCancellationTokenRegistration = RegisterForCancellation(this, cancellationToken);
                 }
                 return this;
             }
