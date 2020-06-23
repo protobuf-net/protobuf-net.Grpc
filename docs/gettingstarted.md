@@ -153,10 +153,10 @@ introduction of `.google.protobuf.Timestamp`). It is recommended to use `DataFor
 
 1. Create an ASP.NET Core Web Application targeting `netcoreapp3.0`, and add a package references to [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore)
 (and a project/package reference to your data/service contracts if necessary). Note that the gRPC tooling can run alongside other services/sites that your ASP.NET application is providing.
-2. in `CreateHostBuilder`, make sure you are using `WebHost`, and enable listening on `HttpProtocols.Http2`; see [`Program.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/master/examples/pb-net-grpc/Server_CS/Program.cs)
-3. in `ConfigureServices`, call `services.AddCodeFirstGrpc()`; see [`Startup.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/master/examples/pb-net-grpc/Server_CS/Startup.cs)
+2. in `CreateHostBuilder`, make sure you are using `WebHost`, and enable listening on `HttpProtocols.Http2`; see [`Program.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Program.cs)
+3. in `ConfigureServices`, call `services.AddCodeFirstGrpc()`; see [`Startup.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Startup.cs)
 4. define a class that implements your service contract, i.e. `class MyTimeService : ITimeService`
-5. in `Configure`, call `endpoints.MapGrpcService<TService>()` for each of your services; see [`Startup.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/master/examples/pb-net-grpc/Server_CS/Startup.cs)
+5. in `Configure`, call `endpoints.MapGrpcService<TService>()` for each of your services; see [`Startup.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Startup.cs)
 
 So what might our services look like? Let's start with our simple calculator; that might be synchronous at the server, which is why `ValueTask<T>` can be useful; consider:
 
