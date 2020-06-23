@@ -1,6 +1,6 @@
 # protobuf-net.Grpc
 
-[![Build status](https://ci.appveyor.com/api/projects/status/en9i5mp471ci6ip3/branch/master?svg=true)](https://ci.appveyor.com/project/StackExchange/protobuf-net-grpc/branch/master)
+[![Build status](https://ci.appveyor.com/api/projects/status/en9i5mp471ci6ip3/branch/main?svg=true)](https://ci.appveyor.com/project/StackExchange/protobuf-net-grpc/branch/main)
 
 `protobuf-net.Grpc` adds code-first support for services over gRPC using either the native `Grpc.Core` API, or the fully-managed `Grpc.Net.Client` / `Grpc.AspNetCore.Server` API.
 
@@ -54,7 +54,7 @@ Everything is available as pre-built packages on nuget; in particular, you proba
 - [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native) for clients or servers using the native/unmanaged API
 - [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc) and [`Grpc.Net.Client`](https://www.nuget.org/packages/Grpc.Net.Client/) for clients using `HttpClient` on .NET Core 3
 
-[Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/master/examples/pb-net-grpc).
+[Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/main/examples/pb-net-grpc).
 
 ## Anything else?
 
