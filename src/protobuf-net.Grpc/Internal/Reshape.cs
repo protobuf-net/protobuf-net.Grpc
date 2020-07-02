@@ -2,7 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
 namespace ProtoBuf.Grpc.Internal
@@ -134,6 +136,68 @@ namespace ProtoBuf.Grpc.Internal
             {
                 await writer.WriteAsync(value).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Consumes the provided task raising exceptions as <see cref="RpcException"/>
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static Task WithSimpleExceptionHandling(Task task)
+        {
+            return task.RanToCompletion() ? Task.CompletedTask : Awaited(task);
+
+            static async Task Awaited(Task task)
+            {
+                try
+                {
+                    await task.ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is RpcException))
+                {
+                    Rethrow(ex);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Consumes the provided task raising exceptions as <see cref="RpcException"/>
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static Task<T> WithSimpleExceptionHandling<T>(Task<T> task)
+        {
+            return task.RanToCompletion() ? task : Awaited(task);
+
+            static async Task<T> Awaited(Task<T> task)
+            {
+                try
+                {
+                    return await task.ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is RpcException))
+                {
+                    Rethrow(ex);
+                    return default!; // never reached
+                }
+            }
+        }
+
+        private static void Rethrow(Exception ex)
+        {
+            var code = ex switch
+            {
+                OperationCanceledException => StatusCode.Cancelled,
+                ArgumentException => StatusCode.InvalidArgument,
+                NotImplementedException => StatusCode.Unimplemented,
+                SecurityException => StatusCode.PermissionDenied,
+                EndOfStreamException => StatusCode.OutOfRange,
+                FileNotFoundException => StatusCode.NotFound,
+                DirectoryNotFoundException => StatusCode.NotFound,
+                TimeoutException => StatusCode.DeadlineExceeded,
+                _ => StatusCode.Unknown,
+            };
+            throw new RpcException(new Status(code, ex.Message), ex.Message);
         }
 
         /// <summary>
