@@ -2,8 +2,10 @@
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -40,16 +42,20 @@ namespace ProtoBuf.Grpc.Configuration
                 ? new HashSet<Type> { serviceType }
                 : ContractOperation.ExpandInterfaces(serviceType);
 
+            bool serviceImplSimplifiedExceptions = serviceType.IsDefined(typeof(SimpleRpcExceptionsAttribute));
             foreach (var serviceContract in serviceContracts)
             {
                 if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
 
+                var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions || serviceContract.IsDefined(typeof(SimpleRpcExceptionsAttribute));
                 int svcOpCount = 0;
                 var bindCtx = new ServiceBindContext(serviceContract, serviceType, state);
                 foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, this))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
-                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker, bindCtx))
+                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker, bindCtx,
+                        serviceContractSimplifiedExceptions || op.Method.IsDefined(typeof(SimpleRpcExceptionsAttribute))
+                        ))
                     {
                         // yay!
                         totalCount++;
@@ -61,7 +67,7 @@ namespace ProtoBuf.Grpc.Configuration
             return totalCount;
 
             bool AddMethod(Type @in, Type @out, string on, MethodInfo m, MethodType t,
-                Func<MethodInfo, ParameterExpression[], Expression>? invoker, ServiceBindContext bindContext)
+                Func<MethodInfo, ParameterExpression[], Expression>? invoker, ServiceBindContext bindContext, bool simplifiedExceptionHandling)
             {
                 try
                 {
@@ -72,9 +78,11 @@ namespace ProtoBuf.Grpc.Configuration
                     typesBuffer[1] = @in;
                     typesBuffer[2] = @out;
 
-                    if (argsBuffer == null)
+                    if (argsBuffer is null)
                     {
-                        argsBuffer = new object?[] { null, null, null, null, null, null, binderConfiguration!.MarshallerCache, service == null ? null : Expression.Constant(service, serviceType) };
+                        argsBuffer = new object?[9];
+                        argsBuffer[6] = binderConfiguration!.MarshallerCache;
+                        argsBuffer[7] = service is null ? null : Expression.Constant(service, serviceType);
                     }
                     argsBuffer[0] = serviceName;
                     argsBuffer[1] = on;
@@ -82,6 +90,8 @@ namespace ProtoBuf.Grpc.Configuration
                     argsBuffer[3] = t;
                     argsBuffer[4] = bindContext;
                     argsBuffer[5] = invoker;
+                    // 6, 7 set during array initialization
+                    argsBuffer[8] = simplifiedExceptionHandling;
 
                     return (bool)s_addMethod.MakeGenericMethod(typesBuffer).Invoke(this, argsBuffer)!;
                 }
@@ -116,14 +126,16 @@ namespace ProtoBuf.Grpc.Configuration
         {
             private readonly ConstantExpression? _service;
             private readonly Func<MethodInfo, Expression[], Expression>? _invoker;
+            private readonly bool _simpleExceptionHandling;
 
             /// <summary>
             /// The runtime method being considered
             /// </summary>
             public MethodInfo Method { get; }
 
-            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method, ConstantExpression? service)
+            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method, ConstantExpression? service, bool simpleExceptionHandling)
             {
+                _simpleExceptionHandling = simpleExceptionHandling;
                 _invoker = invoker;
                 _service = service;
                 Method = method;
@@ -137,43 +149,86 @@ namespace ProtoBuf.Grpc.Configuration
             {
                 if (_invoker == null)
                 {
-                    // basic - direct call
-                    return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
-                }
-                var lambdaArgs = ParameterCache<TDelegate>.Parameters;
+                    if (_simpleExceptionHandling)
+                    {
+                        var lambdaArgs = ParameterCache<TDelegate>.Parameters;
 
-                Expression[] mapArgs;
-                if (_service == null)
-                {   // if no service object, then the service is part of the signature, i.e. (svc, req) => svc.Blah();
-                    mapArgs = lambdaArgs;
+                        var call = _service is null
+                            ? Expression.Call(Method, lambdaArgs)
+                            : Expression.Call(_service, Method, lambdaArgs);
+
+                        return Expression.Lambda<TDelegate>(
+                            ApplySimpleExceptionHandling(call), lambdaArgs).Compile();
+                    }
+                    else
+                    {
+                        // basic - direct call
+                        return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
+                    }
                 }
                 else
                 {
-                    // if there *is* a service object, then that is *not* part of the signature, i.e. (req) => svc.Blah(req)
-                    // where the svc instance comes in separately
-                    mapArgs = new Expression[lambdaArgs.Length + 1];
-                    mapArgs[0] = _service;
-                    lambdaArgs.CopyTo(mapArgs, 1);
+                    var lambdaArgs = ParameterCache<TDelegate>.Parameters;
+
+                    Expression[] mapArgs;
+                    if (_service is null)
+                    {   // if no service object, then the service is part of the signature, i.e. (svc, req) => svc.Blah();
+                        mapArgs = lambdaArgs;
+                    }
+                    else
+                    {
+                        // if there *is* a service object, then that is *not* part of the signature, i.e. (req) => svc.Blah(req)
+                        // where the svc instance comes in separately
+                        mapArgs = new Expression[lambdaArgs.Length + 1];
+                        mapArgs[0] = _service;
+                        lambdaArgs.CopyTo(mapArgs, 1);
+                    }
+
+                    var body = _invoker.Invoke(Method, mapArgs);
+                    if (_simpleExceptionHandling)
+                    {
+                        body = ApplySimpleExceptionHandling(body);
+                    }
+                    var lambda = Expression.Lambda<TDelegate>(body, lambdaArgs);
+
+                    return lambda.Compile();
                 }
+            }
 
-                var body = _invoker.Invoke(Method, mapArgs);
-                var lambda = Expression.Lambda<TDelegate>(body, lambdaArgs);
-
-                return lambda.Compile();
+            static Expression ApplySimpleExceptionHandling(Expression body)
+            {
+                var type = body.Type;
+                if (type == typeof(Task))
+                {
+                    body = Expression.Call(s_ReshapeWithSimpleExceptionHandling[0], body);
+                }
+                else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Task<>))
+                {
+                    body = Expression.Call(s_ReshapeWithSimpleExceptionHandling[1].MakeGenericMethod(type.GetGenericArguments()), body);
+                }
+                return body;
             }
         }
+
+#pragma warning disable CS0618
+        private static readonly Dictionary<int, MethodInfo> s_ReshapeWithSimpleExceptionHandling =
+            (from method in typeof(Reshape).GetMethods(BindingFlags.Public | BindingFlags.Static)
+             where method.Name is nameof(Reshape.WithSimpleExceptionHandling)
+             select method)
+            .ToDictionary(method => method.IsGenericMethodDefinition ? method.GetGenericArguments().Length : 0);
+#pragma warning restore CS0618
 
         private bool AddMethod<TService, TRequest, TResponse>(
             string serviceName, string operationName, MethodInfo method, MethodType methodType,
             ServiceBindContext bindContext,
             Func<MethodInfo, Expression[], Expression>? invoker, MarshallerCache marshallerCache,
-            ConstantExpression? service)
+            ConstantExpression? service, bool simplfiedExceptionHandling)
             where TService : class
             where TRequest : class
             where TResponse : class
         {
             var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerCache.GetMarshaller<TRequest>(), marshallerCache.GetMarshaller<TResponse>());
-            var stub = new MethodStub<TService>(invoker, method, service);
+            var stub = new MethodStub<TService>(invoker, method, service, simplfiedExceptionHandling);
             try
             {
                 return TryBind<TService, TRequest, TResponse>(bindContext, grpcMethod, stub);

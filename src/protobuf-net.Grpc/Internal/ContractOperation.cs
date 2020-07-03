@@ -296,7 +296,8 @@ namespace ProtoBuf.Grpc.Internal
             (from method in typeof(Reshape).GetMethods(BindingFlags.Public | BindingFlags.Static)
              where method.IsGenericMethodDefinition
              let parameters = method.GetParameters()
-             where parameters[1].ParameterType == typeof(CallInvoker)
+             where parameters.Length > 1
+             && parameters[1].ParameterType == typeof(CallInvoker)
              && parameters[0].ParameterType == typeof(CallContext).MakeByRefType()
              select method).ToDictionary(x => x.Name);
 

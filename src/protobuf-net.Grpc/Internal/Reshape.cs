@@ -178,7 +178,7 @@ namespace ProtoBuf.Grpc.Internal
                 catch (Exception ex) when (!(ex is RpcException))
                 {
                     Rethrow(ex);
-                    return default!; // never reached
+                    return default!; // make compiler happy
                 }
             }
         }
