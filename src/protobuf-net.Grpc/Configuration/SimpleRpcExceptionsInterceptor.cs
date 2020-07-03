@@ -82,18 +82,20 @@ namespace ProtoBuf.Grpc.Configuration
 
         internal static void RethrowAsRpcException(Exception ex)
         {
+#pragma warning disable IDE0059 // needs more recent compiler than the CI server has
             var code = ex switch
             {
-                OperationCanceledException => StatusCode.Cancelled,
-                ArgumentException => StatusCode.InvalidArgument,
-                NotImplementedException => StatusCode.Unimplemented,
-                SecurityException => StatusCode.PermissionDenied,
-                EndOfStreamException => StatusCode.OutOfRange,
-                FileNotFoundException => StatusCode.NotFound,
-                DirectoryNotFoundException => StatusCode.NotFound,
-                TimeoutException => StatusCode.DeadlineExceeded,
+                OperationCanceledException a => StatusCode.Cancelled,
+                ArgumentException b => StatusCode.InvalidArgument,
+                NotImplementedException c => StatusCode.Unimplemented,
+                SecurityException d => StatusCode.PermissionDenied,
+                EndOfStreamException e => StatusCode.OutOfRange,
+                FileNotFoundException f => StatusCode.NotFound,
+                DirectoryNotFoundException g => StatusCode.NotFound,
+                TimeoutException h => StatusCode.DeadlineExceeded,
                 _ => StatusCode.Unknown,
             };
+#pragma warning restore IDE0059 // needs more recent compiler than the CI server has
             throw new RpcException(new Status(code, ex.Message), ex.Message);
         }
     }

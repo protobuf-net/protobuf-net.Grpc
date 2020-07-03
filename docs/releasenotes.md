@@ -2,7 +2,7 @@
 
 ## unreleased
 
-- add [`[SimpleRpcExceptions]`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/src/protobuf-net.Grpc/Configuration/SimpleRpcExceptionsAttribute.cs) which can be applied at service contract, service type, or service method levels, and which exposes exceptions more directly
+- add `[SimpleRpcExceptions]` (which can be applied at service contract, service type, or service method levels), and `SimpleRpcExceptionsInterceptor` (which can be applied to any service registration) - which expose server exceptions more conveniently (#75)
 
 ## 1.0.90
 
