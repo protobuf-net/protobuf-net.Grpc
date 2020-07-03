@@ -1,6 +1,10 @@
 # Release Notes
 
-## 1.0.**
+## unreleased
+
+- add [`[SimpleRpcExceptions]`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/src/protobuf-net.Grpc/Configuration/SimpleRpcExceptionsAttribute.cs) which can be applied at service contract, service type, or service method levels, and which exposes exceptions more directly
+
+## 1.0.90
 
 - make use of the contextual (buffer rather than `byte[]`) APIs when possible (i.e. when protobuf-net v3 is targeted)
 
