@@ -34,8 +34,9 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             ValueTask Fault();
         }
 
-        public Issue75(Issue75ServerFixture _)
+        public Issue75(Issue75ServerFixture serverFixture)
         {
+            if (serverFixture is null) throw new ArgumentNullException(nameof(serverFixture));
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
