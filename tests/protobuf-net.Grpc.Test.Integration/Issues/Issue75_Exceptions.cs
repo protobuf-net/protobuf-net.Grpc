@@ -27,12 +27,19 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             ValueTask SimplifiedFaultHandling_Fault();
         }
 
+        [Service]
+        public interface IInterceptedFaultTest
+        {
+            ValueTask Success();
+            ValueTask Fault();
+        }
+
         public Issue75(Issue75ServerFixture _)
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
-        public class Issue75ServerFixture : IFaultTest, IAsyncDisposable
+        public class Issue75ServerFixture : IFaultTest, IInterceptedFaultTest, IAsyncDisposable
         {
             public ValueTask DisposeAsync() => new ValueTask(_server.KillAsync());
 
@@ -43,7 +50,8 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
                 {
                     Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
                 };
-                _server.Services.AddCodeFirst(this);
+                _server.Services.AddCodeFirst<IFaultTest>(this);
+                _server.Services.AddCodeFirst<IInterceptedFaultTest>(this, interceptors: new[] { SimpleRpcExceptionsInterceptor.Instance });
                 _server.Start();
             }
             async ValueTask IFaultTest.VanillaFaultHanding_Fault()
@@ -59,6 +67,43 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
                 throw new ArgumentOutOfRangeException("foo");
             }
             ValueTask IFaultTest.SimplifiedFaultHandling_Success() => default;
+
+            ValueTask IInterceptedFaultTest.Success() => default;
+
+            ValueTask IInterceptedFaultTest.Fault() => throw new ArgumentOutOfRangeException("foo");
+        }
+
+        [Fact]
+        public async Task UnmanagedClient_Intercepted_Fault()
+        {
+            var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
+            try
+            {
+                var client = channel.CreateGrpcService<IInterceptedFaultTest>();
+                var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.Fault());
+                Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+                Assert.Equal(s_ExpectedMessage, ex.Status.Detail);
+                Assert.Equal($"Status(StatusCode=InvalidArgument, Detail=\"{s_ExpectedMessage}\")", ex.Message);
+            }
+            finally
+            {
+                await channel.ShutdownAsync();
+            }
+        }
+
+        [Fact]
+        public async Task UnmanagedClient_Intercepted_Success()
+        {
+            var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
+            try
+            {
+                var client = channel.CreateGrpcService<IInterceptedFaultTest>();
+                await client.Success();
+            }
+            finally
+            {
+                await channel.ShutdownAsync();
+            }
         }
 
         [Fact]
@@ -165,6 +210,25 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             using var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
             var client = http.CreateGrpcService<IFaultTest>();
             await client.SimplifiedFaultHandling_Success();
+        }
+
+        [Fact]
+        public async Task ManagedClient_Intercepted_Fault()
+        {
+            using var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
+            var client = http.CreateGrpcService<IInterceptedFaultTest>();
+            var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.Fault());
+            Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+            Assert.Equal(s_ExpectedMessage, ex.Status.Detail);
+            Assert.Equal($"Status(StatusCode=InvalidArgument, Detail=\"{s_ExpectedMessage}\")", ex.Message);
+        }
+
+        [Fact]
+        public async Task ManagedClient_Intercepted_Success()
+        {
+            using var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
+            var client = http.CreateGrpcService<IInterceptedFaultTest>();
+            await client.Success();
         }
 #endif
     }

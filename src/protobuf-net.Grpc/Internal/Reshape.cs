@@ -1,10 +1,9 @@
 ﻿using Grpc.Core;
+using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
-using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
 namespace ProtoBuf.Grpc.Internal
@@ -153,12 +152,14 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     await task.ConfigureAwait(false);
                 }
-                catch (Exception ex) when (!(ex is RpcException))
+                catch (Exception ex) when (SimpleRpcExceptionsInterceptor.IsNotRpcException(ex))
                 {
-                    Rethrow(ex);
+                    SimpleRpcExceptionsInterceptor.RethrowAsRpcException(ex);
                 }
             }
         }
+
+
 
         /// <summary>
         /// Consumes the provided task raising exceptions as <see cref="RpcException"/>
@@ -175,29 +176,12 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     return await task.ConfigureAwait(false);
                 }
-                catch (Exception ex) when (!(ex is RpcException))
+                catch (Exception ex) when (SimpleRpcExceptionsInterceptor.IsNotRpcException(ex))
                 {
-                    Rethrow(ex);
+                    SimpleRpcExceptionsInterceptor.RethrowAsRpcException(ex);
                     return default!; // make compiler happy
                 }
             }
-        }
-
-        private static void Rethrow(Exception ex)
-        {
-            var code = ex switch
-            {
-                OperationCanceledException => StatusCode.Cancelled,
-                ArgumentException => StatusCode.InvalidArgument,
-                NotImplementedException => StatusCode.Unimplemented,
-                SecurityException => StatusCode.PermissionDenied,
-                EndOfStreamException => StatusCode.OutOfRange,
-                FileNotFoundException => StatusCode.NotFound,
-                DirectoryNotFoundException => StatusCode.NotFound,
-                TimeoutException => StatusCode.DeadlineExceeded,
-                _ => StatusCode.Unknown,
-            };
-            throw new RpcException(new Status(code, ex.Message), ex.Message);
         }
 
         /// <summary>
