@@ -1,12 +1,10 @@
 ﻿using Grpc.Core;
-using ProtoBuf;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Server;
 using System;
 using System.Threading.Tasks;
 using Xunit;
-using Xunit.Abstractions;
 
 #nullable disable
 
@@ -40,9 +38,9 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
-        public class Issue75ServerFixture : IFaultTest, IInterceptedFaultTest, IAsyncDisposable
+        public class Issue75ServerFixture : IFaultTest, IInterceptedFaultTest, IDisposable
         {
-            public ValueTask DisposeAsync() => new ValueTask(_server.KillAsync());
+            public void Dispose() => _ = _server.KillAsync();
 
             private readonly Server? _server;
             public Issue75ServerFixture()

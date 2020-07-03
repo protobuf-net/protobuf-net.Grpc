@@ -1,17 +1,16 @@
 ﻿using Grpc.Core;
 using ProtoBuf;
-using ProtoBuf.Grpc.Configuration;
-using System;
-using System.Threading.Tasks;
-using ProtoBuf.Grpc.Server;
-using Xunit;
 using ProtoBuf.Grpc.Client;
-using Xunit.Abstractions;
+using ProtoBuf.Grpc.Configuration;
+using ProtoBuf.Grpc.Server;
 using ProtoBuf.Meta;
+using System;
 using System.Buffers;
-using Xunit.Sdk;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using Xunit;
+using Xunit.Abstractions;
 
 #nullable disable
 
@@ -82,9 +81,9 @@ As sub-object :
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
-        public class Issue100ServerFixture : ITest, IAsyncDisposable
+        public class Issue100ServerFixture : ITest, IDisposable
         {
-            public ValueTask DisposeAsync() => new ValueTask(_server.KillAsync());
+            public void Dispose() => _ = _server.KillAsync();
 
             private readonly Server? _server;
             public Issue100ServerFixture()
