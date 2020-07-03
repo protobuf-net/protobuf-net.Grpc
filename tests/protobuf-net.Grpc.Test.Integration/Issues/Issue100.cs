@@ -68,11 +68,12 @@ As sub-object :
             ValueTask<TestObject> GetTestInstance();
         }
 
-        
-        private readonly ITestOutputHelper _log;
-        ITest _server;
-        private void Log(string message) => _log?.WriteLine(message);
 
+#pragma warning disable IDE0051, IDE0052 // "unused" things; they are, but it depends on the TFM
+        private readonly ITestOutputHelper _log;
+        private readonly ITest _server;
+        private void Log(string message) => _log?.WriteLine(message);
+#pragma warning restore IDE0051, IDE0052
 
         public Issue100(Issue100ServerFixture server, ITestOutputHelper log)
         {

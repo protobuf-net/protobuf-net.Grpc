@@ -27,16 +27,8 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             ValueTask SimplifiedFaultHandling_Fault();
         }
 
-        
-        private readonly ITestOutputHelper _log;
-        IFaultTest _server;
-        private void Log(string message) => _log?.WriteLine(message);
-
-
-        public Issue75(Issue75ServerFixture server, ITestOutputHelper log)
+        public Issue75(Issue75ServerFixture _)
         {
-            _server = server;
-            _log = log;
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
