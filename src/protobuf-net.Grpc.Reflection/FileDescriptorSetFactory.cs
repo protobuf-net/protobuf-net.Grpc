@@ -50,7 +50,7 @@ namespace ProtoBuf.Grpc.Reflection
                 };
 
                 var dependencies = new HashSet<string>();
-                foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract))
+                foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, null))
                 {
                     // TODO: Validate op
                     serviceDescriptor.Methods.Add(new MethodDescriptorProto
