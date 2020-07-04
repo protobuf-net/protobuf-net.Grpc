@@ -30,11 +30,6 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static void Populate(FileDescriptorSet fileDescriptorSet, Type serviceType, BinderConfiguration binderConfiguration)
         {
-            if (typeof(IServerReflection).IsAssignableFrom(serviceType))
-            {
-                return;
-            }
-
             string? serviceName, inputFile, outputFile;
             var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
                 ? new HashSet<Type> { serviceType }
@@ -88,6 +83,7 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static string GetType(Type type, FileDescriptorSet fileDescriptorSet, out string descriptorProto)
         {
+            var typeName = type.Name;
             var fileName = type.FullName + ".proto";
             var fileDescriptor = fileDescriptorSet.Files.SingleOrDefault(f => f.Name.Equals(fileName, StringComparison.Ordinal));
 
@@ -103,7 +99,8 @@ namespace ProtoBuf.Grpc.Reflection
 
             descriptorProto = fileDescriptor.Name;
 
-            return "." + fileDescriptor.Package + "." + fileDescriptor.MessageTypes.Single().Name;
+            return "." + fileDescriptor.Package + "." + fileDescriptor.MessageTypes
+                .Single(m => m.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase)).Name;
         }
     }
 }
