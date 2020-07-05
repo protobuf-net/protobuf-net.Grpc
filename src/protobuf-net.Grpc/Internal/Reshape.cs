@@ -152,9 +152,9 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     await task.ConfigureAwait(false);
                 }
-                catch (Exception ex) when (SimpleRpcExceptionsInterceptor.IsNotRpcException(ex))
+                catch (Exception ex) when (SimpleRpcExceptionsInterceptor.ShouldWrap(ex, out var status))
                 {
-                    SimpleRpcExceptionsInterceptor.RethrowAsRpcException(ex);
+                    throw new RpcException(status, ex.Message);
                 }
             }
         }
@@ -176,10 +176,9 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     return await task.ConfigureAwait(false);
                 }
-                catch (Exception ex) when (SimpleRpcExceptionsInterceptor.IsNotRpcException(ex))
+                catch (Exception ex) when (SimpleRpcExceptionsInterceptor.ShouldWrap(ex, out var status))
                 {
-                    SimpleRpcExceptionsInterceptor.RethrowAsRpcException(ex);
-                    return default!; // make compiler happy
+                    throw new RpcException(status, ex.Message);
                 }
             }
         }
