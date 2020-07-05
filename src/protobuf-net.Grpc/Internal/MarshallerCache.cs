@@ -78,16 +78,5 @@ namespace ProtoBuf.Grpc.Internal
             }
             return null;
         }
-
-        internal TFactory? TryGetFactory<TFactory>()
-            where TFactory : MarshallerFactory
-        {
-            foreach (var factory in _factories)
-            {
-                if (factory is TFactory typed)
-                    return typed;
-            }
-            return null;
-        }
     }
 }

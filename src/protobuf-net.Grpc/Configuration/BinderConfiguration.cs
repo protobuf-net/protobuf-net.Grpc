@@ -53,5 +53,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         /// <param name="marshaller">The marshaller to use - if null, the cache is reset for this type</param>
         public void SetMarshaller<T>(Marshaller<T>? marshaller) => MarshallerCache.SetMarshaller<T>(marshaller);
+
+        internal MarshallerFactory? TryGetFactory(Type type) => MarshallerCache.TryGetFactory(type);
     }
 }
