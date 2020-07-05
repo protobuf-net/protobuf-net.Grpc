@@ -21,6 +21,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Server_CS", "examples\pb-ne
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB6F-6111-4604-8EDF-6A59F8B12D7E}"
 	ProjectSection(SolutionItems) = preProject
+		appveyor.yml = appveyor.yml
 		Directory.build.props = Directory.build.props
 		Directory.Build.targets = Directory.Build.targets
 		global.json = global.json
@@ -99,7 +100,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "toys", "toys", "{0DD003CC-9
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.ClientFactory", "src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj", "{4A7D8244-D6B2-4DD3-A0F3-1BF716FB1A0B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.Grpc.Test.IntegrationUpLevel", "tests\protobuf-net.Grpc.Test.IntegrationUpLevel\protobuf-net.Grpc.Test.IntegrationUpLevel.csproj", "{B694ED60-93A4-4362-BBCF-4EA04B6F4660}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.Test.IntegrationUpLevel", "tests\protobuf-net.Grpc.Test.IntegrationUpLevel\protobuf-net.Grpc.Test.IntegrationUpLevel.csproj", "{B694ED60-93A4-4362-BBCF-4EA04B6F4660}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
