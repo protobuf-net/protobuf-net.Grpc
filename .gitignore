@@ -20,3 +20,4 @@ src/VBTest/*
 src/Benchmark/DalSerializer.dll
 ~$*.pptx
 .nupkgs/*
+.ionide/

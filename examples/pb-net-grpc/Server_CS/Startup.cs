@@ -15,6 +15,7 @@ namespace Server_CS
             {
                 config.ResponseCompressionLevel = System.IO.Compression.CompressionLevel.Optimal;
             });
+            services.AddCodeFirstGrpcReflection();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -26,6 +27,7 @@ namespace Server_CS
             {
                 endpoints.MapGrpcService<MyCalculator>();
                 endpoints.MapGrpcService<MyTimeService>();
+                endpoints.MapCodeFirstGrpcReflectionService();
             });
         }
     }

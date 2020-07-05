@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net461;netstandard2.1;netstandard2.0</TargetFrameworks>
+        <RootNamespace>ProtoBuf.Grpc.Reflection</RootNamespace>
+        <LangVersion>preview</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="protobuf-net.Reflection" Version="3.0.17" />
+        <PackageReference Include="protobuf-net" Version="3.0.17" />
+        <PackageReference Include="protobuf-net.Core" Version="3.0.17" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    </ItemGroup>
+
+</Project>
