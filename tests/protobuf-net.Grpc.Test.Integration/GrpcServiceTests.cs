@@ -114,7 +114,8 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
-            _server.Services.AddCodeFirst(new ApplyServices());
+            object nonGeneric = new ApplyServices();
+            _server.Services.AddCodeFirst(nonGeneric);
             _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
             _server.Services.AddCodeFirst(new InterceptedService(), interceptors: new[] { _interceptor });
             _server.Start();

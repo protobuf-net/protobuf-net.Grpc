@@ -68,8 +68,8 @@ namespace protobuf_net.Grpc.Test
             => CheckResults(AttributeHelper.For(type, inherit), expectedFoo, expectedBar);
         private static void CheckResults(AttributeHelper attribs, string expectedFoo, string expectedBar)
         {
-            var fooResult = attribs.TryGetAnyNonWhitespaceString(typeof(FooAttribute).FullName, "Name", out var actualFoo);
-            var barResult = attribs.TryGetAnyNonWhitespaceString(typeof(BarAttribute).FullName, "Name", out var actualBar);
+            var fooResult = attribs.TryGetAnyNonWhitespaceString(typeof(FooAttribute).FullName!, "Name", out var actualFoo);
+            var barResult = attribs.TryGetAnyNonWhitespaceString(typeof(BarAttribute).FullName!, "Name", out var actualBar);
 
             if (string.IsNullOrWhiteSpace(expectedFoo))
             {
@@ -120,7 +120,7 @@ namespace protobuf_net.Grpc.Test
         [InlineData(typeof(SomeLeafType), "D", false, null, null)]
 
         public void CheckMethodAttributes(Type type, string method, bool inherit, string expectedFoo, string expectedBar)
-            => CheckResults(AttributeHelper.For(type.GetMethod(method), inherit), expectedFoo, expectedBar);
+            => CheckResults(AttributeHelper.For(type.GetMethod(method)!, inherit), expectedFoo, expectedBar);
 
         [Foo("base")]
         [Bar("base bar")]

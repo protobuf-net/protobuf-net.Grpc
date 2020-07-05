@@ -30,9 +30,24 @@ namespace ProtoBuf.Grpc.Server
             TextWriter? log = null,
             IEnumerable<Interceptor>? interceptors = null)
             where TService : class
+            => AddCodeFirstImpl(services, service, typeof(TService), binderConfiguration, log, interceptors);
+
+        /// <summary>
+        /// Adds a code-first service to the available services
+        /// </summary>
+        public static int AddCodeFirst(this ServiceDefinitionCollection services, object service,
+            BinderConfiguration? binderConfiguration = null,
+            TextWriter? log = null,
+            IEnumerable<Interceptor>? interceptors = null)
+            => AddCodeFirstImpl(services, service, service?.GetType() ?? throw new ArgumentNullException(nameof(service)), binderConfiguration, log, interceptors);
+
+        private static int AddCodeFirstImpl(ServiceDefinitionCollection services, object service, Type serviceType,
+            BinderConfiguration? binderConfiguration,
+            TextWriter? log,
+            IEnumerable<Interceptor>? interceptors)
         {
             var builder = ServerServiceDefinition.CreateBuilder();
-            int count = Binder.Create(log).Bind<TService>(builder, binderConfiguration, service);
+            int count = Binder.Create(log).Bind(builder, serviceType, binderConfiguration, service);
             var serverServiceDefinition = builder.Build();
             
             if (interceptors is object)
