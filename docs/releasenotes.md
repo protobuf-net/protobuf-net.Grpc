@@ -3,6 +3,7 @@
 ## unreleased
 
 - add `[SimpleRpcExceptions]` (which can be applied at service contract, service type, or service method levels), and `SimpleRpcExceptionsInterceptor` (which can be applied to any service registration) - which expose server exceptions more conveniently (#75)
+- use linker-friendly metadata inspection (#90)
 
 ## 1.0.90
 

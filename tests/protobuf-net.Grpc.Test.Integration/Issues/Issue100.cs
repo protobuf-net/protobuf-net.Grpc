@@ -59,7 +59,7 @@ As sub-object :
         }
 #endif
 
-        const int Port = 12315;
+        const int Port = 10046;
 
         [Service]
         public interface ITest

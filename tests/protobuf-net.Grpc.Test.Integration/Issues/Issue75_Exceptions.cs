@@ -12,7 +12,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
 {
     public class Issue75 : IClassFixture<Issue75.Issue75ServerFixture>
     {
-        const int Port = 12316;
+        const int Port = 10045;
 
         [Service]
         public interface IFaultTest
