@@ -39,6 +39,11 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None, default);
 
+        /// <summary>
+        /// Gets the model used by this instance.
+        /// </summary>
+        public TypeModel Model => _model;
+
         private readonly TypeModel _model;
         private readonly SerializationContext? _userState;
         private readonly Options _options;

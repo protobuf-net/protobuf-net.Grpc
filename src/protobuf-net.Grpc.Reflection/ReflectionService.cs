@@ -10,21 +10,33 @@ using ProtoBuf.Grpc.Reflection.Internal;
 
 namespace ProtoBuf.Grpc.Reflection
 {
+    /// <summary>
+    /// Implements the <see cref="IServerReflection"/> API
+    /// </summary>
     public sealed class ReflectionService : IServerReflection
     {
         private readonly List<string> _services;
         private readonly SymbolRegistry _symbolRegistry;
 
+        /// <summary>
+        /// Creates a new <see cref="ReflectionService"/> instance
+        /// </summary>
         public ReflectionService(params Type[] types)
             : this(null, types)
         {
         }
 
+        /// <summary>
+        /// Creates a new <see cref="ReflectionService"/> instance
+        /// </summary>
         public ReflectionService(BinderConfiguration? binderConfiguration, params Type[] types)
             : this(FileDescriptorSetFactory.Create(types, binderConfiguration))
         {
         }
 
+        /// <summary>
+        /// Creates a new <see cref="ReflectionService"/> instance
+        /// </summary>
         public ReflectionService(
             FileDescriptorSet fileDescriptorSet)
         {
@@ -35,7 +47,7 @@ namespace ProtoBuf.Grpc.Reflection
             _symbolRegistry = SymbolRegistry.FromFiles(fileDescriptorSet);
         }
 
-        public async IAsyncEnumerable<ServerReflectionResponse> ServerReflectionInfoAsync(IAsyncEnumerable<ServerReflectionRequest> requests, CallContext context = default)
+        async IAsyncEnumerable<ServerReflectionResponse> IServerReflection.ServerReflectionInfoAsync(IAsyncEnumerable<ServerReflectionRequest> requests, CallContext context)
         {
             await foreach(var request in requests)
             {
@@ -44,22 +56,13 @@ namespace ProtoBuf.Grpc.Reflection
             }
         }
 
-        private ServerReflectionResponse ProcessRequest(ServerReflectionRequest request)
+        private ServerReflectionResponse ProcessRequest(ServerReflectionRequest request) => request.MessageRequestCase switch
         {
-            switch (request.MessageRequestCase)
-            {
-                case ServerReflectionRequest.MessageRequestOneofCase.FileByFilename:
-                    return FileByFilename(request.FileByFilename);
-                case ServerReflectionRequest.MessageRequestOneofCase.FileContainingSymbol:
-                    return FileContainingSymbol(request.FileContainingSymbol);
-                case ServerReflectionRequest.MessageRequestOneofCase.ListServices:
-                    return ListServices();
-                case ServerReflectionRequest.MessageRequestOneofCase.AllExtensionNumbersOfType:
-                case ServerReflectionRequest.MessageRequestOneofCase.FileContainingExtension:
-                default:
-                    return CreateErrorResponse(StatusCode.Unimplemented, "Request type not supported by C# reflection service.");
-            }
-        }
+            ServerReflectionRequest.MessageRequestOneofCase.FileByFilename => FileByFilename(request.FileByFilename),
+            ServerReflectionRequest.MessageRequestOneofCase.FileContainingSymbol => FileContainingSymbol(request.FileContainingSymbol),
+            ServerReflectionRequest.MessageRequestOneofCase.ListServices => ListServices(),
+            _ => CreateErrorResponse(StatusCode.Unimplemented, "Request type not supported by C# reflection service."),
+        };
 
         private ServerReflectionResponse FileByFilename(string filename)
         {

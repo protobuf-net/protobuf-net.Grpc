@@ -17,11 +17,11 @@ namespace ProtoBuf.Grpc.Reflection
         internal static FileDescriptorSet Create(IEnumerable<Type> serviceTypes, BinderConfiguration? binderConfiguration = null)
         {
             var fileDescriptorSet = new FileDescriptorSet();
-            var configuration = binderConfiguration ?? BinderConfiguration.Default;
+            binderConfiguration ??= BinderConfiguration.Default;
 
             foreach (var serviceType in serviceTypes)
             {
-                Populate(fileDescriptorSet, serviceType, configuration);
+                Populate(fileDescriptorSet, serviceType, binderConfiguration);
             }
 
             fileDescriptorSet.Process();
@@ -30,14 +30,13 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static void Populate(FileDescriptorSet fileDescriptorSet, Type serviceType, BinderConfiguration binderConfiguration)
         {
-            string? serviceName, inputFile, outputFile;
             var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
                 ? new HashSet<Type> { serviceType }
                 : ContractOperation.ExpandInterfaces(serviceType);
 
             foreach (var serviceContract in serviceContracts)
             {
-                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
+                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out string? serviceName)) continue;
 
                 var serviceDescriptor = new ServiceDescriptorProto
                 {
@@ -51,8 +50,8 @@ namespace ProtoBuf.Grpc.Reflection
                     serviceDescriptor.Methods.Add(new MethodDescriptorProto
                     {
                         Name = op.Name,
-                        InputType = GetType(op.From, fileDescriptorSet, out inputFile),
-                        OutputType = GetType(op.To, fileDescriptorSet, out outputFile),
+                        InputType = GetType(binderConfiguration, op.From, fileDescriptorSet, out string? inputFile),
+                        OutputType = GetType(binderConfiguration, op.To, fileDescriptorSet, out string? outputFile),
                         ClientStreaming = op.MethodType == MethodType.ClientStreaming ||
                                           op.MethodType == MethodType.DuplexStreaming,
                         ServerStreaming = op.MethodType == MethodType.ServerStreaming ||
@@ -81,15 +80,17 @@ namespace ProtoBuf.Grpc.Reflection
             }
         }
 
-        private static string GetType(Type type, FileDescriptorSet fileDescriptorSet, out string descriptorProto)
+        private static string GetType(BinderConfiguration binderConfiguration, Type type, FileDescriptorSet fileDescriptorSet, out string descriptorProto)
         {
             var typeName = type.Name;
             var fileName = type.FullName + ".proto";
             var fileDescriptor = fileDescriptorSet.Files.SingleOrDefault(f => f.Name.Equals(fileName, StringComparison.Ordinal));
 
+            TypeModel model = binderConfiguration.TryGetFactory(type) is ProtoBufMarshallerFactory factory ? factory.Model : RuntimeTypeModel.Default;
+
             if (fileDescriptor is null)
             {
-                var schema = RuntimeTypeModel.Default.GetSchema(type, ProtoSyntax.Proto3);
+                var schema = model.GetSchema(type, ProtoSyntax.Proto3);
 
                 using var reader = new StringReader(schema);
 

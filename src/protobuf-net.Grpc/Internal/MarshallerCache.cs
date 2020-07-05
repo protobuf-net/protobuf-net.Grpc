@@ -67,5 +67,15 @@ namespace ProtoBuf.Grpc.Internal
             }
             return null;
         }
+
+        internal MarshallerFactory? TryGetFactory(Type type)
+        {
+            foreach (var factory in _factories)
+            {
+                if (factory.CanSerialize(type))
+                    return factory;
+            }
+            return null;
+        }
     }
 }
