@@ -86,7 +86,7 @@ namespace ProtoBuf.Grpc.Reflection
             var fileName = type.FullName + ".proto";
             var fileDescriptor = fileDescriptorSet.Files.SingleOrDefault(f => f.Name.Equals(fileName, StringComparison.Ordinal));
 
-            TypeModel model = binderConfiguration.TryGetFactory(type) is ProtoBufMarshallerFactory factory ? factory.Model : RuntimeTypeModel.Default;
+            TypeModel model = binderConfiguration.MarshallerCache.TryGetFactory(type) is ProtoBufMarshallerFactory factory ? factory.Model : RuntimeTypeModel.Default;
 
             if (fileDescriptor is null)
             {

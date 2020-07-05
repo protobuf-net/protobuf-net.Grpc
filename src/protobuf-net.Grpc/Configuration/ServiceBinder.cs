@@ -80,7 +80,7 @@ namespace ProtoBuf.Grpc.Configuration
                 return true;
             }
 
-            string? serviceName = null;
+            string? serviceName;
             var attribs = AttributeHelper.For(contractType, inherit: true);
             if (attribs.IsDefined("ProtoBuf.Grpc.Configuration.ServiceAttribute"))
             {
