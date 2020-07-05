@@ -1,4 +1,6 @@
-﻿using Grpc.Core;
+﻿#if NETCOREAPP3_1 // getting problems from multiple TFMs fighting over ports; since we're testing the unmanaged server, the client TFM doesn't matter - just do one
+
+using Grpc.Core;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Server;
@@ -232,3 +234,4 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
 #endif
     }
 }
+#endif
