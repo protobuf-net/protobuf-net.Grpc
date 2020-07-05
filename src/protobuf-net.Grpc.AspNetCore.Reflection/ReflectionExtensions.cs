@@ -1,23 +1,36 @@
 ﻿using Grpc.AspNetCore.Server;
-using Grpc.AspNetCore.Server.Model;
-using Grpc.Core;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Reflection;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace ProtoBuf.Grpc.Server
 {
     /// <summary>
-    /// Provides extension methods to the IServiceCollection API
+    /// Provides extension methods to provide protobuf-net.Grpc reflection services
     /// </summary>
-    public static class ServicesExtensions
+    public static class ReflectionExtensions
     {
+        /// <summary>
+        /// Maps incoming requests to the gRPC reflection service.
+        /// This service can be queried to discover the gRPC services on the server.
+        /// </summary>
+        /// <param name="builder">The <see cref="IEndpointRouteBuilder"/> to add the route to.</param>
+        /// <returns>An <see cref="IEndpointConventionBuilder"/> for endpoints associated with the service.</returns>
+        public static IEndpointConventionBuilder MapCodeFirstGrpcReflectionService(this IEndpointRouteBuilder builder)
+        {
+            if (builder is null)
+            {
+                throw new ArgumentNullException(nameof(builder));
+            }
+
+            return builder.MapGrpcService<ReflectionService>();
+        }
+
         /// <summary>
         /// Adds gRPC reflection services to the specified <see cref="IServiceCollection" />.
         /// </summary>

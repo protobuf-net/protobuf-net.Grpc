@@ -4,7 +4,8 @@
 //   Input: https://github.com/grpc/grpc/blob/64fb7d47452e32e8746569bf0d1c19c5d1f1a1d9/src/proto/grpc/reflection/v1alpha/reflection.proto
 // </auto-generated>
 
-#pragma warning disable CS0612, CS1591, CS3021, IDE1006, RCS1036, RCS1057, RCS1085, RCS1192
+#region Designer generated code
+#pragma warning disable CS0612, CS0618, CS1591, CS3021, IDE1006, RCS1036, RCS1057, RCS1085, RCS1192
 namespace grpc.reflection.v1alpha
 {
 
@@ -23,8 +24,8 @@ namespace grpc.reflection.v1alpha
         [global::System.ComponentModel.DefaultValue("")]
         public string FileByFilename
         {
-            get { return __pbn__message_request.Is(3) ? ((string)__pbn__message_request.Object) : ""; }
-            set { __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(3, value); }
+            get => __pbn__message_request.Is(3) ? ((string)__pbn__message_request.Object) : "";
+            set => __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(3, value);
         }
         public bool ShouldSerializeFileByFilename() => __pbn__message_request.Is(3);
         public void ResetFileByFilename() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_request, 3);
@@ -35,8 +36,8 @@ namespace grpc.reflection.v1alpha
         [global::System.ComponentModel.DefaultValue("")]
         public string FileContainingSymbol
         {
-            get { return __pbn__message_request.Is(4) ? ((string)__pbn__message_request.Object) : ""; }
-            set { __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(4, value); }
+            get => __pbn__message_request.Is(4) ? ((string)__pbn__message_request.Object) : "";
+            set => __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(4, value);
         }
         public bool ShouldSerializeFileContainingSymbol() => __pbn__message_request.Is(4);
         public void ResetFileContainingSymbol() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_request, 4);
@@ -44,8 +45,8 @@ namespace grpc.reflection.v1alpha
         [global::ProtoBuf.ProtoMember(5, Name = @"file_containing_extension")]
         public ExtensionRequest FileContainingExtension
         {
-            get { return __pbn__message_request.Is(5) ? ((ExtensionRequest)__pbn__message_request.Object) : default; }
-            set { __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(5, value); }
+            get => __pbn__message_request.Is(5) ? ((ExtensionRequest)__pbn__message_request.Object) : default;
+            set => __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(5, value);
         }
         public bool ShouldSerializeFileContainingExtension() => __pbn__message_request.Is(5);
         public void ResetFileContainingExtension() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_request, 5);
@@ -54,8 +55,8 @@ namespace grpc.reflection.v1alpha
         [global::System.ComponentModel.DefaultValue("")]
         public string AllExtensionNumbersOfType
         {
-            get { return __pbn__message_request.Is(6) ? ((string)__pbn__message_request.Object) : ""; }
-            set { __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(6, value); }
+            get => __pbn__message_request.Is(6) ? ((string)__pbn__message_request.Object) : "";
+            set => __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(6, value);
         }
         public bool ShouldSerializeAllExtensionNumbersOfType() => __pbn__message_request.Is(6);
         public void ResetAllExtensionNumbersOfType() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_request, 6);
@@ -64,8 +65,8 @@ namespace grpc.reflection.v1alpha
         [global::System.ComponentModel.DefaultValue("")]
         public string ListServices
         {
-            get { return __pbn__message_request.Is(7) ? ((string)__pbn__message_request.Object) : ""; }
-            set { __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(7, value); }
+            get => __pbn__message_request.Is(7) ? ((string)__pbn__message_request.Object) : "";
+            set => __pbn__message_request = new global::ProtoBuf.DiscriminatedUnionObject(7, value);
         }
         public bool ShouldSerializeListServices() => __pbn__message_request.Is(7);
         public void ResetListServices() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_request, 7);
@@ -117,8 +118,8 @@ namespace grpc.reflection.v1alpha
         [global::ProtoBuf.ProtoMember(4, Name = @"file_descriptor_response")]
         public FileDescriptorResponse FileDescriptorResponse
         {
-            get { return __pbn__message_response.Is(4) ? ((FileDescriptorResponse)__pbn__message_response.Object) : default; }
-            set { __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(4, value); }
+            get => __pbn__message_response.Is(4) ? ((FileDescriptorResponse)__pbn__message_response.Object) : default;
+            set => __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(4, value);
         }
         public bool ShouldSerializeFileDescriptorResponse() => __pbn__message_response.Is(4);
         public void ResetFileDescriptorResponse() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_response, 4);
@@ -128,8 +129,8 @@ namespace grpc.reflection.v1alpha
         [global::ProtoBuf.ProtoMember(5, Name = @"all_extension_numbers_response")]
         public ExtensionNumberResponse AllExtensionNumbersResponse
         {
-            get { return __pbn__message_response.Is(5) ? ((ExtensionNumberResponse)__pbn__message_response.Object) : default; }
-            set { __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(5, value); }
+            get => __pbn__message_response.Is(5) ? ((ExtensionNumberResponse)__pbn__message_response.Object) : default;
+            set => __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(5, value);
         }
         public bool ShouldSerializeAllExtensionNumbersResponse() => __pbn__message_response.Is(5);
         public void ResetAllExtensionNumbersResponse() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_response, 5);
@@ -137,8 +138,8 @@ namespace grpc.reflection.v1alpha
         [global::ProtoBuf.ProtoMember(6, Name = @"list_services_response")]
         public ListServiceResponse ListServicesResponse
         {
-            get { return __pbn__message_response.Is(6) ? ((ListServiceResponse)__pbn__message_response.Object) : default; }
-            set { __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(6, value); }
+            get => __pbn__message_response.Is(6) ? ((ListServiceResponse)__pbn__message_response.Object) : default;
+            set => __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(6, value);
         }
         public bool ShouldSerializeListServicesResponse() => __pbn__message_response.Is(6);
         public void ResetListServicesResponse() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_response, 6);
@@ -146,8 +147,8 @@ namespace grpc.reflection.v1alpha
         [global::ProtoBuf.ProtoMember(7, Name = @"error_response")]
         public ErrorResponse ErrorResponse
         {
-            get { return __pbn__message_response.Is(7) ? ((ErrorResponse)__pbn__message_response.Object) : default; }
-            set { __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(7, value); }
+            get => __pbn__message_response.Is(7) ? ((ErrorResponse)__pbn__message_response.Object) : default;
+            set => __pbn__message_response = new global::ProtoBuf.DiscriminatedUnionObject(7, value);
         }
         public bool ShouldSerializeErrorResponse() => __pbn__message_response.Is(7);
         public void ResetErrorResponse() => global::ProtoBuf.DiscriminatedUnionObject.Reset(ref __pbn__message_response, 7);
@@ -242,4 +243,5 @@ namespace grpc.reflection.v1alpha
 
 }
 
-#pragma warning restore CS0612, CS1591, CS3021, IDE1006, RCS1036, RCS1057, RCS1085, RCS1192
+#pragma warning restore CS0612, CS0618, CS1591, CS3021, IDE1006, RCS1036, RCS1057, RCS1085, RCS1192
+#endregion
