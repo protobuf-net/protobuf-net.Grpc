@@ -85,14 +85,14 @@ service MyService {
             public string? Value { get; set; }
 
             [DataMember(Order = 2)]
-            public Category Category {get;set;}
+            public Category Category { get; set; }
 
             [DataMember(Order = 3)]
             public Guid RefId { get; set; }
         }
 
         public enum Category
-    {
+        {
             Default = 0,
             Foo = 1,
             Bar = 2,

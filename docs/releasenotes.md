@@ -1,7 +1,9 @@
 # Release Notes
 
-## unreleased
+## 1.0.110
 
+- add support for server-side reflection (think "mex"/"wsdl") in `protobuf-net.Grpc.AspNetCore.Reflection` (#49/#63 via mholo65)
+- add .proto schema generation tools in `protobuf-net.Grpc.Reflection`
 - add `[SimpleRpcExceptions]` (which can be applied at service contract, service type, or service method levels), and `SimpleRpcExceptionsInterceptor` (which can be applied to any service registration) - which expose server exceptions more conveniently (#75)
 - use linker-friendly metadata inspection (#90)
 - add non-generic `AddCodeFirst` native server overload (#106)
