@@ -1,6 +1,5 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
-using ProtoBuf.Meta;
 using System;
 using System.Collections.Concurrent;
 using System.Reflection;
@@ -75,6 +74,17 @@ namespace ProtoBuf.Grpc.Internal
             {
                 if (factory.CanSerialize(type))
                     return factory;
+            }
+            return null;
+        }
+
+        internal TFactory? TryGetFactory<TFactory>()
+            where TFactory : MarshallerFactory
+        {
+            foreach (var factory in _factories)
+            {
+                if (factory is TFactory typed)
+                    return typed;
             }
             return null;
         }
