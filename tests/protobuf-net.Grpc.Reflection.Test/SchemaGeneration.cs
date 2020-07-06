@@ -45,11 +45,11 @@ message MyResponse {
 }
 service MyService {
    rpc AsyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
-   rpc ClientStreaming (MyResponse) returns (stream MyRequest);
-   rpc FullDuplex (stream MyResponse) returns (stream MyRequest);
-   rpc ServerStreaming (stream MyResponse) returns (MyRequest);
+   rpc ClientStreaming (stream MyRequest) returns (MyResponse);
+   rpc FullDuplex (stream MyRequest) returns (stream MyResponse);
+   rpc ServerStreaming (MyRequest) returns (stream MyResponse);
    rpc SyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
-   rpc Unary (MyResponse) returns (MyRequest);
+   rpc Unary (MyRequest) returns (MyResponse);
 }
 ", schema, ignoreLineEndingDifferences: true);
         }

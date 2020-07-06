@@ -11,7 +11,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.6.1" />
-		<PackageReference Include="protobuf-net" Version="3.0.21" />
+		<PackageReference Include="protobuf-net" Version="3.0.24" />
 		<PackageReference Include="System.Collections.Immutable" Version="1.7.1" />
 		<PackageReference Include="xunit" Version="2.4.1" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="2.4.2">
