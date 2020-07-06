@@ -32,7 +32,7 @@
     <GrpcVersion>2.30.0</GrpcVersion>
 
     <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
-    <ProtoBufNet3Version>3.0.24</ProtoBufNet3Version>
+    <ProtoBufNet3Version>3.0.27</ProtoBufNet3Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
