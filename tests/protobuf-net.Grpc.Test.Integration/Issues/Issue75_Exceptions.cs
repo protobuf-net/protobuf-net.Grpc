@@ -84,7 +84,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
                 var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.Fault());
                 Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
                 Assert.Equal(s_ExpectedMessage, ex.Status.Detail);
-                Assert.Equal($"Status(StatusCode=InvalidArgument, Detail=\"{s_ExpectedMessage}\")", ex.Message);
+                Assert.StartsWith($"Status(StatusCode=\"InvalidArgument\", Detail=\"{s_ExpectedMessage}\"", ex.Message);
             }
             finally
             {
@@ -117,7 +117,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
                 var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.VanillaFaultHanding_Fault());
                 Assert.Equal(StatusCode.Unknown, ex.StatusCode);
                 Assert.Equal("Exception was thrown by handler.", ex.Status.Detail);
-                Assert.Equal("Status(StatusCode=Unknown, Detail=\"Exception was thrown by handler.\")", ex.Message);
+                Assert.StartsWith("Status(StatusCode=\"Unknown\", Detail=\"Exception was thrown by handler.\"", ex.Message);
             }
             finally
             {
@@ -151,7 +151,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
                 var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.SimplifiedFaultHandling_Fault());
                 Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
                 Assert.Equal(s_ExpectedMessage, ex.Status.Detail);
-                Assert.Equal($"Status(StatusCode=InvalidArgument, Detail=\"{s_ExpectedMessage}\")", ex.Message);
+                Assert.StartsWith($"Status(StatusCode=\"InvalidArgument\", Detail=\"{s_ExpectedMessage}\"", ex.Message);
             }
             finally
             {
@@ -183,7 +183,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.VanillaFaultHanding_Fault());
             Assert.Equal(StatusCode.Unknown, ex.StatusCode);
             Assert.Equal("Exception was thrown by handler.", ex.Status.Detail);
-            Assert.Equal("Status(StatusCode=Unknown, Detail=\"Exception was thrown by handler.\")", ex.Message);
+            Assert.StartsWith("Status(StatusCode=\"Unknown\", Detail=\"Exception was thrown by handler.\"", ex.Message);
         }
 
         [Fact]
@@ -202,7 +202,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.SimplifiedFaultHandling_Fault());
             Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
             Assert.Equal(s_ExpectedMessage, ex.Status.Detail);
-            Assert.Equal($"Status(StatusCode=InvalidArgument, Detail=\"{s_ExpectedMessage}\")", ex.Message);
+            Assert.StartsWith($"Status(StatusCode=\"InvalidArgument\", Detail=\"{s_ExpectedMessage}\"", ex.Message);
         }
 
         [Fact]
@@ -221,7 +221,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.Fault());
             Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
             Assert.Equal(s_ExpectedMessage, ex.Status.Detail);
-            Assert.Equal($"Status(StatusCode=InvalidArgument, Detail=\"{s_ExpectedMessage}\")", ex.Message);
+            Assert.StartsWith($"Status(StatusCode=\"InvalidArgument\", Detail=\"{s_ExpectedMessage}\"", ex.Message);
         }
 
         [Fact]

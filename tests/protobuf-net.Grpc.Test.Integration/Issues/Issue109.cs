@@ -1,6 +1,5 @@
 ﻿using Grpc.Core;
 using System.Threading.Tasks;
-using ProtoBuf.Grpc.Server;
 using Xunit;
 
 namespace protobuf_net.Grpc.Test.Integration.Issues
@@ -22,7 +21,6 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             await server.ShutdownAsync();
             // await server.KillAsync(); // kill also doesn't release, but can't Shutdown *and* Kill
             await server.ShutdownTask;
-            
 
             var server2 = new Server()
             {

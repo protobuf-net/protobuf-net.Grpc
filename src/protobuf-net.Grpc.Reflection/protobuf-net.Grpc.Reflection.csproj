@@ -8,9 +8,9 @@
 
     <ItemGroup>
         <!-- note this uses v3 features that are not back-ported to v2 -->
-        <PackageReference Include="protobuf-net.Reflection" Version="3.0.24" />
-        <PackageReference Include="protobuf-net" Version="3.0.24" />
-        <PackageReference Include="protobuf-net.Core" Version="3.0.24" />
+        <PackageReference Include="protobuf-net.Reflection" Version="$(ProtoBufNet3Version)" />
+        <PackageReference Include="protobuf-net" Version="$(ProtoBufNet3Version)" />
+        <PackageReference Include="protobuf-net.Core" Version="$(ProtoBufNet3Version)" />
     </ItemGroup>
 
     <ItemGroup>
