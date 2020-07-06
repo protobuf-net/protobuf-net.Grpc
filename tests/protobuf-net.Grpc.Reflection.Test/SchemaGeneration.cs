@@ -137,6 +137,9 @@ message ConferenceOverview {
    string ID = 1; // default value could not be applied: 00000000-0000-0000-0000-000000000000
    string Title = 2;
 }
+message IEnumerable_ConferenceOverview {
+   repeated ConferenceOverview items = 1;
+}
 message ListConferencesResult {
    repeated ConferenceOverview Conferences = 1;
 }
