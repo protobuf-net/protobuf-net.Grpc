@@ -69,6 +69,19 @@ namespace ProtoBuf.Grpc.Configuration
             return opName ?? "";
         }
 
+        internal static string GetNameParts(string? declaredName, Type? type, out string package)
+        {
+            declaredName ??= "";
+            var idx = declaredName.LastIndexOf('.');
+            if (idx >= 0)
+            {
+                package = declaredName.Substring(0, idx);
+                return declaredName.Substring(idx + 1);
+            }
+            package = type?.Namespace ?? "";
+            return declaredName;
+        }
+
         /// <summary>
         /// Indicates whether an interface should be considered a service-contract (and if so: by what name)
         /// </summary>

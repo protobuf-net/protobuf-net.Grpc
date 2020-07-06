@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace ProtoBuf.Grpc.Reflection
 {
@@ -40,26 +41,30 @@ namespace ProtoBuf.Grpc.Reflection
 
                 var serviceDescriptor = new ServiceDescriptorProto
                 {
-                    Name = serviceName!.Split('.').Last()
+                    Name = ServiceBinder.GetNameParts(serviceName, serviceType, out var package),
                 };
 
                 var dependencies = new HashSet<string>();
                 foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, null))
                 {
                     // TODO: Validate op
-                    serviceDescriptor.Methods.Add(new MethodDescriptorProto
+                    if (TryGetType(binderConfiguration, op.From, fileDescriptorSet, out var inputType, out var inputFile)
+                        && TryGetType(binderConfiguration, op.From, fileDescriptorSet, out var outputType, out var outputFile))
                     {
-                        Name = op.Name,
-                        InputType = GetType(binderConfiguration, op.From, fileDescriptorSet, out string? inputFile),
-                        OutputType = GetType(binderConfiguration, op.To, fileDescriptorSet, out string? outputFile),
-                        ClientStreaming = op.MethodType == MethodType.ClientStreaming ||
-                                          op.MethodType == MethodType.DuplexStreaming,
-                        ServerStreaming = op.MethodType == MethodType.ServerStreaming ||
-                                          op.MethodType == MethodType.DuplexStreaming
-                    });
+                        serviceDescriptor.Methods.Add(new MethodDescriptorProto
+                        {
+                            Name = op.Name,
+                            InputType = inputType,
+                            OutputType = outputType,
+                            ClientStreaming = op.MethodType == MethodType.ClientStreaming ||
+                                              op.MethodType == MethodType.DuplexStreaming,
+                            ServerStreaming = op.MethodType == MethodType.ServerStreaming ||
+                                              op.MethodType == MethodType.DuplexStreaming
+                        });
 
-                    dependencies.Add(inputFile);
-                    dependencies.Add(outputFile);
+                        dependencies.Add(inputFile);
+                        dependencies.Add(outputFile);
+                    }
                 }
 
                 var fileDescriptor = new FileDescriptorProto
@@ -67,7 +72,7 @@ namespace ProtoBuf.Grpc.Reflection
                     Name = serviceName + ".proto",
                     Services = { serviceDescriptor },
                     Syntax = "proto3",
-                    Package = serviceContract.Namespace
+                    Package = package
                 };
 
                 foreach (var dependency in dependencies)
@@ -80,7 +85,7 @@ namespace ProtoBuf.Grpc.Reflection
             }
         }
 
-        private static string GetType(BinderConfiguration binderConfiguration, Type type, FileDescriptorSet fileDescriptorSet, out string descriptorProto)
+        private static bool TryGetType(BinderConfiguration binderConfiguration, Type type, FileDescriptorSet fileDescriptorSet, out string fullyQualifiedName, out string descriptorProto)
         {
             var typeName = type.Name;
             var fileName = type.FullName + ".proto";
@@ -95,13 +100,23 @@ namespace ProtoBuf.Grpc.Reflection
                 using var reader = new StringReader(schema);
 
                 fileDescriptorSet.Add(fileName, includeInOutput: true, reader);
-                fileDescriptor = fileDescriptorSet.Files.Single(f => f.Name.Equals(fileName, StringComparison.Ordinal));
+                fileDescriptor = fileDescriptorSet.Files.SingleOrDefault(f => f.Name.Equals(fileName, StringComparison.Ordinal));
+                if (fileDescriptor is null)
+                {
+                    fullyQualifiedName = descriptorProto = "";
+                    return false;
+                }
             }
 
+            var msgType = fileDescriptor.MessageTypes.SingleOrDefault(m => m.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase));
+            if (msgType is null)
+            {
+                fullyQualifiedName = descriptorProto = "";
+                return false;
+            }
             descriptorProto = fileDescriptor.Name;
-
-            return "." + fileDescriptor.Package + "." + fileDescriptor.MessageTypes
-                .Single(m => m.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase)).Name;
+            fullyQualifiedName = "." + fileDescriptor.Package + "." + msgType.Name;
+            return true;
         }
     }
 }

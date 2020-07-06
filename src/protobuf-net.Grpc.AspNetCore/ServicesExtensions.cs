@@ -26,6 +26,7 @@ namespace ProtoBuf.Grpc.Server
         {
             var builder = configureOptions == null ? services.AddGrpc() : services.AddGrpc(configureOptions);
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
+            services.TryAddSingleton(SimpleRpcExceptionsInterceptor.Instance);
             return builder;
         }
 
