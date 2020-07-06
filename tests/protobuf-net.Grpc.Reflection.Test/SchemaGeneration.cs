@@ -97,5 +97,55 @@ service MyService {
             Foo = 1,
             Bar = 2,
         }
+
+        [ServiceContract]
+        public interface IConferencesService
+        {
+            Task<IEnumerable<ConferenceOverview>> ListConferencesEnumerable();
+            IAsyncEnumerable<ConferenceOverview> ListConferencesAsyncEnumerable();
+            Task<ListConferencesResult> ListConferencesWrapped();
+        }
+
+        [DataContract]
+        public class ConferenceOverview
+        {
+            [DataMember(Order = 1)]
+            public Guid ID { get; set; }
+
+            [DataMember(Order = 2)]
+            public string? Title { get; set; }
+        }
+
+        [DataContract]
+        public class ListConferencesResult
+        {
+            [ProtoMember(1)]
+            public List<ConferenceOverview> Conferences { get; } = new List<ConferenceOverview>();
+        }
+
+        [Fact]
+        public void ConferenceServiceSchema()
+        {
+            var generator = new SchemaGenerator();
+            var proto = generator.GetSchema<IConferencesService>();
+            Log(proto);
+            Assert.Equal(@"syntax = ""proto3"";
+package protobuf_net.Grpc.Reflection.Test;
+import ""google/protobuf/empty.proto"";
+
+message ConferenceOverview {
+   string ID = 1; // default value could not be applied: 00000000-0000-0000-0000-000000000000
+   string Title = 2;
+}
+message ListConferencesResult {
+   repeated ConferenceOverview Conferences = 1;
+}
+service ConferencesService {
+   rpc ListConferencesAsyncEnumerable (.google.protobuf.Empty) returns (stream ConferenceOverview);
+   rpc ListConferencesEnumerable (.google.protobuf.Empty) returns (IEnumerable_ConferenceOverview);
+   rpc ListConferencesWrapped (.google.protobuf.Empty) returns (ListConferencesResult);
+}
+", proto, ignoreLineEndingDifferences: true);
+        }
     }
 }
