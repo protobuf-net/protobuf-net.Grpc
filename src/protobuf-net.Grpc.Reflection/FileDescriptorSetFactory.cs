@@ -49,7 +49,7 @@ namespace ProtoBuf.Grpc.Reflection
                 {
                     // TODO: Validate op
                     if (TryGetType(binderConfiguration, op.From, fileDescriptorSet, out var inputType, out var inputFile)
-                        && TryGetType(binderConfiguration, op.From, fileDescriptorSet, out var outputType, out var outputFile))
+                        && TryGetType(binderConfiguration, op.To, fileDescriptorSet, out var outputType, out var outputFile))
                     {
                         serviceDescriptor.Methods.Add(new MethodDescriptorProto
                         {
