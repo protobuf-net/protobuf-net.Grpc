@@ -17,7 +17,7 @@ namespace ProtoBuf.Grpc.Client
         public static bool AllowUnencryptedHttp2
         {
             get => AppContext.TryGetSwitch(Switch_AllowUnencryptedHttp2, out var enabled) && enabled;
-            set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, true);
+            set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, value);
         }
 
         /// <summary>
