@@ -35,22 +35,17 @@ namespace protobuf_net.Grpc.Test.Integration
         }
         public StreamTestsFixture() { }
 
-        public int Port { get; private set; }
-        public void Init(int port)
+        public int Port { get; } = PortManager.GetNextPort();
+        public void Init()
         {
             if (_server == null)
             {
-                Port = port;
                 _server = new Server
                 {
                     Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
                 };
                 _server.Services.AddCodeFirst(new StreamServer(this));
                 _server.Start();
-            }
-            else if (Port != port)
-            {
-                throw new InvalidOperationException("Cannot change port on the fixture instance");
             }
         }
 
@@ -299,7 +294,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
     public class NativeStreamTests : StreamTests
     {
-        public NativeStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(10043, fixture, log) { }
+        public NativeStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(fixture, log) { }
         protected override IAsyncDisposable CreateClient(out IStreamAPI client)
         {
             var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
@@ -319,7 +314,7 @@ namespace protobuf_net.Grpc.Test.Integration
     public class ManagedStreamTests : StreamTests
     {
         public override bool IsManagedClient => true;
-        public ManagedStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(10044, fixture, log) { }
+        public ManagedStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(fixture, log) { }
         protected override IAsyncDisposable CreateClient(out IStreamAPI client)
         {
             var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
@@ -375,10 +370,10 @@ namespace protobuf_net.Grpc.Test.Integration
 
         protected int Port => _fixture.Port;
         private readonly StreamTestsFixture _fixture;
-        public StreamTests(int port, StreamTestsFixture fixture, ITestOutputHelper log)
+        public StreamTests(StreamTestsFixture fixture, ITestOutputHelper log)
         {
             _fixture = fixture;
-            fixture.Init(port);
+            fixture.Init();
             fixture?.SetOutput(log);
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }

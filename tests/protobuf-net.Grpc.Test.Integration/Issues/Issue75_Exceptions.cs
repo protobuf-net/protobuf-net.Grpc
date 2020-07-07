@@ -1,6 +1,4 @@
-﻿#if NETCOREAPP3_1 // getting problems from multiple TFMs fighting over ports; since we're testing the unmanaged server, the client TFM doesn't matter - just do one
-
-using Grpc.Core;
+﻿using Grpc.Core;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Server;
@@ -14,8 +12,6 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
 {
     public class Issue75 : IClassFixture<Issue75.Issue75ServerFixture>
     {
-        const int Port = 10045;
-
         [Service]
         public interface IFaultTest
         {
@@ -34,14 +30,18 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             ValueTask Fault();
         }
 
+        private readonly Issue75ServerFixture _serverFixture;
         public Issue75(Issue75ServerFixture serverFixture)
         {
-            if (serverFixture is null) throw new ArgumentNullException(nameof(serverFixture));
+            _serverFixture = serverFixture ?? throw new ArgumentNullException(nameof(serverFixture));
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
+        private int Port => _serverFixture.Port;
+
         public class Issue75ServerFixture : IFaultTest, IInterceptedFaultTest, IDisposable
         {
+            public int Port { get; } = PortManager.GetNextPort();
             public void Dispose() => _ = _server.KillAsync();
 
             private readonly Server? _server;
@@ -234,4 +234,3 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
 #endif
     }
 }
-#endif

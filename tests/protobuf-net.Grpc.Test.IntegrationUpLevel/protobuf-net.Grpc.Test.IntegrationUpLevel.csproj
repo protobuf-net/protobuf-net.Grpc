@@ -5,7 +5,6 @@
 		<RootNamespace>protobuf_net.Grpc.Test.Integration</RootNamespace>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>
 		<IsPackable>false</IsPackable>
-
 		<DefineConstants>$(DefineConstants);PROTOBUFNET_BUFFERS</DefineConstants>
 	</PropertyGroup>
 

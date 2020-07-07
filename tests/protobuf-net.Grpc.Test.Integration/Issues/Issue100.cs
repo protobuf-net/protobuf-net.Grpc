@@ -1,5 +1,4 @@
-﻿#if NETCOREAPP3_1 // getting problems from multiple TFMs fighting over ports; just... don't fight it; can test locally fine - is just a problem on CI 
-using Grpc.Core;
+﻿using Grpc.Core;
 using ProtoBuf;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
@@ -23,7 +22,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
         [Fact]
         public async Task MeasuredSerialize()
         {
-            var obj = await _server.GetTestInstance();
+            var obj = await ((ITest)_server).GetTestInstance();
             var ms = new MemoryStream();
             Serializer.Serialize(ms, obj); // regular serialize
             Assert.Equal(14, ms.Length);
@@ -60,8 +59,6 @@ As sub-object :
         }
 #endif
 
-        const int Port = 10046;
-
         [Service]
         public interface ITest
         {
@@ -71,9 +68,11 @@ As sub-object :
 
 #pragma warning disable IDE0051, IDE0052 // "unused" things; they are, but it depends on the TFM
         private readonly ITestOutputHelper _log;
-        private readonly ITest _server;
+        private readonly Issue100ServerFixture _server;
         private void Log(string message) => _log?.WriteLine(message);
 #pragma warning restore IDE0051, IDE0052
+
+        private int Port => _server.Port;
 
         public Issue100(Issue100ServerFixture server, ITestOutputHelper log)
         {
@@ -84,6 +83,8 @@ As sub-object :
 
         public class Issue100ServerFixture : ITest, IDisposable
         {
+            public int Port { get; } = PortManager.GetNextPort();
+
             public void Dispose() => _ = _server.KillAsync();
 
             private readonly Server? _server;
@@ -161,4 +162,3 @@ As sub-object :
         }
     }
 }
-#endif

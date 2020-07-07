@@ -9,7 +9,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
         [Fact(Skip = "definitely fails, but needs Grpc.Core input")]
         public async Task Issue_109()
         {
-            var port = 10050;
+            var port = PortManager.GetNextPort();
 
             var server = new Server()
             {

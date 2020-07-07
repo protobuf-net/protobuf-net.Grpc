@@ -96,7 +96,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
     public class GrpcServiceFixture : IAsyncDisposable
     {
-        public const int Port = 10042;
+        public int Port { get; } = PortManager.GetNextPort();
         private readonly Server _server;
 
         private readonly Interceptor _interceptor;
@@ -151,6 +151,8 @@ namespace protobuf_net.Grpc.Test.Integration
             if (fixture != null) fixture.Output = log;
         }
 
+        private int Port => _fixture.Port;
+
         private void Log(string message) => _fixture?.Log(message);
 
         public void Dispose()
@@ -168,7 +170,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public async Task CanCallAllApplyServicesUnaryAsync(bool disableContextual)
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
 
             var request = new Apply { X = 6, Y = 3 };
             var marshaller = disableContextual ? DisableContextualSerializer : EnableContextualSerializer;
@@ -220,7 +222,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public async Task CanCallAllApplyServicesTypedUnaryAsync()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
 
             var request = new Apply { X = 6, Y = 3 };
 
@@ -243,7 +245,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public void CanCallAllApplyServicesUnarySync()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
 
             var request = new Apply { X = 6, Y = 3 };
 
@@ -264,7 +266,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public void CanCallAllApplyServicesTypedUnarySync()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
 
             var request = new Apply { X = 6, Y = 3 };
 
@@ -287,7 +289,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public void CanCallAdocService()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
 
             var request = new AdhocRequest { X = 12, Y = 7 };
             var client = http.CreateGrpcService<IAdhocService>(AdhocConfig.ClientFactory);
@@ -299,7 +301,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public async Task CanCallInterceptedService()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
-            using var http = GrpcChannel.ForAddress($"http://localhost:{GrpcServiceFixture.Port}");
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
 
             var request = new Apply { X = 6, Y = 3 };
 
