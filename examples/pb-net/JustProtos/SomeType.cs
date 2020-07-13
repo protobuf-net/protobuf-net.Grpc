@@ -17,6 +17,7 @@ namespace JustProtos
                 typeof(TimeResult),
                 typeof(MultiplyRequest),
             };
+            _ = types;
         }
     }
 #pragma warning restore IDE0051, IDE0059

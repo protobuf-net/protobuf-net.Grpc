@@ -10,14 +10,14 @@ namespace ProtoBuf.Grpc.Client
     /// </summary>
     public static class GrpcClientFactory
     {
-        private const string Switch_AllowUnencryptedHttp2 = "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport";
+        private const string SwitchAllowUnencryptedHttp2 = "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport";
         /// <summary>
         /// Allows HttpClient to use HTTP/2 without TLS
         /// </summary>
         public static bool AllowUnencryptedHttp2
         {
-            get => AppContext.TryGetSwitch(Switch_AllowUnencryptedHttp2, out var enabled) && enabled;
-            set => AppContext.SetSwitch(Switch_AllowUnencryptedHttp2, value);
+            get => AppContext.TryGetSwitch(SwitchAllowUnencryptedHttp2, out var enabled) && enabled;
+            set => AppContext.SetSwitch(SwitchAllowUnencryptedHttp2, value);
         }
 
         /// <summary>

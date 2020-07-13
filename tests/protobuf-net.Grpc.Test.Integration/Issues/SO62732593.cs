@@ -5,7 +5,7 @@ using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.Threading.Tasks;
 using Xunit;
-
+#nullable disable
 namespace protobuf_net.Grpc.Test.Integration.Issues
 {
     public class SO62732593

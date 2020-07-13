@@ -11,7 +11,7 @@ using System.ServiceModel;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-
+#nullable disable
 namespace protobuf_net.Grpc.Test.Integration.Issues
 {
     public class Issue107 : IClassFixture<Issue107.MyServer<Issue107.Derived<string>>>
@@ -26,7 +26,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
         }
         public class MyServer<T> : MyServerBase, IDisposable, ICalculatorService<T>
         {
-            Server _server;
+            private readonly Server _server;
             public MyServer()
             {
                 _server = new Server

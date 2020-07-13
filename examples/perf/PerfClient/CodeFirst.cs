@@ -14,16 +14,16 @@ namespace CodeFirst
     [ServiceContract(Name = "PerfTest.VanillaGrpc")]
     public interface IVanillaGrpc
     {
-        public Task IncrementAsync();
+        Task IncrementAsync();
 
-        public Task<IncrementResult> ResetAsync();
+        Task<IncrementResult> ResetAsync();
     }
 
     [ServiceContract(Name = "PerfTest.ProtobufNetGrpc")]
     public interface IProtobufNetGrpc
     {
-        public Task IncrementAsync();
+        Task IncrementAsync();
 
-        public Task<IncrementResult> ResetAsync();
+        Task<IncrementResult> ResetAsync();
     }
 }

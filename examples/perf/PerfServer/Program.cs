@@ -2,7 +2,6 @@ using Grpc.Core;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.Extensions.Hosting;
 using PerfTest;
 using ProtoBuf.Grpc.Server;
 
