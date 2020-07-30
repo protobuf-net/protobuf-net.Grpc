@@ -183,7 +183,7 @@ public class MyTimeService : ITimeService
     {
         while (!cancel.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(10));
+            await Task.Delay(TimeSpan.FromSeconds(10), cancel);
             yield return new TimeResult { Time = DateTime.UtcNow };
         }
     }
