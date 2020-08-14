@@ -10,8 +10,8 @@ the managed and unmanaged client APIs share a common `ChannelBase` abstraction).
 
 ## `protobuf-net.Grpc.AspNetCore`
 
-This is for using gRPC as a **server** with the ASP.NET Core 3 implementation. It takes a dependency on `Grpc.AspNetCore.Server` and `Microsoft.AspNetCore.App`
-(although you'll already have the latter if you're hosting in ASP.NET Core). It only works on .NET Core 3 (or above).
+This is for using gRPC as a **server** with the ASP.NET Core 3.1 implementation. It takes a dependency on `Grpc.AspNetCore.Server` and `Microsoft.AspNetCore.App`
+(although you'll already have the latter if you're hosting in ASP.NET Core). It only works on .NET Core 3.1 (or above).
 
 ## `protobuf-net.Grpc.Native`
 

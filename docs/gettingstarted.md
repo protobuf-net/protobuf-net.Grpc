@@ -2,7 +2,7 @@
 
 ## What is it?
 
-> Simple gRPC access in .NET Core 3 - think WCF, but over gRPC
+> Simple gRPC access in .NET Core 3+ and .NET Framework 4.6.1+ - think WCF, but over gRPC
 
 - Google released gRPC, a cross-platform RPC stack over HTTP/2 using protobuf serialization
 - included in the Google bits is [`Grpc.Core`](https://github.com/grpc/grpc), Google's gRPC bindings for .NET; it has kinks:
@@ -32,18 +32,10 @@ Additionally, it even works with the standard (unmanaged) `Grpc.Core` implementa
 
 ### 0: get your build environment
 
-This walkthrough assumes you have the [.NET Core 3 SDK](https://dotnet.microsoft.com/download/dotnet-core/3.0), and an up-to-date compiler, ideally
-by having an up-to-date IDE. Note that the tools work on more platforms than just .NET Core 3 (although you'd need to use the unmanaged bindings).
+This walkthrough assumes you have the [.NET Core 3.1 SDK or above](https://dotnet.microsoft.com/download/dotnet/current), and an up-to-date compiler, ideally
+by having an up-to-date IDE. Note that the tools work on more platforms than just .NET Core (although you'd need to use the unmanaged bindings).
 
-Also: make sure that you are *actually using* the .NET Core 3 SDK, via "global.json"; right now, my "global.json" is:
-
-``` json
-{
-  "sdk": {
-    "version": "3.0.100"
-  }
-}
-```
+Also: make sure that you are *actually using* the correct .NET Core SDK (usually via "global.json").
 
 ### 1: define your data contracts and service contracts
 
