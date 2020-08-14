@@ -95,7 +95,7 @@ public interface ICalculator
 We're using `ValueTask<T>` here, but the library also supports `Task<T>` and simple synchronous `T` (but: please prefer asynchronous when possible). Sometimes,
 you don't actually have data to send in one or both directions; in regular gRPC you'd typically use `.google.protobuf.Empty` as a nil token here, but
 we don't need to do that here - we can just have a parameterless method (`MultiplyAsync()`) and/or return `void`, `ValueTask` or `Task`. The library understands
-what you intend. Additionally, since you may want to specify or query dealines, credentials, send/receive additional headers, trailers, etc, there is a `CallContext`
+what you intend. Additionally, since you may want to specify or query deadlines, credentials, cancellation, or send/receive additional headers, trailers, etc, there is a `CallContext`
 type that expresses this intent, which can be included as an additional parameter **after** the data parameter. Since you don't always need this, it is useful
 to make this an optional parameter, i.e.
 
