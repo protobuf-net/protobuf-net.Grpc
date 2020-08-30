@@ -32,7 +32,7 @@ namespace ProtoBuf.Grpc.Client
         /// Creates a code-first service backed by a ChannelBase instance
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static TService CreateGrpcService<TService>(CallInvoker client, ClientFactory? clientFactory = null)
+        public static TService CreateGrpcService<TService>(this CallInvoker client, ClientFactory? clientFactory = null)
             where TService : class
                     => (clientFactory ?? ClientFactory.Default).CreateClient<TService>(client);
 
@@ -47,7 +47,7 @@ namespace ProtoBuf.Grpc.Client
         /// Creates a general purpose service backed by a ChannelBase instance
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static GrpcClient CreateGrpcService(CallInvoker client, Type serviceType, ClientFactory? clientFactory = null)
+        public static GrpcClient CreateGrpcService(this CallInvoker client, Type serviceType, ClientFactory? clientFactory = null)
             => (clientFactory ?? ClientFactory.Default).CreateClient(client, serviceType);
     }
 }
