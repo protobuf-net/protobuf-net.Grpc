@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ProtoBuf.Grpc.Reflection
 {
@@ -87,8 +88,8 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static bool TryGetType(BinderConfiguration binderConfiguration, Type type, FileDescriptorSet fileDescriptorSet, out string fullyQualifiedName, out string descriptorProto)
         {
-            var typeName = type.Name;
-            var fileName = type.FullName + ".proto";
+            var typeName = type.GetFriendlyName();
+            var fileName = type.GetFriendlyFullName() + ".proto";
             var fileDescriptor = fileDescriptorSet.Files.SingleOrDefault(f => f.Name.Equals(fileName, StringComparison.Ordinal));
 
             TypeModel model = binderConfiguration.MarshallerCache.TryGetFactory(type) is ProtoBufMarshallerFactory factory ? factory.Model : RuntimeTypeModel.Default;
@@ -115,8 +116,53 @@ namespace ProtoBuf.Grpc.Reflection
                 return false;
             }
             descriptorProto = fileDescriptor.Name;
-            fullyQualifiedName = "." + fileDescriptor.Package + "." + msgType.Name;
+
+            // there are circumstances, in which the package string is String.Empty. The fullQualifiedName in this case would be something like "..Name"
+            // this will fix the double dot-names
+            if (String.IsNullOrEmpty(fileDescriptor.Package))
+            {
+                fullyQualifiedName = "." + msgType.Name;
+            }
+            else
+            {
+                fullyQualifiedName = "." + fileDescriptor.Package + "." + msgType.Name;
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// Gets the name of a type as a friendly readable name for generic types. Instead of IEnumerable´1 for IEnumarable of integers, the name will be IEnumerable_Int32
+        /// This is required for the message type in the generation of the proto definition - fileDescriptor.MessageTypes.SingleOrDefault(m => m.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase))
+        /// </summary>
+        /// <param name="type">The type</param>
+        /// <returns>The readable name of the type</returns>
+        private static string GetFriendlyName(this Type type)
+        {
+            if (!type.IsGenericType)
+            {
+                return type.Name;
+            }
+
+            StringBuilder? friednlyName = new StringBuilder();
+            friednlyName.Append(type.Name.Split('`')[0]);
+            friednlyName.Append("_");
+            friednlyName.Append(String.Join(", ", type.GetGenericArguments().Select(GetFriendlyName)));
+            return friednlyName.ToString();
+        }
+
+        private static string GetFriendlyFullName(this Type type)
+        {
+            if (!type.IsGenericType)
+            {
+                return type.FullName;
+            }
+
+            StringBuilder? friednlyName = new StringBuilder();
+            friednlyName.Append(type.FullName.Split('`')[0]);
+            friednlyName.Append("_");
+            friednlyName.Append(String.Join(", ", type.GetGenericArguments().Select(GetFriendlyFullName)));
+            return friednlyName.ToString();
         }
     }
 }
