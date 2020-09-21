@@ -1,11 +1,12 @@
-﻿using Grpc.AspNetCore.Server;
+﻿using System;
+using System.Collections.Generic;
+using Grpc.AspNetCore.Server;
 using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
-using System;
 
 namespace ProtoBuf.Grpc.Server
 {
@@ -17,7 +18,7 @@ namespace ProtoBuf.Grpc.Server
         /// <summary>
         /// Registers a provider that can recognize and handle code-first services
         /// </summary>
-        public static void AddCodeFirstGrpc(this IServiceCollection services) => AddCodeFirstGrpc(services, null);
+        public static IGrpcServerBuilder AddCodeFirstGrpc(this IServiceCollection services) => AddCodeFirstGrpc(services, null);
 
         /// <summary>
         /// Registers a provider that can recognize and handle code-first services
@@ -28,6 +29,21 @@ namespace ProtoBuf.Grpc.Server
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
             services.TryAddSingleton(SimpleRpcExceptionsInterceptor.Instance);
             return builder;
+        }
+
+        public static IGrpcServerBuilder WithBinderConfiguration(this IGrpcServerBuilder builder, Action<BinderOptions> binderOptions)
+        {
+            var options = new BinderOptions();
+            binderOptions(options);
+            builder.Services.TryAddSingleton(BinderConfiguration.Create(options.MarshallerFactories, options.ServiceBinder));
+            return builder;
+        }
+
+        public sealed class BinderOptions
+        {
+            public IList<MarshallerFactory>? MarshallerFactories { get; set; } = null;
+
+            public ServiceBinder? ServiceBinder { get; set; } = null;
         }
 
         private sealed class CodeFirstServiceMethodProvider<TService> : IServiceMethodProvider<TService> where TService : class
@@ -64,7 +80,7 @@ namespace ProtoBuf.Grpc.Server
                 where TResponse : class
             {
                 var metadata = bindContext.GetMetadata(stub.Method);
-                
+
                 var context = (ServiceMethodProviderContext<TService>)bindContext.State;
                 switch (method.Type)
                 {
