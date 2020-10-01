@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" Version="2.31.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
+    <ProjectReference Include="..\TraderSys.StockMarket\TraderSys.StockMarket.csproj" />
+    <ProjectReference Include="..\TraderSys.FullStockTicker.Shared\TraderSys.FullStockTicker.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
