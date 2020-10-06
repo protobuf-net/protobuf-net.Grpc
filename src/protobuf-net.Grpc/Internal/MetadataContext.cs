@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
 
@@ -10,11 +11,42 @@ namespace ProtoBuf.Grpc.Internal
         internal MetadataContext(object? state) => State = state;
 
         internal object? State { get; }
-        private Metadata? _headers, _trailers;
+        private Metadata? _trailers;
+        private object? _headersTaskOrSource;
+
         internal Metadata Headers
         {
-            get => _headers ?? Throw("Headers are not yet available");
+            get
+            {
+                var pending = GetHeadersTask(false);
+                return pending is object && pending.RanToCompletion()
+                    ? pending.Result
+                    : Throw("Headers are not yet available");
+            }
         }
+
+        internal Task<Metadata>? GetHeadersTask(bool createIfMissing)
+        {
+            return _headersTaskOrSource switch
+            {
+                Task<Metadata> task => task,
+                TaskCompletionSource<Metadata> tcs => tcs.Task,
+                _ => createIfMissing ? InterlockedCreateSource() : null,
+            };
+
+            Task<Metadata> InterlockedCreateSource()
+            {
+                var newTcs = new TaskCompletionSource<Metadata>();
+                var existing = Interlocked.CompareExchange(ref _headersTaskOrSource, newTcs, null);
+                return existing switch
+                {
+                    Task<Metadata> task => task,
+                    TaskCompletionSource<Metadata> tcs => tcs.Task,
+                    _ => newTcs.Task,
+                };
+            }
+        }
+
         internal Metadata Trailers
         {
             get => _trailers ?? Throw("Trailers are not yet available");
@@ -27,7 +59,8 @@ namespace ProtoBuf.Grpc.Internal
         internal MetadataContext Reset()
         {
             Status = Status.DefaultSuccess;
-            _headers = _trailers = null;
+            _trailers = null;
+            _headersTaskOrSource = null;
             return this;
         }
 
@@ -57,24 +90,34 @@ namespace ProtoBuf.Grpc.Internal
 
         internal ValueTask SetHeadersAsync(Task<Metadata> headers)
         {
+            var tcs = Interlocked.CompareExchange(ref _headersTaskOrSource, headers, null) as TaskCompletionSource<Metadata>;
             if (headers.RanToCompletion())
             {
-                _headers = headers.Result;
+                // headers are sync; update TCS if one
+                tcs?.TrySetResult(headers.Result);
                 return default;
             }
             else
             {
-                return Awaited(this, headers);
+                // headers are async (or faulted); pay the piper
+                return Awaited(this, tcs, headers);
             }
-            static async ValueTask Awaited(MetadataContext context, Task<Metadata> headers)
+
+            static async ValueTask Awaited(MetadataContext context, TaskCompletionSource<Metadata>? tcs, Task<Metadata> headers)
             {
                 try
                 {
-                    context._headers = await headers.ConfigureAwait(false);
+                    tcs?.TrySetResult(await headers.ConfigureAwait(false));
                 }
                 catch (RpcException fault)
                 {
                     context.SetTrailers(fault);
+                    tcs?.TrySetException(fault);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    tcs?.TrySetException(ex);
                     throw;
                 }
             }

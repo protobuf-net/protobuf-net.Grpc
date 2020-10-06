@@ -517,7 +517,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
                 {
-                    CheckHeaderState();
+                    await CheckHeaderStateAsync();
                     values.Add(item.Bar);
                 }
             });
@@ -526,7 +526,7 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(marker + " faultval", rpc.Trailers.GetString("faultkey"));
 
             _fixture?.Log("after await foreach");
-            CheckHeaderState();
+            await CheckHeaderStateAsync();
             Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
@@ -538,7 +538,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal(marker + " detail", status.Detail);
             }
 
-            void CheckHeaderState()
+            async ValueTask CheckHeaderStateAsync()
             {
                 if (haveCheckedHeaders) return;
                 haveCheckedHeaders = true;
@@ -548,10 +548,10 @@ namespace protobuf_net.Grpc.Test.Integration
                     switch (scenario)
                     {
                         case Scenario.FaultBeforeHeaders:
-                            Assert.Null(ctx.ResponseHeaders().GetString("prekey"));
+                            Assert.Null((await ctx.ResponseHeadersAsync()).GetString("prekey"));
                             break;
                         default:
-                            Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                            Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
                             break;
                     }
                 }

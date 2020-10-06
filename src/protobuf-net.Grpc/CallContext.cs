@@ -4,6 +4,7 @@ using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc
 {
@@ -160,6 +161,13 @@ namespace ProtoBuf.Grpc
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Metadata ResponseHeaders() => MetadataContext?.Headers ?? ThrowNoContext<Metadata>();
+
+        /// <summary>
+        /// Get the response-headers from a client operation when they are available
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Task<Metadata> ResponseHeadersAsync() => MetadataContext?.GetHeadersTask(true)
+            ?? Task.FromResult(ThrowNoContext<Metadata>()); // note this actually throws immediately; this is intentional
 
         /// <summary>
         /// Get the response-trailers from a client operation
