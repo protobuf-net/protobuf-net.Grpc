@@ -27,7 +27,7 @@ namespace ProtoBuf.Grpc.Internal
 
         internal Task<Metadata>? GetHeadersTask(bool createIfMissing)
         {
-            return _headersTaskOrSource switch
+            return Volatile.Read(ref _headersTaskOrSource) switch
             {
                 Task<Metadata> task => task,
                 TaskCompletionSource<Metadata> tcs => tcs.Task,
@@ -60,7 +60,7 @@ namespace ProtoBuf.Grpc.Internal
         {
             Status = Status.DefaultSuccess;
             _trailers = null;
-            _headersTaskOrSource = null;
+            Volatile.Write(ref _headersTaskOrSource, null);
             return this;
         }
 
