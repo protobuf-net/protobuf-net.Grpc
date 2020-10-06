@@ -166,8 +166,13 @@ namespace ProtoBuf.Grpc
         /// Get the response-headers from a client operation when they are available
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Task<Metadata> ResponseHeadersAsync() => MetadataContext?.GetHeadersTask(true)
-            ?? Task.FromResult(ThrowNoContext<Metadata>()); // note this actually throws immediately; this is intentional
+        public ValueTask<Metadata> ResponseHeadersAsync()
+        {   // exposing as ValueTask<T> to retain ability to change API internals later, but currently just wraps Task<T>
+            var task = MetadataContext?.GetHeadersTask(true);
+            return task is object
+                ? new ValueTask<Metadata>(task)
+                : new ValueTask<Metadata>(ThrowNoContext<Metadata>());// note this actually throws immediately; this is intentional
+        }
 
         /// <summary>
         /// Get the response-trailers from a client operation
