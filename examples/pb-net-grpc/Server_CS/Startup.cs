@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using ProtoBuf.Grpc.Server;
+using Shared_CS;
 
 namespace Server_CS
 {
@@ -14,8 +15,17 @@ namespace Server_CS
             services.AddCodeFirstGrpc(config =>
             {
                 config.ResponseCompressionLevel = System.IO.Compression.CompressionLevel.Optimal;
-            });
+            })
+            .WithBinderConfiguration(config => config.ServiceBinder = new ServiceBinderWithServiceResolutionFromServiceCollection(services));
             services.AddCodeFirstGrpcReflection();
+
+            services.AddAuthentication(options =>
+            {
+                options.AddScheme<FakeAuthHandler>(FakeAuthHandler.SchemeName, FakeAuthHandler.SchemeName);
+                options.DefaultScheme = FakeAuthHandler.SchemeName;
+            });
+            services.AddAuthorization();
+            services.AddSingleton<ICounter, MyCounter>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -23,8 +33,12 @@ namespace Server_CS
         {
             app.UseRouting();
 
+            app.UseAuthentication();
+            app.UseAuthorization();
+
             app.UseEndpoints(endpoints =>
             {
+                endpoints.MapGrpcService<ICounter>();
                 endpoints.MapGrpcService<MyCalculator>();
                 endpoints.MapGrpcService<MyTimeService>();
                 endpoints.MapCodeFirstGrpcReflectionService();
