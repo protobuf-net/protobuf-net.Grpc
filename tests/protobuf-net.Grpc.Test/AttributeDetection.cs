@@ -1,7 +1,8 @@
-﻿using ProtoBuf.Grpc.Internal;
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using ProtoBuf.Grpc.Configuration;
+using ProtoBuf.Grpc.Internal;
 using Xunit;
 using static ProtoBuf.Grpc.Configuration.ServerBinder;
 
@@ -50,11 +51,10 @@ namespace protobuf_net.Grpc.Test
             "Interface,ExplicitInterfaceMethod,BaseType,Service,ExplicitServiceMethod")]
         public void AttributesDetectedWherever(string methodName, string expected)
         {
-            var ctx = new ServiceBindContext(typeof(ISomeService), typeof(SomeServer), "n/a");
+            var ctx = new ServiceBindContext(typeof(ISomeService), typeof(SomeServer), "n/a", ServiceBinder.Default);
             var method = typeof(ISomeService).GetMethod(methodName)!;
             var actual = string.Join(",", ctx.GetMetadata(method).OfType<SomethingAttribute>().Select(x => x.Value));
             Assert.Equal(expected, actual);
-
         }
 
         [Theory]
@@ -168,6 +168,6 @@ namespace protobuf_net.Grpc.Test
         }
     }
 
-    
+
 
 }
