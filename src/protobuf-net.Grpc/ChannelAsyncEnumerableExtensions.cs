@@ -64,7 +64,7 @@ namespace ProtoBuf.Grpc
 
         private static async IAsyncEnumerable<T> AsAsyncEnumerableCompleteWriter<T>(this Channel<T> channel, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            static void TryCompleteWriter(object state)
+            static void TryCompleteWriter(object? state)
             {
                 try
                 {

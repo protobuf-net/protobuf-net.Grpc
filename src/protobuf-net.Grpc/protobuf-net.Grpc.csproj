@@ -1,18 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFrameworks>net461;netstandard2.1;netstandard2.0</TargetFrameworks>
-		<RootNamespace>ProtoBuf.Grpc</RootNamespace>
-		<LangVersion>preview</LangVersion>
-
-		<DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
-	</PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="Grpc.Core.Api" Version="$(GrpcVersion)" />
-		<PackageReference Include="System.Threading.Channels" Version="4.7.1" />
-		<PackageReference Include="protobuf-net" Version="$(ProtoBufNet2Version)" />
-	</ItemGroup>
-	<ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.1'">
-		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.1.1" />
-	</ItemGroup>
+  <PropertyGroup>
+    <TargetFrameworks>net461;netstandard2.1;netstandard2.0;net5.0</TargetFrameworks>
+    <RootNamespace>ProtoBuf.Grpc</RootNamespace>
+    <LangVersion>preview</LangVersion>
+    <DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Grpc.Core.Api" Version="$(GrpcVersion)" />
+    <PackageReference Include="System.Threading.Channels" Version="4.7.1" />
+    <PackageReference Include="protobuf-net" Version="$(ProtoBufNet2Version)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net461' or '$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.1.1" />
+    <PackageReference Include="System.Threading.Channels" Version="4.7.1" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Threading.Channels" Version="4.7.1" />
+  </ItemGroup>
 </Project>

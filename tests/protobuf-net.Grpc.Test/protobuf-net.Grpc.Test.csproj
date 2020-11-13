@@ -2,12 +2,12 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFrameworks>net461;net472;netcoreapp2.1;netcoreapp3.1</TargetFrameworks>
+    <TargetFrameworks>net461;net472;netcoreapp5.0;netcoreapp3.1</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'netcoreapp3.1'">
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
     <DefineConstants>$(DefineConstants);CLIENT_FACTORY</DefineConstants>
   </PropertyGroup>
   
@@ -21,7 +21,7 @@
     <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.1'">
+  <ItemGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="3.1.5" />
   </ItemGroup>

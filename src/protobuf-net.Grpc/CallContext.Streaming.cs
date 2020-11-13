@@ -9,7 +9,7 @@ namespace ProtoBuf.Grpc
     public readonly partial struct CallContext
     {
         /// <inheritdoc/>
-        public override bool Equals(object obj) => throw new NotSupportedException();
+        public override bool Equals(object? obj) => throw new NotSupportedException();
         /// <inheritdoc/>
         public override int GetHashCode() => throw new NotSupportedException();
         /// <inheritdoc/>
