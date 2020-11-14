@@ -1,5 +1,6 @@
 ﻿using ProtoBuf;
 using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Reflection;
 using System;
 using System.Linq;
@@ -38,7 +39,7 @@ namespace protobuf_net.Grpc.Reflection.Test
         public string Message { get; set; } = string.Empty;
     }
 
-    [ServiceContract]
+    [Service]
     public interface IGreeterService
     {
         ValueTask<HelloReply> SayHello(HelloRequest request, CallContext context);

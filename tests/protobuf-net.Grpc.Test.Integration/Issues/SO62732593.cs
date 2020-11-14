@@ -1,5 +1,6 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Client;
+using ProtoBuf.Grpc.Configuration;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.ServiceModel;
@@ -33,7 +34,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             public string CustomerName { get; set; }
         }
 
-        [ServiceContract(Name = "Services.Customer")]
+        [Service("Services.Customer")]
         public interface ICustomerService
         {
             ValueTask<Customer> CreateCustomer(Customer customerDTO);

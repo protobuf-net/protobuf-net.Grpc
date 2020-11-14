@@ -116,7 +116,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             public T Value { get; set; }
         }
 
-        [ServiceContract]
+        [Service]
         public interface ICalculatorService<T>
         {
             IAsyncEnumerable<T> Duplex(IAsyncEnumerable<T> input);

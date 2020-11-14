@@ -27,12 +27,12 @@
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>1.0.110</PBGRPCLibVersion>
-    <GrpcDotNetVersion>2.29.0</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.12.3</GoogleProtobufVersion>
-    <GrpcVersion>2.30.0</GrpcVersion>
+    <GrpcDotNetVersion>2.33.1</GrpcDotNetVersion>
+    <GoogleProtobufVersion>3.14.0</GoogleProtobufVersion>
+    <GrpcVersion>2.33.1</GrpcVersion>
 
     <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
-    <ProtoBufNet3Version>3.0.27</ProtoBufNet3Version>
+    <ProtoBufNet3Version>3.0.62</ProtoBufNet3Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -51,6 +51,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
-    <PackageReference Include="Nerdbank.GitVersioning" Version="3.1.91" PrivateAssets="all" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.3.37" PrivateAssets="all" />
   </ItemGroup>
 </Project>
