@@ -190,9 +190,14 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 return ((IStreamAPI)this).UnaryAsync(value, ctx).AsTask().Result; // sync-over-async for this test only
             }
-            catch (RpcException ex)
+            catch (AggregateException aex)  when (aex.InnerException is RpcException ex)
             {
                 Log($"RpcException: {ex.StatusCode}, '{ex.Message}', {ex.Trailers?.Count ?? 0} trailers");
+                throw ex;
+            }
+            catch (Exception ex)
+            {
+                Log($"{ex.GetType().FullName}: {ex.Message}");
                 throw;
             }
         }
@@ -747,16 +752,8 @@ namespace protobuf_net.Grpc.Test.Integration
                         Assert.Equal("before trailers detail", status.Detail);
                         break;
                     case Scenario.FaultSuccessGoodProducer:
-                        if (IsManagedClient)
-                        {
-                            Assert.Equal(StatusCode.OK, status.StatusCode);
-                            Assert.Equal("", status.Detail);
-                        }
-                        else
-                        {   // see https://github.com/grpc/grpc-dotnet/issues/916
-                            Assert.Equal(StatusCode.Internal, status.StatusCode);
-                            Assert.Equal("Failed to deserialize response message.", status.Detail);
-                        }
+                        Assert.Equal(StatusCode.Internal, status.StatusCode);
+                        Assert.Equal("Failed to deserialize response message.", status.Detail);
                         break;
                     default:
                         throw new NotImplementedException();
