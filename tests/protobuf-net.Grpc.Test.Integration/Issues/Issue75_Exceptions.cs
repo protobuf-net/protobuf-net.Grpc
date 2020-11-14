@@ -42,7 +42,11 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
         public class Issue75ServerFixture : IFaultTest, IInterceptedFaultTest, IDisposable
         {
             public int Port { get; } = PortManager.GetNextPort();
-            public void Dispose() => _ = _server.KillAsync();
+            public void Dispose()
+            {
+                _ = _server.KillAsync();
+                GC.SuppressFinalize(this);
+            }
 
             private readonly Server? _server;
             public Issue75ServerFixture()

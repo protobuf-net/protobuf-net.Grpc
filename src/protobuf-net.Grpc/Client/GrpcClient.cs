@@ -36,7 +36,7 @@ namespace ProtoBuf.Grpc.Client
         public GrpcClient(CallInvoker callInvoker, string serviceName, BinderConfiguration? binderConfiguration = null, string? host = null)
         {
             _binderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
-            if (string.IsNullOrWhiteSpace(serviceName)) throw new ArgumentException(nameof(serviceName));
+            if (string.IsNullOrWhiteSpace(serviceName)) throw new ArgumentException($"Service name cannot be null/empty", nameof(serviceName));
             _serviceName = serviceName;
             _callInvoker = callInvoker;
             _host = host;

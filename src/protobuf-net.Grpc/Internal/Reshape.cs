@@ -361,7 +361,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request);
+            => ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken);
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -374,7 +374,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request));
+            => new ValueTask<TResponse>(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken));
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -387,11 +387,11 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request));
+            => new ValueTask(ClientStreamingTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken));
 
         private static async Task<TResponse> ClientStreamingTaskAsyncImpl<TRequest, TResponse>(
             AsyncClientStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
-            CancellationToken cancellationToken, bool ignoreStreamTermination, IAsyncEnumerable<TRequest> request)
+            bool ignoreStreamTermination, IAsyncEnumerable<TRequest> request, CancellationToken cancellationToken)
         {
             using (call)
             {
@@ -431,11 +431,11 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IAsyncEnumerable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.CancellationToken, options.IgnoreStreamTermination, request);
+            => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken);
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
             AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
-            CancellationToken contextCancel, bool ignoreStreamTermination, IAsyncEnumerable<TRequest> request, [EnumeratorCancellation] CancellationToken consumerCancel = default)
+            bool ignoreStreamTermination, IAsyncEnumerable<TRequest> request, CancellationToken contextCancel, [EnumeratorCancellation] CancellationToken consumerCancel = default)
         {
             using (call)
             {

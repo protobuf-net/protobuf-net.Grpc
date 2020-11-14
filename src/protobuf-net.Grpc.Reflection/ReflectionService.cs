@@ -118,13 +118,11 @@ namespace ProtoBuf.Grpc.Reflection
             };
         }
 
-        private ServerReflectionResponse CreateErrorResponse(StatusCode status, string message)
-        {
-            return new ServerReflectionResponse
+        private static ServerReflectionResponse CreateErrorResponse(StatusCode status, string message)
+            => new ServerReflectionResponse
             {
                 ErrorResponse = new ErrorResponse { ErrorCode = (int)status, ErrorMessage = message }
             };
-        }
 
         private void CollectTransitiveDependencies(FileDescriptorProto descriptor, ISet<FileDescriptorProto> pool)
         {
@@ -151,8 +149,16 @@ namespace ProtoBuf.Grpc.Reflection
         {
             public static FileDescriptorProtoComparer Instance { get; } = new FileDescriptorProtoComparer();
 
-            public int Compare(FileDescriptorProto left, FileDescriptorProto right)
+            public int Compare(FileDescriptorProto? left, FileDescriptorProto? right)
             {
+                if (left is null)
+                {
+                    return right is null ? 0 : -1;
+                }
+                else if (right is null)
+                {
+                    return 1;
+                }
                 if (left.Dependencies.Contains(right.Name))
                 {
                     return 1;

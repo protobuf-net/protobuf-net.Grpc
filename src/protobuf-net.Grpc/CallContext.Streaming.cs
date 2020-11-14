@@ -6,7 +6,11 @@ using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc
 {
+#pragma warning disable IDE0079 // Remove unnecessary suppression
+#pragma warning disable CA2231 // Overload operator equals on overriding value type Equals
     public readonly partial struct CallContext
+#pragma warning restore CA2231 // Overload operator equals on overriding value type Equals
+#pragma warning restore IDE0079 // Remove unnecessary suppression
     {
         /// <inheritdoc/>
         public override bool Equals(object? obj) => throw new NotSupportedException();

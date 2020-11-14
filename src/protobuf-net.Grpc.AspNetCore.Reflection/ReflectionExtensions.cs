@@ -52,10 +52,10 @@ namespace ProtoBuf.Grpc.Server
 
                 var grpcEndpointMetadata = endpointDataSource.Endpoints
                     .Select(ep => ep.Metadata.GetMetadata<GrpcMethodMetadata>())
-                    .Where(m => m != null)
+                    .Where(m => m?.ServiceType is object)
                     .ToList();
 
-                var serviceTypes = grpcEndpointMetadata.Select(m => m.ServiceType).Distinct().ToArray();
+                var serviceTypes = grpcEndpointMetadata.Select(m => m!.ServiceType).Distinct().ToArray();
 
                 return new ReflectionService(binderConfiguration, serviceTypes);
             });

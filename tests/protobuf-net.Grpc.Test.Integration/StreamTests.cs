@@ -188,7 +188,7 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             try
             {
-                return ((IStreamAPI)this).UnaryAsync(value, ctx).Result; // sync-over-async for this test only
+                return ((IStreamAPI)this).UnaryAsync(value, ctx).AsTask().Result; // sync-over-async for this test only
             }
             catch (RpcException ex)
             {
@@ -380,7 +380,11 @@ namespace protobuf_net.Grpc.Test.Integration
 
         public virtual bool IsManagedClient => false;
 
-        public void Dispose() => _fixture?.SetOutput(null);
+        public void Dispose()
+        {
+            _fixture?.SetOutput(null);
+            GC.SuppressFinalize(this);
+        }
 
         protected abstract IAsyncDisposable CreateClient(out IStreamAPI client);
 
@@ -584,7 +588,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 for (int i = 0; i < count; i++)
                 {
-                    await Task.Delay(millisecondsDelay);
+                    await Task.Delay(millisecondsDelay, cancellationToken);
                     CheckForCancellation("before yield");
 
                     Log($"producer yielding {i}");

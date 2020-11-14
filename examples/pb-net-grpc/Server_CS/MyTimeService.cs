@@ -13,7 +13,7 @@ namespace Server_CS
         public IAsyncEnumerable<TimeResult> SubscribeAsync(CallContext context = default)
             => SubscribeAsyncImpl(context.CancellationToken);
 
-        private async IAsyncEnumerable<TimeResult> SubscribeAsyncImpl([EnumeratorCancellation] CancellationToken cancel)
+        private static async IAsyncEnumerable<TimeResult> SubscribeAsyncImpl([EnumeratorCancellation] CancellationToken cancel)
         {
             while (!cancel.IsCancellationRequested)
             {

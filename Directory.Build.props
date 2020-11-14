@@ -5,7 +5,7 @@
     <OutputType>Library</OutputType>
     <SignAssembly>true</SignAssembly>
     <DelaySign>False</DelaySign>
-    <NoWarn>NU5105;CS1701;BC42016;MSB3884;NETSDK1057;CS8632</NoWarn>
+    <NoWarn>NU5105;CS1701;BC42016;MSB3884;NETSDK1057;CS8632;IDE0090;IDE0057;xUnit1004</NoWarn>
     <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)ProtoBuf.snk</AssemblyOriginatorKeyFile>
     <Copyright>Marc Gravell, 2019-</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

@@ -62,9 +62,7 @@ namespace ProtoBuf.Grpc.Configuration
             var opName = method.Name;
             if (opName.EndsWith("Async"))
             {
-#pragma warning disable IDE0057 // not on all frameworks
                 opName = opName.Substring(0, opName.Length - 5);
-#pragma warning restore IDE0057
             }
             return opName ?? "";
         }

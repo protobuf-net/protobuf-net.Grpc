@@ -6,6 +6,7 @@
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
     <DefineConstants>$(DefineConstants);CLIENT_FACTORY</DefineConstants>
