@@ -414,7 +414,12 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination)]
         [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
-        public async Task DuplexEcho(Scenario scenario, int expectedCount, CallContextFlags flags)
+
+        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.None, true)]
+        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.CaptureMetadata, true)]
+        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.None)]
+        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.CaptureMetadata)]
+        public async Task DuplexEcho(Scenario scenario, int expectedCount, CallContextFlags flags, bool expectBrittle = false)
         {
             await using var svc = CreateClient(out var client);
 
@@ -422,10 +427,18 @@ namespace protobuf_net.Grpc.Test.Integration
 
             bool haveCheckedHeaders = false;
             var values = new List<int>(expectedCount);
-            await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
+            try
             {
-                await CheckHeaderStateAsync();
-                values.Add(item.Bar);
+                await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
+                {
+                    await CheckHeaderStateAsync();
+                    values.Add(item.Bar);
+                }
+            }
+            catch (Exception ex) when (expectBrittle && ex.GetType().FullName == "ProtoBuf.Grpc.Internal.IncompleteSendRpcException")
+            {
+                _fixture?.Log($"faulted as incomplete; user advised: '{ex.Message}'");
+                return; // best we can do
             }
             _fixture?.Log("after await foreach");
             await CheckHeaderStateAsync();
@@ -447,52 +460,6 @@ namespace protobuf_net.Grpc.Test.Integration
                         Assert.Equal("resp detail", status.Detail);
                         break;
                 }
-            }
-
-            async Task CheckHeaderStateAsync()
-            {
-                if (haveCheckedHeaders) return;
-                haveCheckedHeaders = true;
-                if ((flags & CallContextFlags.CaptureMetadata) != 0)
-                {
-                    Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
-                }
-            }
-        }
-
-        [DebugTheory]
-        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.None)]
-        [InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.CaptureMetadata)]
-        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.None)]
-        [InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.CaptureMetadata)]
-        public async Task DuplexEchoBadProducer(Scenario scenario, int expectedCount, CallContextFlags flags)
-        {
-            await using var svc = CreateClient(out var client);
-
-            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
-
-            bool haveCheckedHeaders = false;
-            var values = new List<int>(expectedCount);
-
-            var ex = await Assert.ThrowsAnyAsync<Exception>(async () =>
-            {
-                await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
-                {
-                    await CheckHeaderStateAsync();
-                    values.Add(item.Bar);
-                }
-            });
-            Assert.Equal("A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying the IgnoreStreamTermination flag when creating the CallContext", ex.Message);
-            Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
-
-            if ((flags & CallContextFlags.CaptureMetadata) != 0)
-            {   // check trailers
-                var noTrailers = Assert.Throws<InvalidOperationException>(() => ctx.ResponseTrailers());
-                Assert.Equal("Trailers are not yet available", noTrailers.Message);
-
-                var status = ctx.ResponseStatus();
-                Assert.Equal(StatusCode.OK, status.StatusCode);
-                Assert.Equal("", status.Detail);
             }
 
             async Task CheckHeaderStateAsync()
