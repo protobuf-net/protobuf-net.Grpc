@@ -419,11 +419,11 @@ namespace protobuf_net.Grpc.Test.Integration
             var values = new List<int>(expectedCount);
             await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
             {
-                CheckHeaderState();
+                await CheckHeaderStateAsync();
                 values.Add(item.Bar);
             }
             _fixture?.Log("after await foreach");
-            CheckHeaderState();
+            await CheckHeaderStateAsync();
             Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
@@ -444,13 +444,13 @@ namespace protobuf_net.Grpc.Test.Integration
                 }
             }
 
-            void CheckHeaderState()
+            async Task CheckHeaderStateAsync()
             {
                 if (haveCheckedHeaders) return;
                 haveCheckedHeaders = true;
                 if ((flags & CallContextFlags.CaptureMetadata) != 0)
                 {
-                    Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                    Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
                 }
             }
         }
@@ -473,7 +473,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
                 {
-                    CheckHeaderState();
+                    await CheckHeaderStateAsync();
                     values.Add(item.Bar);
                 }
             });
@@ -490,13 +490,13 @@ namespace protobuf_net.Grpc.Test.Integration
                 Assert.Equal("", status.Detail);
             }
 
-            void CheckHeaderState()
+            async Task CheckHeaderStateAsync()
             {
                 if (haveCheckedHeaders) return;
                 haveCheckedHeaders = true;
                 if ((flags & CallContextFlags.CaptureMetadata) != 0)
                 {
-                    Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                    Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
                 }
             }
         }
@@ -647,16 +647,8 @@ namespace protobuf_net.Grpc.Test.Integration
                         Assert.Equal("before trailers detail", status.Detail);
                         break;
                     case Scenario.FaultSuccessGoodProducer:
-                        if (IsManagedClient)
-                        {
-                            Assert.Equal(StatusCode.OK, status.StatusCode);
-                            Assert.Equal("", status.Detail);
-                        }
-                        else
-                        {   // see https://github.com/grpc/grpc-dotnet/issues/916
-                            Assert.Equal(StatusCode.Internal, status.StatusCode);
-                            Assert.Equal("Failed to deserialize response message.", status.Detail);
-                        }
+                        Assert.Equal(StatusCode.Internal, status.StatusCode);
+                        Assert.Equal("Failed to deserialize response message.", status.Detail);
                         break;
                     default:
                         throw new NotImplementedException();
@@ -668,17 +660,17 @@ namespace protobuf_net.Grpc.Test.Integration
                 switch (scenario)
                 {
                     case Scenario.FaultBeforeHeaders:
-                        Assert.Null(ctx.ResponseHeaders().GetString("prekey"));
+                        Assert.Null((await ctx.ResponseHeadersAsync()).GetString("prekey"));
                         Assert.Null(ctx.ResponseTrailers().GetString("postkey"));
                         Assert.Equal("before headers faultval", ctx.ResponseTrailers().GetString("faultkey"));
                         break;
                     case Scenario.FaultBeforeTrailers:
-                        Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                        Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
                         Assert.Null(ctx.ResponseTrailers().GetString("postkey"));
                         Assert.Equal("before trailers faultval", ctx.ResponseTrailers().GetString("faultkey"));
                         break;
                     case Scenario.FaultSuccessGoodProducer:
-                        Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                        Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
                         Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
                         Assert.Null(ctx.ResponseTrailers().GetString("faultkey"));
                         break;
@@ -707,7 +699,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 var status = ctx.ResponseStatus();
                 Assert.Equal(StatusCode.OK, status.StatusCode);
                 Assert.Equal("", status.Detail);
-                Assert.Equal("preval", ctx.ResponseHeaders().GetString("prekey"));
+                Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
                 Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
             }
         }
@@ -865,24 +857,11 @@ namespace protobuf_net.Grpc.Test.Integration
                 });
                 Assert.Equal("oops", ex.Status.Detail);
                 Assert.Equal(StatusCode.Internal, ex.Status.StatusCode);
-                Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
+                Assert.Equal(10, (await ctx.ResponseHeadersAsync()).GetInt32("req"));
 
                 var expect = Enumerable.Range(0, 5).Sum();
-                if (IsManagedClient)
-                {   // see https://github.com/grpc/grpc-dotnet/issues/915
-                    void Check(string? value)
-                    {   // null or duplicated
-                        _fixture.Log($"trailer value: '{value ?? "(null)"}'");
-                        if (value != null) Assert.Equal($"{expect},{expect}", value);
-                    }
-                    Check(ctx.ResponseTrailers().GetString("sum"));
-                    Check(ex.Trailers.GetString("sum"));
-                }
-                else
-                {
-                    Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
-                    Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
-                }
+                Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));
+                Assert.Equal(expect, ex.Trailers.GetInt32("sum"));
             }
             else
             {
@@ -893,7 +872,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 }
                 Assert.Equal(StatusCode.OK, ctx.ResponseStatus().StatusCode);
                 Assert.Equal("", ctx.ResponseStatus().Detail);
-                Assert.Equal(10, ctx.ResponseHeaders().GetInt32("req"));
+                Assert.Equal(10, (await ctx.ResponseHeadersAsync()).GetInt32("req"));
                 Assert.Equal(10, count);
                 var expect = Enumerable.Range(0, 10).Sum();
                 Assert.Equal(expect, ctx.ResponseTrailers().GetInt32("sum"));

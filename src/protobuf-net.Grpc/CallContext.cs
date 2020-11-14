@@ -13,7 +13,11 @@ namespace ProtoBuf.Grpc
     /// directly - for client-specific or server-specific options: use .Client or .Server; note that
     /// whether this is a client or server context depends on the usage. Silent conversions are available.
     /// </summary>
+#pragma warning disable IDE0079 // Remove unnecessary suppression
+#pragma warning disable CA2231 // Overload operator equals on overriding value type Equals
     public readonly partial struct CallContext
+#pragma warning restore CA2231 // Overload operator equals on overriding value type Equals
+#pragma warning restore IDE0079 // Remove unnecessary suppression
     {
         /// <summary>
         /// Default context; all default client options; no server context
@@ -160,6 +164,7 @@ namespace ProtoBuf.Grpc
         /// Get the response-headers from a client operation
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("When possible, ResponseHeadersAsync should be preferred, otherwise race conditions can occur when the headers have not yet been received", false)]
         public Metadata ResponseHeaders() => MetadataContext?.Headers ?? ThrowNoContext<Metadata>();
 
         /// <summary>
