@@ -1,0 +1,41 @@
+﻿<Window x:Class="TraderSys.FullStockTickerClientApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TraderSys.FullStockTickerClientApp"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance local:MainWindowViewModel}"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Label Grid.Column="0">Add Symbol:</Label>
+            <TextBox Grid.Column="1" Width="200" Text="{Binding AddSymbol, UpdateSourceTrigger=PropertyChanged}"/>
+            <Button Grid.Column="2" Command="{Binding AddCommand}">Add</Button>
+        </Grid>
+        <ListView Grid.Row="1" ItemsSource="{Binding Prices}">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Symbol" Width="120" DisplayMemberBinding="{Binding Symbol}"></GridViewColumn>
+                    <GridViewColumn Header="Price" Width="120" DisplayMemberBinding="{Binding Price}"></GridViewColumn>
+                    <GridViewColumn Width="100">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding RemoveCommand}">Remove</Button>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </Grid>
+</Window>
