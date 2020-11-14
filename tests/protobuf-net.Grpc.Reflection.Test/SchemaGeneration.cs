@@ -27,8 +27,8 @@ namespace protobuf_net.Grpc.Reflection.Test
             Log(schema);
             Assert.Equal(@"syntax = ""proto3"";
 package protobuf_net.Grpc.Reflection.Test;
-import ""google/protobuf/timestamp.proto"";
 import ""google/protobuf/empty.proto"";
+import ""google/protobuf/timestamp.proto"";
 
 enum Category {
    Default = 0;
