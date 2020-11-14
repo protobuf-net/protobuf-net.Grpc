@@ -130,7 +130,7 @@ As sub-object :
             }
         }
 
-#if NETCOREAPP3_1
+#if !(NET461 || NET472)
         [Fact]
         public async Task Issue100_ManagedClient()
         {

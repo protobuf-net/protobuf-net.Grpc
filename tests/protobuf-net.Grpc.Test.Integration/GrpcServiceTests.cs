@@ -1,4 +1,4 @@
-# if NETCOREAPP3_1
+#if !(NET461 || NET472)
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
@@ -39,6 +39,8 @@ namespace protobuf_net.Grpc.Test.Integration
         public int Result { get; set; }
     }
 
+#pragma warning disable IDE0079 // Remove unnecessary suppression
+#pragma warning disable CA1822 // Mark members as static
     public class ApplyServices : IGrpcService
     {
         public Task<ApplyResponse> Add(Apply request) => Task.FromResult(new ApplyResponse(request.X + request.Y));
@@ -46,6 +48,8 @@ namespace protobuf_net.Grpc.Test.Integration
         public Task<ApplyResponse> Sub(Apply request) => Task.FromResult(new ApplyResponse(request.X - request.Y));
         public Task<ApplyResponse> Div(Apply request) => Task.FromResult(new ApplyResponse(request.X / request.Y));
     }
+#pragma warning restore CA1822 // Mark members as static
+#pragma warning restore IDE0079 // Remove unnecessary suppression
 
     [Service]
     public interface IInterceptedService
@@ -158,6 +162,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public void Dispose()
         {
             if (_fixture != null) _fixture.Output = null;
+            GC.SuppressFinalize(this);
         }
 
         private static readonly ProtoBufMarshallerFactory
