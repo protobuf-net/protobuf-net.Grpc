@@ -1,6 +1,6 @@
 # Release Notes
 
-## 1.0.239
+## 1.0.136
 
 - add .NET 5 target
 - update gRPC etc dependencies
