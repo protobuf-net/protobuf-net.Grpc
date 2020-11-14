@@ -1,5 +1,13 @@
 # Release Notes
 
+## 1.0.239
+
+- add .NET 5 target
+- update gRPC etc dependencies
+- add `CallContext.ResponseHeadersAsync()` (now preferred) to allow async await for headers
+- allow `CreateGrpcService` to be used as an extension method from `CallInvoker`
+- WCF migration samples added (#135 via mholo65)
+
 ## 1.0.110
 
 - add support for server-side reflection (think "mex"/"wsdl") in `protobuf-net.Grpc.AspNetCore.Reflection` (#49/#63 via mholo65)

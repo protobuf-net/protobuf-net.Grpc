@@ -91,7 +91,7 @@ namespace TraderSys.FullStockTickerClientApp
                 _requestStream.Writer.Complete();
                 await _responseTask.ConfigureAwait(false);
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 // noop
             }

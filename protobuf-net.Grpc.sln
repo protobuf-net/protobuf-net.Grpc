@@ -106,7 +106,42 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.Reflectio
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.Reflection.Test", "tests\protobuf-net.Grpc.Reflection.Test\protobuf-net.Grpc.Reflection.Test.csproj", "{6F589BF3-221C-43AC-85A4-899599ABF6AC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.Grpc.AspNetCore.Reflection", "src\protobuf-net.Grpc.AspNetCore.Reflection\protobuf-net.Grpc.AspNetCore.Reflection.csproj", "{D884098C-35B2-4ACF-AFDF-8C0C01684A0E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc.AspNetCore.Reflection", "src\protobuf-net.Grpc.AspNetCore.Reflection\protobuf-net.Grpc.AspNetCore.Reflection.csproj", "{D884098C-35B2-4ACF-AFDF-8C0C01684A0E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "wcf-port", "wcf-port", "{3B62F12D-1AC1-4617-BD49-21DFFD694E70}"
+	ProjectSection(SolutionItems) = preProject
+		examples\wcf-port\README.md = examples\wcf-port\README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TraderSys", "TraderSys", "{2B3F5AED-24B3-4915-900E-EFC58414EA29}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SimpleStockTicker", "SimpleStockTicker", "{476D4E11-9779-4922-AF57-9ADCF44ED4C7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "FullStockTicker", "FullStockTicker", "{D020CB3F-DCB7-4A08-8D46-F2A60B564BE0}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.FullStockTicker.Shared", "examples\wcf-port\FullStockTicker\src\TraderSys.FullStockTicker.Shared\TraderSys.FullStockTicker.Shared.csproj", "{C7A3CCD4-7675-488A-BE11-29F193B7107E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.FullStockTickerClientApp", "examples\wcf-port\FullStockTicker\src\TraderSys.FullStockTickerClientApp\TraderSys.FullStockTickerClientApp.csproj", "{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.FullStockTickerServer", "examples\wcf-port\FullStockTicker\src\TraderSys.FullStockTickerServer\TraderSys.FullStockTickerServer.csproj", "{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.StockMarket", "examples\wcf-port\FullStockTicker\src\TraderSys.StockMarket\TraderSys.StockMarket.csproj", "{2E5B4757-24F6-415C-92FC-9E20B37214D9}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.SimpleStockTickerServer", "examples\wcf-port\SimpleStockTicker\src\TraderSys.SimpleStockTickerServer\TraderSys.SimpleStockTickerServer.csproj", "{817F0C4C-B477-4111-A635-FB6695DB3974}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.SimpleStockTickerServer.ClientConsole", "examples\wcf-port\SimpleStockTicker\src\TraderSys.SimpleStockTickerServer.ClientConsole\TraderSys.SimpleStockTickerServer.ClientConsole.csproj", "{F53E3432-4AC0-4597-B8C2-55201301ADF3}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.SimpleStockTickerServer.Shared", "examples\wcf-port\SimpleStockTicker\src\TraderSys.SimpleStockTickerServer.Shared\TraderSys.SimpleStockTickerServer.Shared.csproj", "{B384CB30-C505-4566-A040-C4BE5FC0C8C2}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.StockMarket", "examples\wcf-port\SimpleStockTicker\src\TraderSys.StockMarket\TraderSys.StockMarket.csproj", "{2CA1BF31-F89B-4651-8939-C031ADA0619B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.PortfolioData", "examples\wcf-port\TraderSys\src\TraderSys.PortfolioData\TraderSys.PortfolioData.csproj", "{FB537B39-0E7B-4C69-84AD-5B747F66C192}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.Portfolios", "examples\wcf-port\TraderSys\src\TraderSys.Portfolios\TraderSys.Portfolios.csproj", "{87D27844-3A62-431A-9B53-92AFC09A1C3C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.Portfolios.ClientConsole", "examples\wcf-port\TraderSys\src\TraderSys.Portfolios.ClientConsole\TraderSys.Portfolios.ClientConsole.csproj", "{AC65761B-5CF5-4F3E-AF60-41F977E8070D}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.Portfolios.Shared", "examples\wcf-port\TraderSys\src\TraderSys.Portfolios.Shared\TraderSys.Portfolios.Shared.csproj", "{80479131-FE55-473E-AE68-55601AD96668}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -289,6 +324,78 @@ Global
 		{D884098C-35B2-4ACF-AFDF-8C0C01684A0E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D884098C-35B2-4ACF-AFDF-8C0C01684A0E}.VS|Any CPU.ActiveCfg = Debug|Any CPU
 		{D884098C-35B2-4ACF-AFDF-8C0C01684A0E}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{817F0C4C-B477-4111-A635-FB6695DB3974}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{817F0C4C-B477-4111-A635-FB6695DB3974}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{817F0C4C-B477-4111-A635-FB6695DB3974}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{817F0C4C-B477-4111-A635-FB6695DB3974}.Release|Any CPU.Build.0 = Release|Any CPU
+		{817F0C4C-B477-4111-A635-FB6695DB3974}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{817F0C4C-B477-4111-A635-FB6695DB3974}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{80479131-FE55-473E-AE68-55601AD96668}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80479131-FE55-473E-AE68-55601AD96668}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80479131-FE55-473E-AE68-55601AD96668}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80479131-FE55-473E-AE68-55601AD96668}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80479131-FE55-473E-AE68-55601AD96668}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{80479131-FE55-473E-AE68-55601AD96668}.VS|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -333,6 +440,22 @@ Global
 		{B9DAC732-68C2-41AA-96D0-79FEDF181711} = {3E0CF81A-BA7A-4AAB-B46D-5AC8E22B0644}
 		{6F589BF3-221C-43AC-85A4-899599ABF6AC} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
 		{D884098C-35B2-4ACF-AFDF-8C0C01684A0E} = {39491A90-84A2-4E13-B867-CFC3D4592084}
+		{3B62F12D-1AC1-4617-BD49-21DFFD694E70} = {F7FAC6AD-62B0-4B79-98AA-DBD99F84E4E9}
+		{2B3F5AED-24B3-4915-900E-EFC58414EA29} = {3B62F12D-1AC1-4617-BD49-21DFFD694E70}
+		{476D4E11-9779-4922-AF57-9ADCF44ED4C7} = {3B62F12D-1AC1-4617-BD49-21DFFD694E70}
+		{D020CB3F-DCB7-4A08-8D46-F2A60B564BE0} = {3B62F12D-1AC1-4617-BD49-21DFFD694E70}
+		{C7A3CCD4-7675-488A-BE11-29F193B7107E} = {D020CB3F-DCB7-4A08-8D46-F2A60B564BE0}
+		{F33650D8-B78F-4949-9FA0-1C5BB0BF0FDF} = {D020CB3F-DCB7-4A08-8D46-F2A60B564BE0}
+		{F915E6AC-9C15-4EE8-873C-22BD9B92D0C8} = {D020CB3F-DCB7-4A08-8D46-F2A60B564BE0}
+		{2E5B4757-24F6-415C-92FC-9E20B37214D9} = {D020CB3F-DCB7-4A08-8D46-F2A60B564BE0}
+		{817F0C4C-B477-4111-A635-FB6695DB3974} = {476D4E11-9779-4922-AF57-9ADCF44ED4C7}
+		{F53E3432-4AC0-4597-B8C2-55201301ADF3} = {476D4E11-9779-4922-AF57-9ADCF44ED4C7}
+		{B384CB30-C505-4566-A040-C4BE5FC0C8C2} = {476D4E11-9779-4922-AF57-9ADCF44ED4C7}
+		{2CA1BF31-F89B-4651-8939-C031ADA0619B} = {476D4E11-9779-4922-AF57-9ADCF44ED4C7}
+		{FB537B39-0E7B-4C69-84AD-5B747F66C192} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
+		{87D27844-3A62-431A-9B53-92AFC09A1C3C} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
+		{AC65761B-5CF5-4F3E-AF60-41F977E8070D} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
+		{80479131-FE55-473E-AE68-55601AD96668} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA14B07C-CA29-430D-A600-F37A050636D3}
