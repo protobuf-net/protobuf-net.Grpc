@@ -106,7 +106,7 @@ namespace protobuf_net.Grpc.Test.Integration
             // note: the byte[] API is "simple mode"; there is a much more efficient
             // "pipelines"-based API available via CreateMarshaller<T>()
             using var ms = new MemoryStream();
-            new BinaryFormatter().Serialize(ms, value);
+            new BinaryFormatter().Serialize(ms, value!);
             return ms.ToArray();
         }
     }

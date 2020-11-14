@@ -153,6 +153,7 @@ namespace protobuf_net.Grpc.Test
             public override void C() { }
         }
 
+        [AttributeUsage(AttributeTargets.All)]
         public class FooAttribute : Attribute
         {
             public string Name { get; set; }
@@ -160,6 +161,7 @@ namespace protobuf_net.Grpc.Test
             public FooAttribute(string name) { Name = name; }
         }
 
+        [AttributeUsage(AttributeTargets.All)]
         public class BarAttribute : Attribute
         {
             public string Name { get; set; }

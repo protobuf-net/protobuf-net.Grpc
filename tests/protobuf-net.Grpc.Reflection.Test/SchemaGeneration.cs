@@ -1,5 +1,6 @@
 ﻿using ProtoBuf;
 using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Reflection;
 using System;
 using System.Collections.Generic;
@@ -26,8 +27,8 @@ namespace protobuf_net.Grpc.Reflection.Test
             Log(schema);
             Assert.Equal(@"syntax = ""proto3"";
 package protobuf_net.Grpc.Reflection.Test;
-import ""google/protobuf/timestamp.proto"";
 import ""google/protobuf/empty.proto"";
+import ""google/protobuf/timestamp.proto"";
 
 enum Category {
    Default = 0;
@@ -54,7 +55,7 @@ service MyService {
 ", schema, ignoreLineEndingDifferences: true);
         }
 
-        [ServiceContract]
+        [Service]
         public interface IMyService
         {
             ValueTask<MyResponse> Unary(MyRequest request, CallContext callContext = default);
@@ -98,7 +99,7 @@ service MyService {
             Bar = 2,
         }
 
-        [ServiceContract]
+        [Service]
         public interface IConferencesService
         {
             Task<IEnumerable<ConferenceOverview>> ListConferencesEnumerable();

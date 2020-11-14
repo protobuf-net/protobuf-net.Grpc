@@ -66,11 +66,13 @@ As sub-object :
         }
 
 
+#pragma warning disable IDE0079 // Remove unnecessary suppression
 #pragma warning disable IDE0051, IDE0052 // "unused" things; they are, but it depends on the TFM
         private readonly ITestOutputHelper _log;
         private readonly Issue100ServerFixture _server;
         private void Log(string message) => _log?.WriteLine(message);
 #pragma warning restore IDE0051, IDE0052
+#pragma warning restore IDE0079 // Remove unnecessary suppression
 
         private int Port => _server.Port;
 
@@ -85,7 +87,11 @@ As sub-object :
         {
             public int Port { get; } = PortManager.GetNextPort();
 
-            public void Dispose() => _ = _server.KillAsync();
+            public void Dispose()
+            {
+                _server.KillAsync();
+                GC.SuppressFinalize(this);
+            }
 
             private readonly Server? _server;
             public Issue100ServerFixture()
@@ -124,7 +130,7 @@ As sub-object :
             }
         }
 
-#if NETCOREAPP3_1
+#if !(NET461 || NET472)
         [Fact]
         public async Task Issue100_ManagedClient()
         {

@@ -104,7 +104,7 @@ namespace ProtoBuf.Grpc.Server
                     default:
                         return false;
                 }
-                _log?.WriteLine($"{method.ServiceName} / {method.Name} ({method.Type}) bound to {stub.Method.DeclaringType.Name}.{stub.Method.Name}");
+                _log?.WriteLine($"{method.ServiceName} / {method.Name} ({method.Type}) bound to {stub.Method.DeclaringType?.Name}.{stub.Method.Name}");
                 return true;
             }
         }

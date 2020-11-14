@@ -196,7 +196,7 @@ namespace protobuf_net.Grpc.Test
                         if (i != 0) sb.Append(", ");
                         sb.Append(Sanitize(p[i].ParameterType));
                     }
-                    sb.Append(")");
+                    sb.Append(')');
                     list.Add((operation.MethodType, sb.ToString()));
                 }
             }

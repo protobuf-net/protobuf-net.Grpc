@@ -109,7 +109,7 @@ namespace ProtoBuf.Grpc.Configuration
         partial void RecordUplevelBufferRead();
         partial void RecordUplevelBufferWrite();
 
-        private bool TryGetBufferWriter(global::Grpc.Core.SerializationContext context, out IBufferWriter<byte>? writer)
+        private static bool TryGetBufferWriter(global::Grpc.Core.SerializationContext context, out IBufferWriter<byte>? writer)
         {
             // the managed implementation does not yet implement this API
             try { writer = context.GetBufferWriter(); }

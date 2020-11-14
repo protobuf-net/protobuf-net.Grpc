@@ -42,7 +42,11 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
         public class Issue75ServerFixture : IFaultTest, IInterceptedFaultTest, IDisposable
         {
             public int Port { get; } = PortManager.GetNextPort();
-            public void Dispose() => _ = _server.KillAsync();
+            public void Dispose()
+            {
+                _ = _server.KillAsync();
+                GC.SuppressFinalize(this);
+            }
 
             private readonly Server? _server;
             public Issue75ServerFixture()
@@ -174,7 +178,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             }
         }
 
-#if NETCOREAPP3_1
+#if !(NET461 || NET472)
         [Fact]
         public async Task ManagedClient_Vanilla_Fault()
         {

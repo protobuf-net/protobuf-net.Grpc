@@ -130,7 +130,7 @@ namespace ProtoBuf.Grpc.Internal
                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                         null,
                         new object[] { channel },
-                        null);
+                        null)!;
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig)
@@ -214,7 +214,7 @@ namespace ProtoBuf.Grpc.Internal
                             FieldAttributes.Static | FieldAttributes.Private);
                         // = new Method<from, to>(methodType, serviceName, opName, requestMarshaller, responseMarshaller);
                         Ldc_I4(cctor, (int)op.MethodType); // methodType
-                        cctor.Emit(OpCodes.Ldstr, serviceName); // serviceName
+                        cctor.Emit(OpCodes.Ldstr, serviceName ?? ""); // serviceName
                         cctor.Emit(OpCodes.Ldstr, op.Name); // opName
                         cctor.Emit(OpCodes.Ldsfld, Marshaller(op.From)); // requestMarshaller
                         cctor.Emit(OpCodes.Ldsfld, Marshaller(op.To)); // responseMarshaller
@@ -304,7 +304,7 @@ namespace ProtoBuf.Grpc.Internal
                 // return the factory
                 var p = Expression.Parameter(typeof(CallInvoker), "channel");
                 return Expression.Lambda<Func<CallInvoker, TService>>(
-                    Expression.New(finalType.GetConstructor(new[] { typeof(CallInvoker) }), p), p).Compile();
+                    Expression.New(finalType.GetConstructor(new[] { typeof(CallInvoker) })!, p), p).Compile();
 
                 ConstructorBuilder? WritePassThruCtor<T>(MethodAttributes accessibility)
                 {

@@ -54,22 +54,14 @@ namespace ProtoBuf.Grpc.Reflection
         /// <summary>
         /// Gets file descriptor for given file name (including package path). Returns <c>null</c> if not found.
         /// </summary>
-        public FileDescriptorProto FileByName(string filename)
-        {
-            FileDescriptorProto file;
-            filesByName.TryGetValue(filename, out file);
-            return file;
-        }
+        public FileDescriptorProto? FileByName(string filename)
+            => filesByName.TryGetValue(filename, out var file) ? file : default;
 
         /// <summary>
         /// Gets file descriptor that contains definition of given symbol full name (including package path). Returns <c>null</c> if not found.
         /// </summary>
-        public FileDescriptorProto FileContainingSymbol(string symbol)
-        {
-            FileDescriptorProto file;
-            filesBySymbol.TryGetValue(symbol, out file);
-            return file;
-        }
+        public FileDescriptorProto? FileContainingSymbol(string symbol)
+            => filesBySymbol.TryGetValue(symbol, out var file) ? file : default;
 
         /// <summary>
         /// Builder class which isn't exposed, but acts as a convenient alternative to passing round two dictionaries in recursive calls.

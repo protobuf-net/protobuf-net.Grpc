@@ -14,7 +14,7 @@ namespace protobuf_net.Grpc.Test.Integration
             // half for up-level
 #if NETCOREAPP3_1
             s_Port = 10000;
-#elif NETCOREAPP3_0
+#elif NET5_0
             s_Port = 11000;
 #elif NET472
             s_Port = 12000;
