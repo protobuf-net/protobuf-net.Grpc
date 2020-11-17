@@ -155,7 +155,7 @@ namespace ProtoBuf.Grpc.Reflection
                 {
                     return right is null ? 0 : -1;
                 }
-                else if (right is null)
+                if (right is null)
                 {
                     return 1;
                 }
@@ -172,7 +172,7 @@ namespace ProtoBuf.Grpc.Reflection
                     return 0;
                 }
 
-                return 1;
+                return -1;
             }
         }
     }

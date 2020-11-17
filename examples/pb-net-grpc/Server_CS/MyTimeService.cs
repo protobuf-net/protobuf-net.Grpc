@@ -25,7 +25,7 @@ namespace Server_CS
                 {
                     break;
                 }
-                yield return new TimeResult { Time = DateTime.UtcNow };
+                yield return new TimeResult { Time = DateTime.UtcNow, Id = Guid.NewGuid() };
             }
         }
     }
