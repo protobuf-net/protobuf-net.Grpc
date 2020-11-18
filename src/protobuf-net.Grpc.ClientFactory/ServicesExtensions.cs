@@ -29,7 +29,28 @@ namespace ProtoBuf.Grpc.ClientFactory
         /// Registers a provider that can recognize and handle code-first services
         /// </summary>
         public static IHttpClientBuilder AddCodeFirstGrpcClient<T>(this IServiceCollection services,
+            string name, Action<GrpcClientFactoryOptions> configureClient) where T : class
+            => services.AddGrpcClient<T>(name, configureClient).ConfigureCodeFirstGrpcClient<T>();
+
+        /// <summary>
+        /// Registers a provider that can recognize and handle code-first services
+        /// </summary>
+        public static IHttpClientBuilder AddCodeFirstGrpcClient<T>(this IServiceCollection services,
+            string name, Action<IServiceProvider, GrpcClientFactoryOptions> configureClient) where T : class
+            => services.AddGrpcClient<T>(name, configureClient).ConfigureCodeFirstGrpcClient<T>();
+
+        /// <summary>
+        /// Registers a provider that can recognize and handle code-first services
+        /// </summary>
+        public static IHttpClientBuilder AddCodeFirstGrpcClient<T>(this IServiceCollection services,
             Action<GrpcClientFactoryOptions> configureClient) where T : class
+            => services.AddGrpcClient<T>(configureClient).ConfigureCodeFirstGrpcClient<T>();
+
+        /// <summary>
+        /// Registers a provider that can recognize and handle code-first services
+        /// </summary>
+        public static IHttpClientBuilder AddCodeFirstGrpcClient<T>(this IServiceCollection services,
+            Action<IServiceProvider, GrpcClientFactoryOptions> configureClient) where T : class
             => services.AddGrpcClient<T>(configureClient).ConfigureCodeFirstGrpcClient<T>();
 
         /// <summary>
