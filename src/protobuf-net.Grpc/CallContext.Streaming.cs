@@ -106,7 +106,7 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<T, CallContext, ValueTask> consumer)
         {
-            using var allDone = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, default);
+            var allDone = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, default);
             try
             {
                 var context = new CallContext(this, allDone.Token);
@@ -119,37 +119,60 @@ namespace ProtoBuf.Grpc
                 }, context.CancellationToken);
                 var produced = producer(context);
                 if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-                return BothAsync(produced, consumed);
+                return BothAsync(produced, consumed, SwapOut(ref allDone));
             }
             finally
             {
                 // stop the producer, in any exit scenario
-                allDone.Cancel();
+                CancelAndDisposeTaskSource(allDone);
             }
         }
 
-        private static async ValueTask BothAsync(ValueTask produced, Task consumed)
+        static T? SwapOut<T>(ref T? value) where T : class
+        {
+            var tmp = value;
+            value = default;
+            return tmp;
+        }
+
+        static void CancelAndDisposeTaskSource(CancellationTokenSource? cts)
+        {
+            if (cts is object)
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+        }
+
+        private static async ValueTask BothAsync(ValueTask produced, Task consumed, CancellationTokenSource? allDone)
         {
             try
             {
-                await produced.ConfigureAwait(false);
-            }
-            catch (Exception producerEx)
-            {
                 try
                 {
-                    await consumed.ConfigureAwait(false); // make sure we try and await both
+                    await produced.ConfigureAwait(false);
                 }
-                catch (Exception consumerEx)
+                catch (Exception producerEx)
                 {
-                    // so they *both* failed; talk about embarrassing!
-                    throw new AggregateException(producerEx, consumerEx);
+                    try
+                    {
+                        await consumed.ConfigureAwait(false); // make sure we try and await both
+                    }
+                    catch (Exception consumerEx)
+                    {
+                        // so they *both* failed; talk about embarrassing!
+                        throw new AggregateException(producerEx, consumerEx);
+                    }
+                    throw; // re-throw the exception from the producer
                 }
-                throw; // re-throw the exception from the producer
+                // producer completed cleanly; we can just await the
+                // consumer - if it throws, it throws
+                await consumed.ConfigureAwait(false);
             }
-            // producer completed cleanly; we can just await the
-            // consumer - if it throws, it throws
-            await consumed.ConfigureAwait(false);
+            finally
+            {
+                CancelAndDisposeTaskSource(allDone);
+            }
         }
 
         /// <summary>
@@ -160,19 +183,19 @@ namespace ProtoBuf.Grpc
             IAsyncEnumerable<T> source,
             Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
         {
-            using var allDone = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, default);
+            var allDone = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, default);
             try
             {
                 var context = new CallContext(this, allDone.Token);
                 var consumed = Task.Run(() => consumer(source, context).AsTask(), context.CancellationToken); // note this shares a capture scope
                 var produced = producer(context);
                 if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-                return BothAsync(produced, consumed);
+                return BothAsync(produced, consumed, SwapOut(ref allDone));
             }
             finally
             {
                 // stop the producer, in any exit scenario
-                allDone.Cancel();
+                CancelAndDisposeTaskSource(allDone);
             }
         }
 
