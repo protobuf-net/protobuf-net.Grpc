@@ -63,8 +63,8 @@ namespace protobuf_net.Grpc.Reflection.Test
                 ".ReflectionTest.Nested",
                 new[]
                 {
-                    "ReflectionTest.Three.proto", // This includes Two and One
-                    "ReflectionTest.Four.proto", // This includes Three, Two and One
+                    "ReflectionTest.Four.proto", // This includes Two and One
+                    "ReflectionTest.Three.proto", // This includes Three, Two and One
                     "ReflectionTest.Nested.proto",
                 }
             },

@@ -159,20 +159,34 @@ namespace ProtoBuf.Grpc.Reflection
                 {
                     return 1;
                 }
-                if (left.Dependencies.Contains(right.Name))
+                if (GetTransitiveDependencies(left).Contains(right.Name))
                 {
                     return 1;
                 }
-                if (right.Dependencies.Contains(left.Name))
+                if (GetTransitiveDependencies(right).Contains(left.Name))
                 {
                     return -1;
                 }
-                if (left.Name == right.Name)
-                {
-                    return 0;
-                }
 
-                return -1;
+                return string.Compare(left.Name, right.Name, StringComparison.Ordinal);
+
+                static IReadOnlyCollection<string> GetTransitiveDependencies(FileDescriptorProto? descriptor)
+                {
+                    if (descriptor is null)
+                    {
+                        return Array.Empty<string>();
+                    }
+
+                    var dependencies = new List<string>();
+
+                    foreach (var dependency in descriptor.GetDependencies())
+                    {
+                        dependencies.Add(dependency.Name);
+                        dependencies.AddRange(GetTransitiveDependencies(dependency));
+                    }
+
+                    return dependencies;
+                }
             }
         }
     }
