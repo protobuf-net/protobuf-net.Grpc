@@ -51,9 +51,8 @@ namespace protobuf_net.Grpc.Reflection.Test
                 ".ReflectionTest.BclService",
                 new[]
                 {
-                    "ProtoBuf.Grpc.Internal.Empty.proto", // TODO: Maybe Google well-known should have correct name?
+                    "google/protobuf/empty.proto",
                     "protobuf-net/bcl.proto",
-                    "ReflectionTest.BclMessage.proto",
                     "ReflectionTest.BclService.proto"
                 }
             },
@@ -63,8 +62,6 @@ namespace protobuf_net.Grpc.Reflection.Test
                 ".ReflectionTest.Nested",
                 new[]
                 {
-                    "ReflectionTest.Four.proto", // This includes Two and One
-                    "ReflectionTest.Three.proto", // This includes Three, Two and One
                     "ReflectionTest.Nested.proto",
                 }
             },
