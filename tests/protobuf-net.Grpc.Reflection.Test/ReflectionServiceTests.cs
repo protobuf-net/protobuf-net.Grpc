@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using Google.Protobuf.Reflection;
 using grpc.reflection.v1alpha;
 using ProtoBuf;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Reflection;
+using ProtoBuf.Grpc.Reflection.Internal;
 using Xunit;
 
 namespace protobuf_net.Grpc.Reflection.Test
@@ -15,9 +17,11 @@ namespace protobuf_net.Grpc.Reflection.Test
 
     public class ReflectionServiceTests
     {
+        private static Lazy<MethodInfo> AddImportMethod = new Lazy<MethodInfo>(() => typeof(FileDescriptorProto).GetMethod("AddImport", BindingFlags.NonPublic | BindingFlags.Instance));
+
         [Theory]
         [MemberData(nameof(Dependencies))]
-        public async Task ShouldIncludeDependenciesInCorrectOrder(Type service, string symbolName, string[] expectedDescriptors)
+        public async Task ShouldIncludeDependenciesInCorrectOrder(Type service, string symbolName, string[] expectedDescriptors, string[] expectedMessageTypes)
         {
             IServerReflection reflectionService = new ReflectionService(service);
 
@@ -29,7 +33,26 @@ namespace protobuf_net.Grpc.Reflection.Test
                     .Select(x => Serializer.Deserialize<FileDescriptorProto>(x.AsSpan()))
                     .ToArray();
 
-                Assert.Equal(expectedDescriptors, fileDescriptors.Select(x => x.Name));
+                var fileDescriptorSet = new FileDescriptorSet();
+
+                foreach (var fileDescriptor in fileDescriptors)
+                {
+                    // We need to add dependency as import, otherwise FileDescriptorSet.GetErrors() will return error about not finding imports.
+                    foreach (var dependency in fileDescriptor.Dependencies)
+                    {
+                        // Use reflection.
+                        var addImportMethod = AddImportMethod.Value;
+                        addImportMethod.Invoke(fileDescriptor, new object[] {dependency, true, default});
+                    }
+
+                    fileDescriptorSet.Files.Add(fileDescriptor);
+                }
+
+                fileDescriptorSet.Process();
+
+                Assert.Empty(fileDescriptorSet.GetErrors());
+                Assert.Equal(expectedDescriptors, fileDescriptorSet.Files.Select(x => x.Name));
+                Assert.Equal(expectedMessageTypes, fileDescriptorSet.Files.SelectMany(x => x.MessageTypes).Select(x => $".{x.GetFile().Package}.{x.Name}").OrderBy(x => x));
             }
 
             async IAsyncEnumerable<ServerReflectionRequest> GetRequest()
@@ -55,6 +78,17 @@ namespace protobuf_net.Grpc.Reflection.Test
                     "protobuf-net/bcl.proto",
                     "ReflectionTest.BclService.proto"
                 }
+                ,
+                new[]
+                {
+                    ".bcl.DateTime",
+                    ".bcl.Decimal",
+                    ".bcl.Guid",
+                    ".bcl.NetObjectProxy",
+                    ".bcl.TimeSpan",
+                    ".google.protobuf.Empty",
+                    ".ReflectionTest.BclMessage",
+                }
             },
             new object[]
             {
@@ -63,6 +97,13 @@ namespace protobuf_net.Grpc.Reflection.Test
                 new[]
                 {
                     "ReflectionTest.Service.Nested.proto",
+                },
+                new[]
+                {
+                    ".ReflectionTest.Service.Four",
+                    ".ReflectionTest.Service.One",
+                    ".ReflectionTest.Service.Three",
+                    ".ReflectionTest.Service.Two",
                 }
             },
         };
