@@ -58,11 +58,11 @@ namespace protobuf_net.Grpc.Reflection.Test
             },
             new object[]
             {
-                typeof(Nested),
-                ".ReflectionTest.Nested",
+                typeof(ReflectionTest.Service.Nested),
+                ".ReflectionTest.Service.Nested",
                 new[]
                 {
-                    "ReflectionTest.Nested.proto",
+                    "ReflectionTest.Service.Nested.proto",
                 }
             },
         };
@@ -103,31 +103,52 @@ namespace ReflectionTest
     }
 }
 
-namespace ReflectionTest
+namespace ReflectionTest.One
 {
     [ProtoContract]
     public class One
     {
         [ProtoMember(1)] public string P { get; set; } = string.Empty;
     }
+}
+
+namespace ReflectionTest.Two
+{
+    using One;
 
     [ProtoContract]
     public class Two
     {
         [ProtoMember(1)] public One P { get; set; } = new One();
     }
+}
+
+namespace ReflectionTest.Three
+{
+    using Two;
 
     [ProtoContract]
     public class Three
     {
         [ProtoMember(1)] public Two P { get; set; } = new Two();
     }
+}
+
+namespace ReflectionTest.Four
+{
+    using Three;
 
     [ProtoContract]
     public class Four
     {
         [ProtoMember(1)] public Three P { get; set; } = new Three();
     }
+}
+
+namespace ReflectionTest.Service
+{
+    using Three;
+    using Four;
 
     [Service]
     public interface INested
