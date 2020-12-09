@@ -37,10 +37,13 @@ by having an up-to-date IDE. Note that the tools work on more platforms than jus
 
 Also: make sure that you are *actually using* the correct .NET Core SDK (usually via "global.json").
 
+Note: to avoid common usage errors with protobuf-net and gRPC, consider using [`protobuf-net.BuildTools`](https://protobuf-net.github.io/protobuf-net/build_tools), which
+reports problems at build-time.
+
 ### 1: define your data contracts and service contracts
 
 Your service and data contracts can be placed directly in the client/server (see later), or can be in a separate class library. If you use
-a separate library, make sure you target `netcoreapp3.0`.
+a separate library, make sure you target `netcoreapp3.0` or above.
 
 As for what they look like: think "WCF". Data contracts are classes marked with either `[ProtoContract]` or `[DataContract]`, with individual members
 annotated with either `[ProtoMember]` or `[DataMember]`. The `[Proto*]` options are protobuf-net specific and offer fine-grained

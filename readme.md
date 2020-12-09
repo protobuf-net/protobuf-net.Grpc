@@ -8,6 +8,7 @@ It should work on all .NET languages that can generate something *even remotely 
 
 - [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted)
 - [All Documentation](https://protobuf-net.github.io/protobuf-net.Grpc/)
+- [Build/usage available via `protobuf-net.BuildTools`](https://protobuf-net.github.io/protobuf-net/build_tools)
 
 Usage is as simple as declaring an interface for your service-contract:
 
