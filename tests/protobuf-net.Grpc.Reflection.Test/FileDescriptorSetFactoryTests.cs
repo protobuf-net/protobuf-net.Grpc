@@ -20,7 +20,7 @@ namespace protobuf_net.Grpc.Reflection.Test
             Assert.Empty(fileDescriptorSet.GetErrors());
             Assert.Equal(new[] { "GreeterService" },
                 fileDescriptorSet.Files.SelectMany(x => x.Services).Select(x => x.Name).ToArray());
-            Assert.Equal(new[] { "HelloRequest", "HelloReply" },
+            Assert.Equal(new[] { "HelloReply", "HelloRequest" },
                 fileDescriptorSet.Files.SelectMany(x => x.MessageTypes).Select(x => x.Name).ToArray());
         }
     }
