@@ -1,11 +1,11 @@
-﻿using Grpc.Core;
-using ProtoBuf.Grpc.Internal;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
+using Grpc.Core;
+using ProtoBuf.Grpc.Internal;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -49,7 +49,7 @@ namespace ProtoBuf.Grpc.Configuration
 
                 var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions || serviceContract.IsDefined(typeof(SimpleRpcExceptionsAttribute));
                 int svcOpCount = 0;
-                var bindCtx = new ServiceBindContext(serviceContract, serviceType, state);
+                var bindCtx = new ServiceBindContext(serviceContract, serviceType, state, binderConfiguration.Binder);
                 foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, this))
                 {
                     if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
@@ -271,77 +271,37 @@ namespace ProtoBuf.Grpc.Configuration
             /// The caller-provided state for this operation
             /// </summary>
             public object State { get; }
+
+            /// <summary>
+            /// The service binder to use.
+            /// </summary>
+            public ServiceBinder ServiceBinder { get; }
+
             /// <summary>
             /// The service contract interface type
             /// </summary>
             public Type ContractType { get; }
+
             /// <summary>
             /// The concrete service type
             /// </summary>
             public Type ServiceType { get; }
 
-            private InterfaceMapping? _map;
-            private InterfaceMapping GetMap() // lazily memoized
-                => _map ??= ServiceType.GetInterfaceMap(ContractType);
-            internal ServiceBindContext(Type contractType, Type serviceType, object state)
+            internal ServiceBindContext(Type contractType, Type serviceType, object state, ServiceBinder serviceBinder)
             {
                 State = state;
+                ServiceBinder = serviceBinder;
                 ContractType = contractType;
                 ServiceType = serviceType;
             }
 
             /// <summary>
-            /// Gets the implementing method from a method definition
+            /// <para>Gets the metadata associated with a specific contract method.</para>
+            /// <para>Note: Later is higher priority in the code that consumes this.</para>
             /// </summary>
-            public MethodInfo? GetImplementation(MethodInfo serviceMethod)
-            {
-                if (ContractType != ServiceType & serviceMethod is object)
-                {
-                    var map = GetMap();
-                    var from = map.InterfaceMethods;
-                    var to = map.TargetMethods;
-                    int end = Math.Min(from.Length, to.Length);
-                    for (int i = 0; i < end; i++)
-                    {
-                        if (from[i] == serviceMethod) return to[i];
-                    }
-                }
-                return null;
-            }
-
-            /// <summary>
-            /// Gets the metadata associated with a specific contract method
-            /// </summary>
-            public List<object> GetMetadata(MethodInfo method)
-            {
-                // consider the various possible sources of distinct metadata
-                object[]
-                    contractType = ContractType.GetCustomAttributes(inherit: true),
-                    contractMethod = method.GetCustomAttributes(inherit: true),
-                    serviceType = Array.Empty<object>(),
-                    serviceMethod = Array.Empty<object>();
-                if (ContractType != ServiceType & ContractType.IsInterface & ServiceType.IsClass)
-                {
-                    serviceType = ServiceType.GetCustomAttributes(inherit: true);
-                    serviceMethod = GetImplementation(method)?.GetCustomAttributes(inherit: true)
-                        ?? Array.Empty<object>();
-                }
-
-                // note: later is higher priority in the code that consumes this, but
-                // GetAttributes() is "most derived to least derived", so: add everything
-                // backwards, then reverse
-                var metadata = new List<object>(
-                    contractType.Length + contractMethod.Length +
-                    serviceType.Length + serviceMethod.Length);
-
-                metadata.AddRange(serviceMethod);
-                metadata.AddRange(serviceType);
-                metadata.AddRange(contractMethod);
-                metadata.AddRange(contractType);
-                metadata.Reverse();
-                return metadata;
-            }
+            /// <returns>Prioritised list of metadata.</returns>
+            public IList<object> GetMetadata(MethodInfo method)
+                => ServiceBinder.GetMetadata(method, ContractType, ServiceType);
         }
     }
-
 }

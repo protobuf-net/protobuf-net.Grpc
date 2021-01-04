@@ -1,6 +1,7 @@
-﻿using ProtoBuf.Grpc.Internal;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Reflection;
+using ProtoBuf.Grpc.Internal;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -17,6 +18,17 @@ namespace ProtoBuf.Grpc.Configuration
         /// Create a new instance
         /// </summary>
         protected ServiceBinder() { }
+
+        private Dictionary<Type, InterfaceMapping> _map = new Dictionary<Type, InterfaceMapping>();
+        private InterfaceMapping GetMap(Type contractType, Type serviceType)
+        {
+            if (!_map.TryGetValue(contractType, out var interfaceMapping))
+            {
+                interfaceMapping = serviceType.GetInterfaceMap(contractType);
+                _map[contractType] = interfaceMapping;
+            }
+            return interfaceMapping;
+        }
 
         /// <summary>
         /// Gets the default name for a potential service-contract
@@ -153,6 +165,60 @@ namespace ProtoBuf.Grpc.Configuration
                 opName = GetDefaultName(method);
             name = opName;
             return !string.IsNullOrWhiteSpace(name);
+        }
+
+        /// <summary>
+        /// <para>Gets the metadata associated with a specific contract method.</para>
+        /// <para>Note: Later is higher priority in the code that consumes this.</para>
+        /// </summary>
+        /// <returns>Prioritised list of metadata.</returns>
+        public virtual IList<object> GetMetadata(MethodInfo method, Type contractType, Type serviceType)
+        {
+            // consider the various possible sources of distinct metadata
+            object[]
+                contractTypeAtt = contractType.GetCustomAttributes(inherit: true),
+                contractMethodAtt = method.GetCustomAttributes(inherit: true),
+                serviceTypeAtt = Array.Empty<object>(),
+                serviceMethodAtt = Array.Empty<object>();
+            if (contractType != serviceType & contractType.IsInterface & serviceType.IsClass)
+            {
+                serviceTypeAtt = serviceType.GetCustomAttributes(inherit: true);
+                serviceMethodAtt = GetMethodImplementation(method, contractType, serviceType)?.GetCustomAttributes(inherit: true)
+                    ?? Array.Empty<object>();
+            }
+
+            // note: later is higher priority in the code that consumes this, but
+            // GetAttributes() is "most derived to least derived", so: add everything
+            // backwards, then reverse
+            var metadata = new List<object>(
+                contractTypeAtt.Length + contractMethodAtt.Length +
+                serviceTypeAtt.Length + serviceMethodAtt.Length);
+
+            metadata.AddRange(serviceMethodAtt);
+            metadata.AddRange(serviceTypeAtt);
+            metadata.AddRange(contractMethodAtt);
+            metadata.AddRange(contractTypeAtt);
+            metadata.Reverse();
+            return metadata;
+        }
+
+        /// <summary>
+        /// Gets the implementing method from a method definition
+        /// </summary>
+        public MethodInfo? GetMethodImplementation(MethodInfo serviceMethod, Type contractType, Type serviceType)
+        {
+            if (contractType != serviceType & serviceMethod is object)
+            {
+                var map = GetMap(contractType, serviceType);
+                var from = map.InterfaceMethods;
+                var to = map.TargetMethods;
+                int end = Math.Min(from.Length, to.Length);
+                for (int i = 0; i < end; i++)
+                {
+                    if (from[i] == serviceMethod) return to[i];
+                }
+            }
+            return null;
         }
     }
 }
