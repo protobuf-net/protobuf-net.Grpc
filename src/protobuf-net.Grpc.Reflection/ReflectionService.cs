@@ -153,19 +153,19 @@ namespace ProtoBuf.Grpc.Reflection
             {
                 if (left is null)
                 {
-                    return right is null ? 0 : -1;
+                    return right is null ? 0 : 1;
                 }
                 if (right is null)
                 {
-                    return 1;
+                    return -1;
                 }
                 if (GetTransitiveDependencies(left).Contains(right.Name))
                 {
-                    return 1;
+                    return -1;
                 }
                 if (GetTransitiveDependencies(right).Contains(left.Name))
                 {
-                    return -1;
+                    return 1;
                 }
 
                 return string.Compare(left.Name, right.Name, StringComparison.Ordinal);

@@ -74,9 +74,9 @@ namespace protobuf_net.Grpc.Reflection.Test
                 ".ReflectionTest.BclService",
                 new[]
                 {
+                    "ReflectionTest.BclService.proto",
                     "google/protobuf/empty.proto",
-                    "protobuf-net/bcl.proto",
-                    "ReflectionTest.BclService.proto"
+                    "protobuf-net/bcl.proto"
                 }
                 ,
                 new[]
