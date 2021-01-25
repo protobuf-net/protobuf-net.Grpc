@@ -33,9 +33,9 @@ namespace ProtoBuf.Grpc
         {
             while (await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                while (reader.TryRead(out T item))
+                while (reader.TryRead(out T? item))
                 {
-                    yield return item;
+                    yield return item!;
                 }
             }
         }
@@ -79,9 +79,9 @@ namespace ProtoBuf.Grpc
             {
                 while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    while (channel.Reader.TryRead(out T item))
+                    while (channel.Reader.TryRead(out T? item))
                     {
-                        yield return item;
+                        yield return item!;
                     }
                 }
             }

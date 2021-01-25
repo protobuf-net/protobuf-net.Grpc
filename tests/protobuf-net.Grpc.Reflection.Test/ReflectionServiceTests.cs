@@ -17,7 +17,7 @@ namespace protobuf_net.Grpc.Reflection.Test
 
     public class ReflectionServiceTests
     {
-        private static Lazy<MethodInfo> AddImportMethod = new Lazy<MethodInfo>(() => typeof(FileDescriptorProto).GetMethod("AddImport", BindingFlags.NonPublic | BindingFlags.Instance));
+        private static readonly Lazy<MethodInfo> AddImportMethod = new Lazy<MethodInfo>(() => typeof(FileDescriptorProto).GetMethod("AddImport", BindingFlags.NonPublic | BindingFlags.Instance)!);
 
         [Theory]
         [MemberData(nameof(Dependencies))]
@@ -42,7 +42,7 @@ namespace protobuf_net.Grpc.Reflection.Test
                     {
                         // Use reflection.
                         var addImportMethod = AddImportMethod.Value;
-                        addImportMethod.Invoke(fileDescriptor, new object[] {dependency, true, default});
+                        addImportMethod.Invoke(fileDescriptor, new object?[] {dependency, true, default});
                     }
 
                     fileDescriptorSet.Files.Add(fileDescriptor);

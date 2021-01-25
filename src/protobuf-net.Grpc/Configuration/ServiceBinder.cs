@@ -19,7 +19,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected ServiceBinder() { }
 
-        private Dictionary<Type, InterfaceMapping> _map = new Dictionary<Type, InterfaceMapping>();
+        private readonly Dictionary<Type, InterfaceMapping> _map = new Dictionary<Type, InterfaceMapping>();
         private InterfaceMapping GetMap(Type contractType, Type serviceType)
         {
             if (!_map.TryGetValue(contractType, out var interfaceMapping))
