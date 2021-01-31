@@ -101,7 +101,7 @@ namespace ProtoBuf.Grpc
         /// Performs a full-duplex operation that will await the producer,
         /// performing a given opreation on each element from the input stream
         /// </summary>
-        public ValueTask FullDuplexAsync<T>(
+        public async ValueTask FullDuplexAsync<T>(
             Func<CallContext, ValueTask> producer,
             IAsyncEnumerable<T> source,
             Func<T, CallContext, ValueTask> consumer)
@@ -118,8 +118,14 @@ namespace ProtoBuf.Grpc
                     }
                 }, context.CancellationToken);
                 var produced = producer(context);
-                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-                return BothAsync(produced, consumed, SwapOut(ref allDone));
+                if (produced.IsCompletedSuccessfully)
+                {
+                    await consumed;
+                }
+                else
+                {
+                    await BothAsync(produced, consumed, SwapOut(ref allDone));
+                }
             }
             finally
             {
@@ -178,7 +184,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// Performs a full-duplex operation that will await the producer and consumer stream
         /// </summary>
-        public ValueTask FullDuplexAsync<T>(
+        public async ValueTask FullDuplexAsync<T>(
             Func<CallContext, ValueTask> producer,
             IAsyncEnumerable<T> source,
             Func<IAsyncEnumerable<T>, CallContext, ValueTask> consumer)
@@ -189,8 +195,14 @@ namespace ProtoBuf.Grpc
                 var context = new CallContext(this, allDone.Token);
                 var consumed = Task.Run(() => consumer(source, context).AsTask(), context.CancellationToken); // note this shares a capture scope
                 var produced = producer(context);
-                if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
-                return BothAsync(produced, consumed, SwapOut(ref allDone));
+                if (produced.IsCompletedSuccessfully)
+                {
+                    await consumed;
+                }
+                else
+                {
+                    await BothAsync(produced, consumed, SwapOut(ref allDone));
+                }
             }
             finally
             {
