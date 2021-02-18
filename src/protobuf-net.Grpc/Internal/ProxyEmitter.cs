@@ -16,7 +16,7 @@ namespace ProtoBuf.Grpc.Internal
         private static readonly string ProxyIdentity = typeof(ProxyEmitter).Namespace + ".Proxies";
 
         private static readonly ModuleBuilder s_module = AssemblyBuilder.DefineDynamicAssembly(
-                new AssemblyName(ProxyIdentity), AssemblyBuilderAccess.Run).DefineDynamicModule(ProxyIdentity);
+                new AssemblyName(ProxyIdentity), AssemblyBuilderAccess.RunAndCollect).DefineDynamicModule(ProxyIdentity);
 
         private static void Ldc_I4(ILGenerator il, int value)
         {
