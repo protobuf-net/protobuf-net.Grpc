@@ -19,6 +19,21 @@ namespace ProtoBuf.Grpc
 #pragma warning restore CA2231 // Overload operator equals on overriding value type Equals
 #pragma warning restore IDE0079 // Remove unnecessary suppression
     {
+        /// <summary>Evaluates equality between <see cref="CallContext"/> values as defined by their <see cref="CallOptions"/>.</summary>
+        public override bool Equals(object? obj)
+            => obj switch
+            {
+                CallContext cc => this.CallOptions.Equals(cc.CallOptions),
+                CallOptions co => this.CallOptions.Equals(co),
+                _ => false,
+            };
+
+        /// <summary>Evaluates a hashcodeas defined by the <see cref="CallOptions"/> of the instance.</summary>
+        public override int GetHashCode() => this.CallOptions.GetHashCode();
+
+        /// <inheritdoc/>
+        public override string ToString() => nameof(CallContext);
+
         /// <summary>
         /// Default context; all default client options; no server context
         /// </summary>

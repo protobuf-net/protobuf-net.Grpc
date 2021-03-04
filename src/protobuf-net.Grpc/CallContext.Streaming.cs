@@ -12,12 +12,6 @@ namespace ProtoBuf.Grpc
 #pragma warning restore CA2231 // Overload operator equals on overriding value type Equals
 #pragma warning restore IDE0079 // Remove unnecessary suppression
     {
-        /// <inheritdoc/>
-        public override bool Equals(object? obj) => throw new NotSupportedException();
-        /// <inheritdoc/>
-        public override int GetHashCode() => throw new NotSupportedException();
-        /// <inheritdoc/>
-        public override string ToString() => nameof(CallContext);
 
         /// <summary>
         /// Performs a full-duplex operation that will await both the producer and consumer streams
