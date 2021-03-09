@@ -111,31 +111,60 @@ namespace ProtoBuf.Grpc
                         await consumer(value, context).ConfigureAwait(false);
                     }
                 }, context.CancellationToken);
-                var produced = producer(context);
+                ValueTask produced;
+                try
+                {
+                    produced = producer(context);
+                }
+                catch (Exception ex)
+                {
+                    var knownCancellation = CancelAndDisposeTaskSource(ref allDone);
+                    return ObserveErrorAsync(consumed, ex, knownCancellation);
+                }
                 if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
                 return BothAsync(produced, consumed, SwapOut(ref allDone));
             }
             finally
             {
                 // stop the producer, in any exit scenario
-                CancelAndDisposeTaskSource(allDone);
+                CancelAndDisposeTaskSource(ref allDone);
             }
         }
 
-        static T? SwapOut<T>(ref T? value) where T : class
+        private static T? SwapOut<T>(ref T? value) where T : class
         {
             var tmp = value;
             value = default;
             return tmp;
         }
 
-        static void CancelAndDisposeTaskSource(CancellationTokenSource? cts)
+        private static CancellationToken CancelAndDisposeTaskSource(ref CancellationTokenSource? cts)
         {
+            CancellationToken result = default;
             if (cts is object)
             {
-                cts.Cancel();
-                cts.Dispose();
+                try { result = cts.Token; } catch { }
+                try { cts.Cancel(); } catch { }
+                try { cts.Dispose(); } catch { }
             }
+            cts = null;
+            return result;
+        }
+
+        private static async ValueTask ObserveErrorAsync(Task consumed, Exception producerEx, CancellationToken knownCancellation)
+        {
+            try
+            {
+                await consumed.ConfigureAwait(false); // make sure we try and await both
+            }
+            catch (OperationCanceledException oce) when (oce.CancellationToken == knownCancellation)
+            { } // just throw the real exception
+            catch (Exception consumerEx)
+            {
+                // so they *both* failed; talk about embarrassing!
+                throw new AggregateException(producerEx, consumerEx);
+            }
+            throw producerEx;
         }
 
         private static async ValueTask BothAsync(ValueTask produced, Task consumed, CancellationTokenSource? allDone)
@@ -148,16 +177,8 @@ namespace ProtoBuf.Grpc
                 }
                 catch (Exception producerEx)
                 {
-                    try
-                    {
-                        await consumed.ConfigureAwait(false); // make sure we try and await both
-                    }
-                    catch (Exception consumerEx)
-                    {
-                        // so they *both* failed; talk about embarrassing!
-                        throw new AggregateException(producerEx, consumerEx);
-                    }
-                    throw; // re-throw the exception from the producer
+                    var knownCancellation = CancelAndDisposeTaskSource(ref allDone);
+                    await ObserveErrorAsync(consumed, producerEx, knownCancellation).ConfigureAwait(false);
                 }
                 // producer completed cleanly; we can just await the
                 // consumer - if it throws, it throws
@@ -165,7 +186,7 @@ namespace ProtoBuf.Grpc
             }
             finally
             {
-                CancelAndDisposeTaskSource(allDone);
+                CancelAndDisposeTaskSource(ref allDone);
             }
         }
 
@@ -182,14 +203,23 @@ namespace ProtoBuf.Grpc
             {
                 var context = new CallContext(this, allDone.Token);
                 var consumed = Task.Run(() => consumer(source, context).AsTask(), context.CancellationToken); // note this shares a capture scope
-                var produced = producer(context);
+                ValueTask produced;
+                try
+                {
+                    produced = producer(context);
+                }
+                catch (Exception ex)
+                {
+                    var knownCancellation = CancelAndDisposeTaskSource(ref allDone);
+                    return ObserveErrorAsync(consumed, ex, knownCancellation);
+                }
                 if (produced.IsCompletedSuccessfully) return new ValueTask(consumed);
                 return BothAsync(produced, consumed, SwapOut(ref allDone));
             }
             finally
             {
                 // stop the producer, in any exit scenario
-                CancelAndDisposeTaskSource(allDone);
+                CancelAndDisposeTaskSource(ref allDone);
             }
         }
 
