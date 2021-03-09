@@ -208,7 +208,7 @@ namespace ProtoBuf.Grpc
                 {
                     produced = producer(context);
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     var knownCancellation = CancelAndDisposeTaskSource(ref allDone);
                     return ObserveErrorAsync(consumed, ex, knownCancellation);
