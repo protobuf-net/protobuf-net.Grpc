@@ -112,7 +112,7 @@ namespace ProtoBuf.Grpc.Configuration
                 TimeoutException i => StatusCode.DeadlineExceeded,
 #pragma warning restore IDE0059 // needs more recent compiler than the CI server has
                 _ => StatusCode.Unknown,
-            }, exception.Message);
+            }, exception.Message, exception);
             return true;
         }
 
