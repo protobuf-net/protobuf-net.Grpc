@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.Net.Client" Version="2.34.0" />
+    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -6,6 +6,10 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.Grpc", "src\protobuf-net.Grpc\protobuf-net.Grpc.csproj", "{30D0874E-DA1A-497E-A181-37739A46CF32}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{3E0CF81A-BA7A-4AAB-B46D-5AC8E22B0644}"
+	ProjectSection(SolutionItems) = preProject
+		src\Directory.Build.props = src\Directory.Build.props
+		src\protobuf-net.png = src\protobuf-net.png
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{F7FAC6AD-62B0-4B79-98AA-DBD99F84E4E9}"
 EndProject

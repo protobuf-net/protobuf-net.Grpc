@@ -1,0 +1,12 @@
+<Project>
+  <Import Project="../Directory.Build.props" />
+  <PropertyGroup>
+    <PackageIcon>protobuf-net.png</PackageIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="../protobuf-net.png">
+        <Pack>True</Pack>
+        <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+</Project>

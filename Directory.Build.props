@@ -26,13 +26,13 @@
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
-    <PBGRPCLibVersion>1.0.110</PBGRPCLibVersion>
-    <GrpcDotNetVersion>2.34.0</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.14.0</GoogleProtobufVersion>
-    <GrpcVersion>2.34.1</GrpcVersion>
+    <PBGRPCLibVersion>1.0.147</PBGRPCLibVersion>
+    <GrpcDotNetVersion>2.36.0</GrpcDotNetVersion>
+    <GoogleProtobufVersion>3.15.6</GoogleProtobufVersion>
+    <GrpcVersion>2.36.1</GrpcVersion>
 
     <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
-    <ProtoBufNet3Version>3.0.73</ProtoBufNet3Version>
+    <ProtoBufNet3Version>3.0.101</ProtoBufNet3Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
