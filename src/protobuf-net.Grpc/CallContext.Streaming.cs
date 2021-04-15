@@ -31,21 +31,26 @@ namespace ProtoBuf.Grpc
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             using var allDone = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, cancellationToken);
+            Task? consumed = null;
             try
             {
                 context = new CallContext(context, allDone.Token);
-                var consumed = Task.Run(() => consumer(source, context).AsTask(), allDone.Token); // note this shares a capture scope
+                consumed = Task.Run(() => consumer(source, context).AsTask(), allDone.Token); // note this shares a capture scope
 
                 await foreach (var value in producer(context).WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
                     yield return value;
                 }
-                await consumed.ConfigureAwait(false);
             }
             finally
             {
                 // stop the producer, in any exit scenario
                 allDone.Cancel();
+                
+                if (consumed != null)
+                {
+                    await consumed.ConfigureAwait(false);
+                }
             }
         }
 
@@ -68,10 +73,11 @@ namespace ProtoBuf.Grpc
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             using var allDone = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, cancellationToken);
+            Task? consumed = null;
             try
             {
                 context = new CallContext(context, allDone.Token);
-                var consumed = Task.Run(async () =>
+                consumed = Task.Run(async () =>
                 {// note this shares a capture scope
                     await foreach (var value in source.WithCancellation(allDone.Token).ConfigureAwait(false))
                     {
@@ -82,12 +88,16 @@ namespace ProtoBuf.Grpc
                 {
                     yield return value;
                 }
-                await consumed.ConfigureAwait(false);
             }
             finally
             {
                 // stop the producer, in any exit scenario
                 allDone.Cancel();
+
+                if (consumed != null)
+                {
+                    await consumed.ConfigureAwait(false);
+                }
             }
         }
 
