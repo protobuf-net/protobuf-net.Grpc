@@ -1,4 +1,4 @@
-﻿using Grpc.Core;
+using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
@@ -183,10 +183,13 @@ namespace ProtoBuf.Grpc.Internal
 
                 }
 
+                bool isTopLevelService = binderConfig.Binder.IsServiceContract(typeof(TService), out var serviceName);
                 int fieldIndex = 0;
                 foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
                 {
-                    bool isService = binderConfig.Binder.IsServiceContract(iType, out var serviceName);
+                    bool isService = binderConfig.Binder.IsServiceContract(iType, out var interfaceServiceName);
+                    if (!binderConfig.BindAllOperationsToService || !isTopLevelService)
+                        serviceName = interfaceServiceName;
 
                     // : TService
                     type.AddInterfaceImplementation(iType);

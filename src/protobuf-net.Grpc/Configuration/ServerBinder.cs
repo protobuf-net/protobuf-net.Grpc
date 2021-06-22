@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -42,10 +42,12 @@ namespace ProtoBuf.Grpc.Configuration
                 ? new HashSet<Type> { serviceType }
                 : ContractOperation.ExpandInterfaces(serviceType);
 
+            bool isTopLevelService = binderConfiguration.Binder.IsServiceContract(serviceType, out serviceName);
             bool serviceImplSimplifiedExceptions = serviceType.IsDefined(typeof(SimpleRpcExceptionsAttribute));
             foreach (var serviceContract in serviceContracts)
             {
-                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
+                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out var interfaceServiceName)) continue;
+                if (!binderConfiguration.BindAllOperationsToService || !isTopLevelService) serviceName = interfaceServiceName;
 
                 var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions || serviceContract.IsDefined(typeof(SimpleRpcExceptionsAttribute));
                 int svcOpCount = 0;
