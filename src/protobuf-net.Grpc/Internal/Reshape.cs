@@ -520,7 +520,10 @@ namespace ProtoBuf.Grpc.Internal
             }
             catch
             {
-                allDone.Cancel();
+                if (!allDone.IsCancellationRequested)
+                {
+                    allDone.Cancel();
+                }
                 throw;
             }
         }
