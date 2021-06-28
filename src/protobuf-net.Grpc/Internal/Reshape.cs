@@ -520,7 +520,14 @@ namespace ProtoBuf.Grpc.Internal
             }
             catch
             {
-                allDone.Cancel();
+                if (!allDone.IsCancellationRequested)
+                {
+                    try
+                    {
+                        allDone.Cancel();
+                    }
+                    catch { } // calls to "Cancel" can race, ignore the exception if we lose the race
+                }
                 throw;
             }
         }
