@@ -522,7 +522,11 @@ namespace ProtoBuf.Grpc.Internal
             {
                 if (!allDone.IsCancellationRequested)
                 {
-                    allDone.Cancel();
+                    try
+                    {
+                        allDone.Cancel();
+                    }
+                    catch { } // calls to "Cancel" can race, ignore the exception if we lose the race
                 }
                 throw;
             }
