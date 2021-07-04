@@ -3,6 +3,7 @@
 - [Getting Started](gettingstarted)
 - [Configuration Options](configuration)
 - [Package Layout](projects)
+- [Create Proto File](createProtoFile)
 
 Other Content
 
