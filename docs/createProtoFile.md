@@ -29,3 +29,21 @@ using (var writer = new System.IO.StreamWriter("services.proto"))
 ```
 
 Now build your project. Your .proto file is exist on your bin/Debug or bin/Realase
+
+Output example:  
+
+```c#
+syntax = "proto3";
+package Hyper;
+
+message MultiplyRequest {
+   int32 X = 1;
+   int32 Y = 2;
+}
+message MultiplyResult {
+   int32 Result = 1;
+}
+service Calculator {
+   rpc Multiply (MultiplyRequest) returns (MultiplyResult);
+}
+```
