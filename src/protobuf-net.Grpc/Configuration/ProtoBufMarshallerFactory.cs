@@ -1,4 +1,4 @@
-﻿using ProtoBuf.Meta;
+using ProtoBuf.Meta;
 using System;
 using System.Buffers;
 using System.IO;
@@ -182,9 +182,19 @@ namespace ProtoBuf.Grpc.Configuration
         /// Indicates whether a type should be considered as a serializable data type
         /// </summary>
         protected internal override bool CanSerialize(Type type)
-            => HasSingle(Options.ContractTypesOnly)
-                ? _model.CanSerializeContractType(type)
-                : _model.CanSerialize(type);
+        {
+            try
+            {
+                return HasSingle(Options.ContractTypesOnly)
+                    ? _model.CanSerializeContractType(type)
+                    : _model.CanSerialize(type);
+            }
+            catch (NotSupportedException)
+            {
+                // a typical case is the use of jagged arrays
+                return false;
+            }
+        }
 
         /// <summary>
         /// Deserializes an object from a payload
