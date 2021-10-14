@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Grpc.Core;
@@ -179,8 +179,6 @@ namespace ProtoBuf.Grpc.Internal
                 if (genType == typeof(AsyncServerStreamingCall<>)) return TypeCategory.AsyncServerStreamingCall;
             }
 
-            if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
-
             if (marshallerCache.CanSerializeType(type)) return TypeCategory.Data;
             bindContext?.LogWarning("Type cannot be serialized; ignoring: {0}", type.FullName);
             return TypeCategory.Invalid;
@@ -205,7 +203,7 @@ namespace ProtoBuf.Grpc.Internal
             if (method.IsGenericMethodDefinition) return false; // can't work with <T> methods
 
             if ((method.Attributes & (MethodAttributes.SpecialName)) != 0) return false; // some kind of accessor etc
-            
+
             if (!binderConfig.Binder.IsOperationContract(method, out var opName)) return false;
 
             var args = method.GetParameters();
