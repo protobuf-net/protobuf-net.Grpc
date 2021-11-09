@@ -54,6 +54,49 @@ service MyService {
 }
 ", schema, ignoreLineEndingDifferences: true);
         }
+        
+        [Fact]
+        public void CheckIngeritedInterfaceSchema()
+        {
+            var generator = new SchemaGenerator();
+            var schema = generator.GetSchema<IMyInheritedService>();
+            Log(schema);
+            Assert.Equal(@"syntax = ""proto3"";
+package protobuf_net.Grpc.Reflection.Test;
+import ""google/protobuf/empty.proto"";
+import ""google/protobuf/timestamp.proto"";
+
+enum Category {
+   Default = 0;
+   Foo = 1;
+   Bar = 2;
+}
+message MyRequest {
+   int32 Id = 1;
+   .google.protobuf.Timestamp When = 2;
+}
+message MyResponse {
+   string Value = 1;
+   Category Category = 2;
+   string RefId = 3; // default value could not be applied: 00000000-0000-0000-0000-000000000000
+}
+service MyInheritedService {
+   rpc AsyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+   rpc ClientStreaming (stream MyRequest) returns (MyResponse);
+   rpc FullDuplex (stream MyRequest) returns (stream MyResponse);
+   rpc GenericUnary (MyRequest) returns (MyResponse);
+   rpc InheritedAsyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+   rpc InheritedClientStreaming (stream MyRequest) returns (MyResponse);
+   rpc InheritedFullDuplex (stream MyRequest) returns (stream MyResponse);
+   rpc InheritedServerStreaming (MyRequest) returns (stream MyResponse);
+   rpc InheritedSyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+   rpc InheritedUnary (MyRequest) returns (MyResponse);
+   rpc ServerStreaming (MyRequest) returns (stream MyResponse);
+   rpc SyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+   rpc Unary (MyRequest) returns (MyResponse);
+}
+", schema, ignoreLineEndingDifferences: true);
+        }
 
         [Service]
         public interface IMyService
@@ -67,6 +110,24 @@ service MyService {
             void SyncEmpty();
         }
 
+        [Service]
+        public interface ISomeGenericService<TGenericRequest, TGenericResult>
+        {
+            ValueTask<TGenericResult> GenericUnary(TGenericRequest request, CallContext callContext = default);
+        }
+        
+        [Service]
+        public interface IMyInheritedService : IMyService, ISomeGenericService<MyRequest, MyResponse>
+        {
+            ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
+            ValueTask<MyResponse> InheritedClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedServerStreaming(MyRequest request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedFullDuplex(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+
+            ValueTask InheritedAsyncEmpty();
+            void InheritedSyncEmpty();
+        }
+        
         [DataContract]
         public class MyRequest
         {
