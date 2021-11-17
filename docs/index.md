@@ -4,6 +4,7 @@
 - [Configuration Options](configuration)
 - [Package Layout](projects)
 - [Create Proto File](createProtoFile)
+- [Register Client Service in Startup.cs](registerClientService)
 
 Other Content
 
