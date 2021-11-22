@@ -3,6 +3,8 @@
 - [Getting Started](gettingstarted)
 - [Configuration Options](configuration)
 - [Package Layout](projects)
+- [Build Tools ("code-first" focus)](https://protobuf-net.github.io/protobuf-net/build_tools)
+- [Build Tools ("contract-first" focus)](https://protobuf-net.github.io/protobuf-net/contract_first)
 
 Other Content
 
