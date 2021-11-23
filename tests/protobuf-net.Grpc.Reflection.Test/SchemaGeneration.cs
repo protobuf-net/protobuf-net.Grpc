@@ -110,14 +110,29 @@ service MyInheritedService {
             void SyncEmpty();
         }
 
+        /// <summary>
+        /// An interface which is not marked with [Service] attribute.
+        /// Its methods are not expected to participate in reflection at all.
+        /// </summary>
+        public interface INotAService
+        {
+            ValueTask<MyResponse> NotAServiceUnary(MyRequest request, CallContext callContext = default);
+            ValueTask<MyResponse> NotAServiceClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> NotAServiceServerStreaming(MyRequest request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> NotAServiceFullDuplex(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+
+            ValueTask NotAServiceAsyncEmpty();
+            void NotAServiceSyncEmpty();
+        }
+
         [Service]
-        public interface ISomeGenericService<TGenericRequest, TGenericResult>
+        public interface ISomeGenericService<in TGenericRequest, TGenericResult>
         {
             ValueTask<TGenericResult> GenericUnary(TGenericRequest request, CallContext callContext = default);
         }
         
         [Service]
-        public interface IMyInheritedService : IMyService, ISomeGenericService<MyRequest, MyResponse>
+        public interface IMyInheritedService : IMyService, ISomeGenericService<MyRequest, MyResponse>, INotAService
         {
             ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
             ValueTask<MyResponse> InheritedClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
@@ -211,6 +226,14 @@ service ConferencesService {
    rpc ListConferencesWrapped (.google.protobuf.Empty) returns (ListConferencesResult);
 }
 ", proto, ignoreLineEndingDifferences: true);
+        }
+
+        [Fact]
+        public void WhenInterfaceIsNotServiceContract_Throw()
+        {
+            var generator = new SchemaGenerator();
+            Action activation = () => generator.GetSchema<INotAService>();
+            Assert.Throws<ArgumentException>(activation.Invoke);
         }
     }
 }

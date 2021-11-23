@@ -49,7 +49,7 @@ namespace ProtoBuf.Grpc.Reflection
                 Name = name
             };
             
-            var ops = GetMethodsRecursively(contractType);
+            var ops = GetMethodsRecursively(binder, contractType);
             foreach (var method in ops)
             {
                 if (method.DeclaringType == typeof(object))
@@ -103,11 +103,14 @@ namespace ProtoBuf.Grpc.Reflection
             }
         }
 
-        private static MethodInfo[] GetMethodsRecursively(Type contractType)
+        private static MethodInfo[] GetMethodsRecursively(ServiceBinder serviceBinder, Type contractType)
         {
             var methods = contractType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
-            var baseInterfaces = contractType.GetInterfaces();
-            var inheritedMethods = baseInterfaces.SelectMany(iface => GetMethodsRecursively(iface)).ToArray();
+            var baseContractInterfaces = 
+                contractType.GetInterfaces()
+                .Where(cType => serviceBinder.IsServiceContract(cType, out _)); // only the ones marked as contract type 
+
+            var inheritedMethods = baseContractInterfaces.SelectMany(cType => GetMethodsRecursively(serviceBinder, cType)).ToArray();
             if (inheritedMethods.Any())
                 return inheritedMethods.Concat(methods).ToArray();
             
