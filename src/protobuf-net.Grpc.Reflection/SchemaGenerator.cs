@@ -105,16 +105,14 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static MethodInfo[] GetMethodsRecursively(ServiceBinder serviceBinder, Type contractType)
         {
-            var methods = contractType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
-            var baseContractInterfaces = 
-                contractType.GetInterfaces()
-                .Where(cType => serviceBinder.IsServiceContract(cType, out _)); // only the ones marked as contract type 
+            var includingInheritedInterfaces = ContractOperation.ExpandInterfaces(contractType);
 
-            var inheritedMethods = baseContractInterfaces.SelectMany(cType => GetMethodsRecursively(serviceBinder, cType)).ToArray();
-            if (inheritedMethods.Any())
-                return inheritedMethods.Concat(methods).ToArray();
+            var inheritedMethods = includingInheritedInterfaces
+                .Where(cType => serviceBinder.IsServiceContract(cType, out _)) // only the ones marked as contract type
+                .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                .ToArray();
             
-            return methods;
+            return inheritedMethods;
         }
     }
 }

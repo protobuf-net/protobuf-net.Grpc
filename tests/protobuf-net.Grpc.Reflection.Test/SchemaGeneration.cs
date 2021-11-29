@@ -4,9 +4,12 @@ using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Reflection;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
-using System.ServiceModel;
 using System.Threading.Tasks;
+using Google.Protobuf.Reflection;
+using Grpc.Core;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -124,7 +127,63 @@ service MyInheritedService {
             ValueTask NotAServiceAsyncEmpty();
             void NotAServiceSyncEmpty();
         }
+        
+        [Theory]
+        [InlineData(typeof(IMyService))]
+        [InlineData(typeof(IMyInheritedService))]        
+        [InlineData(typeof(IMyAnotherLevelOfInheritedService))]        
+        public void CompareRouteTable(Type type)
+        {
+            // 1: use the existing binder logic to build the routes, using the server logic
+            var binder = new TestBinder();
+            binder.Bind(type, type, BinderConfiguration.Default);
+            var viaBinder = binder.Collect();
+            foreach (var method in viaBinder) Log(method);
+            Log("");
 
+
+            // 2: create a schema and parse it for equivalece
+            var generator = new SchemaGenerator();
+            var schema = generator.GetSchema(type);
+            Log(schema);
+            var fds = new FileDescriptorSet();
+            fds.Add("my.proto", source: new StringReader(schema));
+            fds.Process();
+            Assert.Empty(fds.GetErrors());
+            var viaSchema = new List<string>(viaBinder.Length);
+            var file = fds.Files.Single(static x => x.IncludeInOutput);
+            foreach (var service in file.Services)
+            {
+                var svcName = string.IsNullOrEmpty(file.Package) ? service.Name : $"{file.Package}.{service.Name}";
+                foreach (var method in service.Methods)
+                {
+                    viaSchema.Add($"/{svcName}/{method.Name}");
+                }
+            }
+            viaSchema.Sort();
+
+            Assert.Equal(string.Join(Environment.NewLine, viaBinder), string.Join(Environment.NewLine, viaSchema));
+
+        }
+
+        class TestBinder : ServerBinder
+        {
+            private readonly List<string> _methods = new List<string>();
+            protected override bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
+            {
+                _methods.Add(method.FullName);
+                return true;
+            }
+
+            public string[] Collect()
+            {
+                _methods.Sort();
+                var arr = _methods.ToArray();
+                _methods.Clear(); // reset
+                return arr;
+            }
+        }
+        
         [Service]
         public interface ISomeGenericService<in TGenericRequest, TGenericResult>
         {
@@ -143,6 +202,13 @@ service MyInheritedService {
             void InheritedSyncEmpty();
         }
         
+                
+        [Service]
+        public interface IMyAnotherLevelOfInheritedService : IMyInheritedService
+        {
+            ValueTask<MyResponse> AnotherMethod(MyRequest request, CallContext callContext = default);
+        }
+
         [DataContract]
         public class MyRequest
         {
