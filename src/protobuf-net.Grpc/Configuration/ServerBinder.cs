@@ -36,23 +36,16 @@ namespace ProtoBuf.Grpc.Configuration
             int totalCount = 0;
             object?[]? argsBuffer = null;
             Type[] typesBuffer = Array.Empty<Type>();
-            
-            binderConfiguration ??= BinderConfiguration.Default;
-
-            if (binderConfiguration.Binder.IsServiceContract(serviceType, out var serviceName) == false)
-            {
-                // TODO: shall we assert the following? (currently it will fail some tests)
-                //throw new ArgumentException($"Type {serviceType.Name} is not defined as contract service", nameof(serviceType));
-            }
-
-            var serviceContracts = ContractOperation.ExpandInterfaces(serviceType);
+            string? serviceName;
+            if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
+            var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
+                ? new HashSet<Type> { serviceType }
+                : ContractOperation.ExpandInterfaces(serviceType);
 
             bool serviceImplSimplifiedExceptions = serviceType.IsDefined(typeof(SimpleRpcExceptionsAttribute));
             foreach (var serviceContract in serviceContracts)
             {
-                // Do not take inherited interfaces names!
-                // The main serviceName will be used as routing identifier to all inherited methods!
-                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out _)) continue;
+                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
 
                 var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions || serviceContract.IsDefined(typeof(SimpleRpcExceptionsAttribute));
                 int svcOpCount = 0;
