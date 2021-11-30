@@ -363,6 +363,29 @@ namespace ProtoBuf.Grpc.Internal
             if (type.IsInterface) set.Add(type);
             return set;
         }
+        
+        /// <summary>
+        /// Collect all the types to be used for extracting methods for a specific Service Contract
+        /// </summary>
+        /// <param name="serviceContract">Must be a service contract</param>
+        /// <returns>types to be used for extracting methods</returns>
+        internal static ISet<Type> ExpandWithInterfacesMarkedAsServiceInheritable(Type serviceContract)
+        {
+            var set = new HashSet<Type>();
+            
+            // first add the service contract by itself 
+            set.Add(serviceContract); 
+
+            // now add all inherited interfaces which are marked as inheritable
+            foreach (var t in serviceContract.GetInterfaces())
+            {
+                if (t.IsDefined(typeof(ServiceInheritableAttribute)))
+                {
+                    set.Add(t);
+                }
+            }
+            return set;
+        }
     }
 
     internal enum ContextKind

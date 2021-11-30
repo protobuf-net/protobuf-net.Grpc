@@ -59,7 +59,7 @@ service MyService {
         }
         
         [Fact]
-        public void CheckIngeritedInterfaceSchema()
+        public void CheckInheritedInterfaceSchema()
         {
             var generator = new SchemaGenerator();
             var schema = generator.GetSchema<IMyInheritedService>();
@@ -84,9 +84,6 @@ message MyResponse {
    string RefId = 3; // default value could not be applied: 00000000-0000-0000-0000-000000000000
 }
 service MyInheritedService {
-   rpc AsyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
-   rpc ClientStreaming (stream MyRequest) returns (MyResponse);
-   rpc FullDuplex (stream MyRequest) returns (stream MyResponse);
    rpc GenericUnary (MyRequest) returns (MyResponse);
    rpc InheritedAsyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
    rpc InheritedClientStreaming (stream MyRequest) returns (MyResponse);
@@ -94,9 +91,6 @@ service MyInheritedService {
    rpc InheritedServerStreaming (MyRequest) returns (stream MyResponse);
    rpc InheritedSyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
    rpc InheritedUnary (MyRequest) returns (MyResponse);
-   rpc ServerStreaming (MyRequest) returns (stream MyResponse);
-   rpc SyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
-   rpc Unary (MyRequest) returns (MyResponse);
 }
 ", schema, ignoreLineEndingDifferences: true);
         }
@@ -131,7 +125,7 @@ service MyInheritedService {
         [Theory]
         [InlineData(typeof(IMyService))]
         [InlineData(typeof(IMyInheritedService))]        
-        [InlineData(typeof(IMyAnotherLevelOfInheritedService))]        
+        [InlineData(typeof(IMyServiceInheritTwoLevelsOfHierarchy))]        
         public void CompareRouteTable(Type type)
         {
             // 1: use the existing binder logic to build the routes, using the server logic
@@ -184,14 +178,14 @@ service MyInheritedService {
             }
         }
         
-        [Service]
-        public interface ISomeGenericService<in TGenericRequest, TGenericResult>
+        [ServiceInheritable]
+        public interface ISomeInheritableGenericService<in TGenericRequest, TGenericResult>
         {
             ValueTask<TGenericResult> GenericUnary(TGenericRequest request, CallContext callContext = default);
         }
         
         [Service]
-        public interface IMyInheritedService : IMyService, ISomeGenericService<MyRequest, MyResponse>, INotAService
+        public interface IMyInheritedService : ISomeInheritableGenericService<MyRequest, MyResponse>, INotAService
         {
             ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
             ValueTask<MyResponse> InheritedClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
@@ -202,9 +196,20 @@ service MyInheritedService {
             void InheritedSyncEmpty();
         }
         
-                
+        [ServiceInheritable]
+        public interface ISecondLevelInheritable : ISomeInheritableGenericService<MyRequest, MyResponse>, INotAService
+        {
+            ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
+            ValueTask<MyResponse> InheritedClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedServerStreaming(MyRequest request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedFullDuplex(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+
+            ValueTask InheritedAsyncEmpty();
+            void InheritedSyncEmpty();
+        }
+
         [Service]
-        public interface IMyAnotherLevelOfInheritedService : IMyInheritedService
+        public interface IMyServiceInheritTwoLevelsOfHierarchy : ISecondLevelInheritable
         {
             ValueTask<MyResponse> AnotherMethod(MyRequest request, CallContext callContext = default);
         }

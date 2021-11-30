@@ -105,10 +105,9 @@ namespace ProtoBuf.Grpc.Reflection
 
         private static MethodInfo[] GetMethodsRecursively(ServiceBinder serviceBinder, Type contractType)
         {
-            var includingInheritedInterfaces = ContractOperation.ExpandInterfaces(contractType);
+            var includingInheritedInterfaces = ContractOperation.ExpandWithInterfacesMarkedAsServiceInheritable(contractType);
 
             var inheritedMethods = includingInheritedInterfaces
-                .Where(cType => serviceBinder.IsServiceContract(cType, out _)) // only the ones marked as contract type
                 .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
                 .ToArray();
             
