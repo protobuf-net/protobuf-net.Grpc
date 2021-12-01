@@ -220,5 +220,28 @@ namespace ProtoBuf.Grpc.Configuration
             }
             return null;
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="typesToSearchIn"></param>
+        /// <param name="serviceName"></param>
+        /// <returns></returns>
+        public bool TryFindInheritedService(Type type, IEnumerable<Type> typesToSearchIn, out string? serviceName)
+        {
+            foreach (var potentialServiceContract in typesToSearchIn)
+            {
+                if (potentialServiceContract != type
+                    && type.IsAssignableFrom(potentialServiceContract)
+                    && IsServiceContract(potentialServiceContract, out serviceName))
+                {
+                    return true;
+                }
+            }
+
+            serviceName = null;
+            return false;
+        }
     }
 }
