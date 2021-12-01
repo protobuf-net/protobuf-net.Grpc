@@ -39,15 +39,18 @@ namespace ProtoBuf.Grpc.Configuration
             object?[]? argsBuffer = null;
             Type[] typesBuffer = Array.Empty<Type>();
             if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
-            var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
+            var potentialServiceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
                 ? new HashSet<Type> {serviceType}
                 : ContractOperation.ExpandInterfaces(serviceType);
 
             bool serviceImplSimplifiedExceptions = serviceType.IsDefined(typeof(SimpleRpcExceptionsAttribute));
-            foreach (var serviceContract in serviceContracts)
+            foreach (var potentialServiceContract in potentialServiceContracts)
             {
-                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out var serviceName)) continue;
+                if (!binderConfiguration.Binder.IsServiceContract(potentialServiceContract, out var serviceName)) continue;
 
+                // now that we know it is a service contract type for sure
+                var serviceContract = potentialServiceContract;
+                
                 var typesToBeIncludedInMethodsBinding =
                     ContractOperation.ExpandWithInterfacesMarkedAsServiceInheritable(serviceContract);
 
