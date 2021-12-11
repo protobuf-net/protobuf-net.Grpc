@@ -156,7 +156,9 @@ service MyInheritedService {
             }
             viaSchema.Sort();
 
-            Assert.Equal(string.Join(Environment.NewLine, viaBinder), string.Join(Environment.NewLine, viaSchema));
+            var routeTableViaBinder = string.Join(Environment.NewLine, viaBinder);
+            var routeTableViaSchame = string.Join(Environment.NewLine, viaSchema);
+            Assert.Equal(routeTableViaBinder, routeTableViaSchame);
 
         }
 
@@ -196,7 +198,7 @@ service MyInheritedService {
             void InheritedSyncEmpty();
         }
         
-        [ServiceInheritable]
+        [ServiceInheritable][Service]
         public interface ISecondLevelInheritable : ISomeInheritableGenericService<MyRequest, MyResponse>, INotAService
         {
             ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
