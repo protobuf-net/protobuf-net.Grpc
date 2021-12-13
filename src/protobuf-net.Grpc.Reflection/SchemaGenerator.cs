@@ -35,7 +35,10 @@ namespace ProtoBuf.Grpc.Reflection
         /// Get the .proto schema associated with a service contract
         /// </summary>
         /// <param name="contractType">The service type to generate schema for.</param>
-        /// <remarks>This API is considered experimental and may change slightly</remarks>
+        /// <remarks>This API is considered experimental and may change slightly.
+        /// ATTENTION! although the 'GetSchema(params Type[] contractTypes)' covers also a case of 'GetSchema(Type contractType)',
+        /// this method need to remain for backward compatibility for client which will get this updated version, without recompilation.
+        /// Thus, this method mustn't be deleted.</remarks>
         public string GetSchema(Type contractType)
             => GetSchema(new [] {contractType});
 
