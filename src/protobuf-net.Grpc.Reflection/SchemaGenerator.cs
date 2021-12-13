@@ -26,14 +26,26 @@ namespace ProtoBuf.Grpc.Reflection
         /// <summary>
         /// Get the .proto schema associated with a service contract
         /// </summary>
+        /// <typeparam name="TService">The service type to generate schema for.</typeparam>
         /// <remarks>This API is considered experimental and may change slightly</remarks>
         public string GetSchema<TService>()
             => GetSchema(typeof(TService));
 
         /// <summary>
+        /// Get the .proto schema associated with a service contract
+        /// </summary>
+        /// <param name="contractType">The service type to generate schema for.</param>
+        /// <remarks>This API is considered experimental and may change slightly</remarks>
+        public string GetSchema(Type contractType)
+            => GetSchema(new [] {contractType});
+
+        /// <summary>
         /// Get the .proto schema associated with multiple service contracts
         /// </summary>
-        /// <remarks>This API is considered experimental and may change slightly</remarks>
+        /// <param name="contractTypes">Array (or params syntax) of service types to generate schema for.</param>
+        /// <remarks>This API is considered experimental and may change slightly
+        /// All types will be generated into single schema.
+        /// All the shared classes the services use will be generated only once for all of them.</remarks>
         public string GetSchema(params Type[] contractTypes)
         {
             string globalPackage = "";
