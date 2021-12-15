@@ -5,8 +5,8 @@ using ProtoBuf.Grpc.Reflection;
 using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
-using System.ServiceModel;
 using System.Threading.Tasks;
+using protobuf_net.Grpc.Reflection.Test;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -151,5 +151,119 @@ service ConferencesService {
 }
 ", proto, ignoreLineEndingDifferences: true);
         }
+
+        public interface INotAService
+        {
+            ValueTask<MyResponse> SomeMethod1(MyRequest request, CallContext callContext = default);
+        }        
+        [Fact]
+        public void WhenInterfaceIsNotServiceContract_Throw()
+        {
+            var generator = new SchemaGenerator();
+            Action activation = () => generator.GetSchema<INotAService>();
+            Assert.Throws<ArgumentException>(activation.Invoke);
+        }
+        
+        // ReSharper disable once ClassNeverInstantiated.Global
+        public class NotAService
+        {
+            public Task<MyResponse> SomeMethod1(MyRequest request, CallContext callContext = default) 
+                => Task.FromResult(new MyResponse());
+        }        
+        [Fact]
+        public void WhenClassIsNotServiceContract_Throw()
+        {
+            var generator = new SchemaGenerator();
+            Action activation = () => generator.GetSchema<NotAService>();
+            Assert.Throws<ArgumentException>(activation.Invoke);
+        }
+
+        [Service]
+        public interface ISimpleService1
+        {
+            ValueTask<MyResponse> SomeMethod1(MyRequest request, CallContext callContext = default);
+        }
+        [Service]
+        public interface ISimpleService2
+        {
+            ValueTask<MyResponse> SomeMethod2(MyRequest request, CallContext callContext = default);
+        }
+        
+        /// <summary>
+        /// When we have multiple services which share same classes,
+        /// we would like to have a schema which defines those  services
+        /// while having their shared classes defined only once - in that schema.
+        /// The proto schema consumer will generate code (in any language) while the classes are common to the several services
+        /// and can be reused towards multiple services, the same way the code-first uses those shared classes.. 
+        /// </summary>
+        [Fact]
+        public void MultiServicesInSameSchema_ServicesAreFromSameNamespace_Success()
+        {
+            var generator = new SchemaGenerator();
+            
+            var proto =  generator.GetSchema(typeof(ISimpleService1), typeof(ISimpleService2));
+            
+            Assert.Equal(@"syntax = ""proto3"";
+package protobuf_net.Grpc.Reflection.Test;
+import ""google/protobuf/timestamp.proto"";
+
+enum Category {
+   Default = 0;
+   Foo = 1;
+   Bar = 2;
+}
+message MyRequest {
+   int32 Id = 1;
+   .google.protobuf.Timestamp When = 2;
+}
+message MyResponse {
+   string Value = 1;
+   Category Category = 2;
+   string RefId = 3; // default value could not be applied: 00000000-0000-0000-0000-000000000000
+}
+service SimpleService1 {
+   rpc SomeMethod1 (MyRequest) returns (MyResponse);
+}
+service SimpleService2 {
+   rpc SomeMethod2 (MyRequest) returns (MyResponse);
+}
+", proto, ignoreLineEndingDifferences: true);            
+        }
+        
+        
+        /// <summary>
+        /// When we have multiple services but with different namespaces,
+        /// since schema should export a single package, this situation is unsupported.
+        /// We expect for an exception.
+        /// </summary>
+        [Fact]
+        public void MultiServicesInSameSchema_ServicesAreFromDifferentNamespaces_Throw()
+        {
+            var generator = new SchemaGenerator();
+            
+            Action activation = () => generator.GetSchema(typeof(DifferentNamespace1.IServiceInNamespace1), typeof(DifferentNamespace2.IServiceInNamespace2));
+            Assert.Throws<ArgumentException>(activation.Invoke);                  
+        }
     }
 }
+
+
+namespace DifferentNamespace1
+{
+
+    [Service]
+    public interface IServiceInNamespace1
+    {
+        ValueTask<SchemaGeneration.MyResponse> SomeMethod1(SchemaGeneration.MyRequest request, CallContext callContext = default);
+    }
+}
+namespace DifferentNamespace2
+{
+    [Service]
+    public interface IServiceInNamespace2
+    {
+        ValueTask<SchemaGeneration.MyResponse> SomeMethod2(SchemaGeneration.MyRequest request, CallContext callContext = default);
+    }
+
+}
+    
