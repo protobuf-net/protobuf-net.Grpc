@@ -324,6 +324,21 @@ service ConferencesService {
             Assert.Throws<ArgumentException>(activation.Invoke);
         }
 
+
+        [Service]
+        [ServiceInheritable]
+        public interface IIServiceWithBothServiceAndServiceInheritableAttributes
+        {
+            void SomeMethod();
+        }
+        [Fact]
+        public void WhenInterfaceHasAttributesServiceAndServiceInheritable_Throw()
+        {
+            var generator = new SchemaGenerator();
+            Action activation = () => generator.GetSchema<IIServiceWithBothServiceAndServiceInheritableAttributes>();
+            Assert.Throws<ArgumentException>(activation.Invoke);
+        }
+
         [Service]
         public interface ISimpleService1
         {

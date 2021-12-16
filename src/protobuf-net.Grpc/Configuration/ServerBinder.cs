@@ -52,7 +52,7 @@ namespace ProtoBuf.Grpc.Configuration
                 var serviceContract = potentialServiceContract;
                 
                 var typesToBeIncludedInMethodsBinding =
-                    ContractOperation.ExpandWithInterfacesMarkedAsServiceInheritable(serviceContract);
+                    ContractOperation.ExpandWithInterfacesMarkedAsServiceInheritable(binderConfiguration.Binder, serviceContract);
 
                 // Per service contract, we will collect all the methods of inherited interfaces
                 // and bind them as they were defined in the service contract itself.

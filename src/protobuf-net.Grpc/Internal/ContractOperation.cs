@@ -363,13 +363,15 @@ namespace ProtoBuf.Grpc.Internal
             if (type.IsInterface) set.Add(type);
             return set;
         }
-        
+
         /// <summary>
         /// Collect all the types to be used for extracting methods for a specific Service Contract
         /// </summary>
+        /// <param name="serviceBinder"></param>
         /// <param name="serviceContract">Must be a service contract</param>
         /// <returns>types to be used for extracting methods</returns>
-        internal static ISet<Type> ExpandWithInterfacesMarkedAsServiceInheritable(Type serviceContract)
+        internal static ISet<Type> ExpandWithInterfacesMarkedAsServiceInheritable(ServiceBinder serviceBinder,
+            Type serviceContract)
         {
             var set = new HashSet<Type>();
             
@@ -384,7 +386,23 @@ namespace ProtoBuf.Grpc.Internal
                     set.Add(t);
                 }
             }
+
+            ValidateServiceContracts(serviceBinder, set);
             return set;
+        }
+
+        private static void ValidateServiceContracts(ServiceBinder serviceBinder, HashSet<Type> set)
+        {
+            foreach (var item in set)
+            {
+                if (item.IsDefined(typeof(ServiceInheritableAttribute)))
+                {
+                    if (serviceBinder.IsServiceContract(item, out var serviceName))
+                        throw new ArgumentException(
+                            $"Bad definition for service {serviceName}: " +
+                            $"A service contract cannot be marked as a service inheritable as well");
+                }
+            }
         }
     }
 
