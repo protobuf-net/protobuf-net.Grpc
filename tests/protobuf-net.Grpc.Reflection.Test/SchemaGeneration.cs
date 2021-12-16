@@ -199,7 +199,7 @@ service MyInheritedService {
             void InheritedSyncEmpty();
         }
         
-        [ServiceInheritable][Service]
+        [ServiceInheritable]
         public interface ISecondLevelInheritable : ISomeInheritableGenericService<MyRequest, MyResponse>, INotAService
         {
             ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
@@ -301,11 +301,7 @@ service ConferencesService {
 }
 ", proto, ignoreLineEndingDifferences: true);
         }
-
-        public interface INotAService
-        {
-            ValueTask<MyResponse> SomeMethod1(MyRequest request, CallContext callContext = default);
-        }        
+        
         [Fact]
         public void WhenInterfaceIsNotServiceContract_Throw()
         {
