@@ -162,7 +162,7 @@ namespace protobuf_net.Grpc.Test
         {
             var method = typeof(IAllOptions).GetMethod(name);
             Assert.NotNull(method);
-            var config = BinderConfiguration.Default;
+            var config = new BinderConfiguration();
             if (!ContractOperation.TryIdentifySignature(method!, config, out var operation, null))
             {
                 var sig = ContractOperation.GetSignature(config.MarshallerCache, method!, null);
@@ -183,7 +183,7 @@ namespace protobuf_net.Grpc.Test
         {
             var list = new List<(MethodType Kind, string Signature)>();
             var sb = new StringBuilder();
-            var binder = BinderConfiguration.Default;
+            var binder = new BinderConfiguration();
             foreach (var method in typeof(IAllOptions).GetMethods())
             {
                 if (ContractOperation.TryIdentifySignature(method, binder, out var operation, null))

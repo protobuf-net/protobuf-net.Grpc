@@ -81,11 +81,7 @@ namespace protobuf_net.Grpc.Test.Integration
             So: there are **lots** of reasons not to use BinaryFormatter. Please don't.
         */
 
-        private BinaryFormatterMarshallerFactory() { }
-        /// <summary>
-        /// Uses BinaryFormatter for serialization
-        /// </summary>
-        public static MarshallerFactory Default { get; } = new BinaryFormatterMarshallerFactory();
+        internal BinaryFormatterMarshallerFactory() { }
 
         /// <inheritdoc/>
         protected override bool CanSerialize(Type type)

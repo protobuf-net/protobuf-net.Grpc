@@ -11,13 +11,9 @@ namespace ProtoBuf.Grpc.Configuration
     public class ServiceBinder
     {
         /// <summary>
-        /// Default bindings; services require ServiceContractAttribute; all operations are considered
-        /// </summary>
-        public static ServiceBinder Default { get; } = new ServiceBinder();
-        /// <summary>
         /// Create a new instance
         /// </summary>
-        protected ServiceBinder() { }
+        public ServiceBinder() { }
 
         private readonly Dictionary<Type, InterfaceMapping> _map = new Dictionary<Type, InterfaceMapping>();
         private InterfaceMapping GetMap(Type contractType, Type serviceType)

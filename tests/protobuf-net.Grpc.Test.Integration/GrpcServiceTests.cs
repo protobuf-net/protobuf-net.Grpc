@@ -13,6 +13,7 @@ using Grpc.Core.Interceptors;
 using Xunit.Abstractions;
 using System.Runtime.CompilerServices;
 using ProtoBuf.Meta;
+using System.Collections.Generic;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -87,13 +88,13 @@ namespace protobuf_net.Grpc.Test.Integration
     static class AdhocConfig
     {
         public static ClientFactory ClientFactory { get; }
-            = ClientFactory.Create(BinderConfiguration.Create(new[] {
+            = ClientFactory.Create(BinderConfiguration.Create(new List<MarshallerFactory> {
                     // we'll allow multiple marshallers to take a stab; protobuf-net first,
                     // then try BinaryFormatter for anything that protobuf-net can't handle
 
-                    ProtoBufMarshallerFactory.Default,
+                    new ProtoBufMarshallerFactory(),
 #pragma warning disable CS0618 // Type or member is obsolete
-                    BinaryFormatterMarshallerFactory.Default, // READ THE NOTES ON NOT DOING THIS
+                    new BinaryFormatterMarshallerFactory(), // READ THE NOTES ON NOT DOING THIS
 #pragma warning restore CS0618 // Type or member is obsolete
                     }));
     }

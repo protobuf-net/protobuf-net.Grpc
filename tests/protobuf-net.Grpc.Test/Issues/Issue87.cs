@@ -39,12 +39,12 @@ namespace protobuf_net.Grpc.Test.Issues
         {
             if (string.IsNullOrWhiteSpace(name))
             {
-                Assert.False(ServiceBinder.Default.IsServiceContract(type, out _));
+                Assert.False(new ServiceBinder().IsServiceContract(type, out _));
                 Assert.Null(name);
             }
             else
             {
-                Assert.True(ServiceBinder.Default.IsServiceContract(type, out var svcName));
+                Assert.True(new ServiceBinder().IsServiceContract(type, out var svcName));
                 Assert.Equal(name, svcName);
             }
         }

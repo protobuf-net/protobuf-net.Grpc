@@ -35,7 +35,7 @@ namespace ProtoBuf.Grpc.Client
         /// </summary>
         public GrpcClient(CallInvoker callInvoker, string serviceName, BinderConfiguration? binderConfiguration = null, string? host = null)
         {
-            _binderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
+            _binderConfiguration = binderConfiguration ?? new BinderConfiguration();
             if (string.IsNullOrWhiteSpace(serviceName)) throw new ArgumentException($"Service name cannot be null/empty", nameof(serviceName));
             _serviceName = serviceName;
             _callInvoker = callInvoker;
@@ -156,7 +156,7 @@ namespace ProtoBuf.Grpc.Client
 
         private static string GetServiceName(Type contractType, BinderConfiguration? binderConfiguration)
         {
-            binderConfiguration ??= BinderConfiguration.Default;
+            binderConfiguration ??= new BinderConfiguration();
             if (!binderConfiguration.Binder.IsServiceContract(contractType, out var name))
                 throw new InvalidOperationException("Invalid service type: " + contractType.FullName);
             return name!;

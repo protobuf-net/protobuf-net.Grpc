@@ -53,7 +53,7 @@ namespace ProtoBuf.Grpc.Reflection
         {
             string globalPackage = "";
             List<Service> services = new List<Service>();  
-            var binderConfiguration = BinderConfiguration ?? BinderConfiguration.Default;
+            var binderConfiguration = BinderConfiguration ?? new BinderConfiguration();
             var binder = binderConfiguration.Binder;
             foreach (var contractType in contractTypes)
             {

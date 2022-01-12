@@ -349,7 +349,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
         [Fact]
         public void FooHasMarshaller()
-            => Assert.NotNull(BinderConfiguration.Default.GetMarshaller<Foo>());
+            => Assert.NotNull(new BinderConfiguration().GetMarshaller<Foo>());
     }
 
     public abstract class StreamTests : IClassFixture<StreamTestsFixture>, IDisposable

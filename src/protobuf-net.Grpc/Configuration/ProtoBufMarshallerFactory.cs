@@ -35,11 +35,6 @@ namespace ProtoBuf.Grpc.Configuration
         }
 
         /// <summary>
-        /// Uses the default protobuf-net serializer
-        /// </summary>
-        public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None, default);
-
-        /// <summary>
         /// Gets the model used by this instance.
         /// </summary>
         public TypeModel Model => _model;
@@ -58,7 +53,7 @@ namespace ProtoBuf.Grpc.Configuration
         public static MarshallerFactory Create(TypeModel? model = null, Options options = Options.None, object? userState = null)
         {
             model ??= RuntimeTypeModel.Default;
-            if (options == Options.None && model == RuntimeTypeModel.Default && userState is null) return Default;
+            if (options == Options.None && model == RuntimeTypeModel.Default && userState is null) return new ProtoBufMarshallerFactory();
             return new ProtoBufMarshallerFactory(model, options, userState);
         }
 
@@ -67,6 +62,11 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static MarshallerFactory Create(RuntimeTypeModel? model, Options options)
             => Create((TypeModel?)model, options, null);
+
+        public ProtoBufMarshallerFactory() :
+            this(RuntimeTypeModel.Default, Options.None, default)
+        {
+        }
 
         internal ProtoBufMarshallerFactory(TypeModel model, Options options, object? userState = null)
         {

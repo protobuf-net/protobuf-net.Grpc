@@ -37,7 +37,7 @@ namespace ProtoBuf.Grpc.Configuration
             object?[]? argsBuffer = null;
             Type[] typesBuffer = Array.Empty<Type>();
             string? serviceName;
-            if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
+            if (binderConfiguration == null) binderConfiguration = new BinderConfiguration();
             var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
                 ? new HashSet<Type> { serviceType }
                 : ContractOperation.ExpandInterfaces(serviceType);

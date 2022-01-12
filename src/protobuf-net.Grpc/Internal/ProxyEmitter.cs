@@ -114,12 +114,6 @@ namespace ProtoBuf.Grpc.Internal
             if (!typeof(TService).IsInterface)
                 throw new InvalidOperationException("Type is not an interface: " + typeof(TService).FullName);
 
-            if (binderConfig == BinderConfiguration.Default) // only use ProxyAttribute for default binder
-            {
-                var proxy = (typeof(TService).GetCustomAttribute(typeof(ProxyAttribute)) as ProxyAttribute)?.Type;
-                if (proxy is object) return CreateViaActivator<TService>(proxy);
-            }
-
             return EmitFactory<TService>(binderConfig);
         }
         [MethodImpl(MethodImplOptions.NoInlining)]

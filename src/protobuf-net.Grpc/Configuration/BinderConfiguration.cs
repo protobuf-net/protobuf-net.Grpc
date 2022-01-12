@@ -12,12 +12,15 @@ namespace ProtoBuf.Grpc.Configuration
     public sealed class BinderConfiguration
     {
         // this *must* stay above Default - .cctor order is file order
-        static readonly MarshallerFactory[] s_defaultFactories = new MarshallerFactory[] { ProtoBufMarshallerFactory.Default };
+        readonly MarshallerFactory[] s_defaultFactories = new MarshallerFactory[] { new ProtoBufMarshallerFactory() };
 
         /// <summary>
         /// Use the default MarshallerFactory and ServiceBinder
         /// </summary>
-        public static BinderConfiguration Default { get; } = new BinderConfiguration(s_defaultFactories, ServiceBinder.Default);
+        public BinderConfiguration()
+            :this(new MarshallerFactory[] { new ProtoBufMarshallerFactory() }, new ServiceBinder())
+        {
+        }
 
         private BinderConfiguration(MarshallerFactory[] factories, ServiceBinder binder)
         {
@@ -32,13 +35,13 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static BinderConfiguration Create(IList<MarshallerFactory>? marshallerFactories = null, ServiceBinder? binder = null)
         {
+            MarshallerFactory[] s_defaultFactories = new MarshallerFactory[] { new ProtoBufMarshallerFactory() };
+
             if (marshallerFactories == null || marshallerFactories.SequenceEqual(s_defaultFactories))
                 marshallerFactories = s_defaultFactories;
 
-            if (binder == null) binder = ServiceBinder.Default;
+            if (binder == null) binder = new ServiceBinder();
 
-            if (marshallerFactories == s_defaultFactories && binder == Default.Binder) return Default;
-            // note we create a copy of the factories at this point, to prevent further mutation by the caller
             return new BinderConfiguration(marshallerFactories.ToArray(), binder);
         }
 

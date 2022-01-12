@@ -51,7 +51,7 @@ namespace protobuf_net.Grpc.Test
             "Interface,ExplicitInterfaceMethod,BaseType,Service,ExplicitServiceMethod")]
         public void AttributesDetectedWherever(string methodName, string expected)
         {
-            var ctx = new ServiceBindContext(typeof(ISomeService), typeof(SomeServer), "n/a", ServiceBinder.Default);
+            var ctx = new ServiceBindContext(typeof(ISomeService), typeof(SomeServer), "n/a", new ServiceBinder());
             var method = typeof(ISomeService).GetMethod(methodName)!;
             var actual = string.Join(",", ctx.GetMetadata(method).OfType<SomethingAttribute>().Select(x => x.Value));
             Assert.Equal(expected, actual);

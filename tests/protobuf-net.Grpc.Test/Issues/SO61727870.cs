@@ -17,7 +17,7 @@ namespace protobuf_net.Grpc.Test.Issues
         [InlineData(typeof(IBlap<X>), "zzz_def")]
         public void Foo(Type type, string expected)
         {
-            Assert.True(ServiceBinder.Default.IsServiceContract(type, out var actual));
+            Assert.True(new ServiceBinder().IsServiceContract(type, out var actual));
             Assert.Equal(expected, actual);
         }
 

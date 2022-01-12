@@ -18,7 +18,7 @@ namespace ProtoBuf.Grpc.Reflection
         internal static FileDescriptorSet Create(IEnumerable<Type> serviceTypes, BinderConfiguration? binderConfiguration = null)
         {
             var fileDescriptorSet = new FileDescriptorSet();
-            binderConfiguration ??= BinderConfiguration.Default;
+            binderConfiguration ??= new BinderConfiguration();
 
             foreach (var serviceType in serviceTypes)
             {

@@ -13,15 +13,10 @@ namespace ProtoBuf.Grpc.Configuration
     public abstract class ClientFactory
     {
         /// <summary>
-        /// The default client factory (uses the default BinderConfiguration)
-        /// </summary>
-        public static ClientFactory Default { get; } = DefaultClientFactory.Instance;
-
-        /// <summary>
         /// Create a new client factory; note that non-default factories should be considered expensive, and stored/re-used suitably
         /// </summary>
         public static ClientFactory Create(BinderConfiguration? binderConfiguration = null)
-            => (binderConfiguration == null || binderConfiguration == BinderConfiguration.Default) ? Default : new ConfiguredClientFactory(binderConfiguration);
+            => (binderConfiguration == null) ? new DefaultClientFactory() : new ConfiguredClientFactory(binderConfiguration);
 
         /// <summary>
         /// Get the binder configuration associated with this instance
@@ -31,7 +26,7 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Get the binder configuration associated with this instance
         /// </summary>
-        public static implicit operator BinderConfiguration(ClientFactory? value) => value?.BinderConfiguration ?? BinderConfiguration.Default;
+        public static implicit operator BinderConfiguration(ClientFactory? value) => value?.BinderConfiguration ?? new BinderConfiguration();
 
         /// <summary>
         /// Create a service-client backed by a CallInvoker
@@ -52,7 +47,7 @@ namespace ProtoBuf.Grpc.Configuration
 
             public ConfiguredClientFactory(BinderConfiguration? binderConfiguration)
             {
-                BinderConfiguration = binderConfiguration ?? BinderConfiguration.Default;
+                BinderConfiguration = binderConfiguration ?? new BinderConfiguration();
             }
 
             private readonly ConcurrentDictionary<Type, object> _proxyCache = new ConcurrentDictionary<Type, object>();
@@ -78,15 +73,14 @@ namespace ProtoBuf.Grpc.Configuration
 
         internal static class DefaultProxyCache<TService> where TService : class
         {
-            internal static readonly Func<CallInvoker, TService> Create = ProxyEmitter.CreateFactory<TService>(BinderConfiguration.Default);
+            internal static readonly Func<CallInvoker, TService> Create = ProxyEmitter.CreateFactory<TService>(new BinderConfiguration());
         }
 
         private sealed class DefaultClientFactory : ClientFactory
         {
-            protected override BinderConfiguration BinderConfiguration => BinderConfiguration.Default;
+            protected override BinderConfiguration BinderConfiguration => new BinderConfiguration();
 
-            public static readonly DefaultClientFactory Instance = new DefaultClientFactory();
-            private DefaultClientFactory() { }
+            internal DefaultClientFactory() { }
 
             public override TService CreateClient<TService>(CallInvoker channel) => DefaultProxyCache<TService>.Create(channel);
         }
