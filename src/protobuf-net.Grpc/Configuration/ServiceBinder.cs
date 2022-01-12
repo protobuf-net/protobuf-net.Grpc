@@ -1,7 +1,8 @@
-﻿using System;
+﻿using ProtoBuf.Grpc.Internal;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
-using ProtoBuf.Grpc.Internal;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -19,11 +20,12 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected ServiceBinder() { }
 
-        private readonly Dictionary<Type, InterfaceMapping> _map = new Dictionary<Type, InterfaceMapping>();
+        private readonly ConcurrentDictionary<Type, InterfaceMapping> _map = new ConcurrentDictionary<Type, InterfaceMapping>();
         private InterfaceMapping GetMap(Type contractType, Type serviceType)
         {
             if (!_map.TryGetValue(contractType, out var interfaceMapping))
-            {
+            {   // note: it doesn't matter if this ends up getting called more than once
+                // in a race condition - we don't need to block etc (the result will be compatible)
                 interfaceMapping = serviceType.GetInterfaceMap(contractType);
                 _map[contractType] = interfaceMapping;
             }
