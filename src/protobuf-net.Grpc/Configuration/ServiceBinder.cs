@@ -20,14 +20,14 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected ServiceBinder() { }
 
-        private readonly ConcurrentDictionary<Type, InterfaceMapping> _map = new ConcurrentDictionary<Type, InterfaceMapping>();
-        private InterfaceMapping GetMap(Type contractType, Type serviceType)
+        private static readonly ConcurrentDictionary<Type, InterfaceMapping> s_map = new ConcurrentDictionary<Type, InterfaceMapping>();
+        private static InterfaceMapping GetMap(Type contractType, Type serviceType)
         {
-            if (!_map.TryGetValue(contractType, out var interfaceMapping))
+            if (!s_map.TryGetValue(contractType, out var interfaceMapping))
             {   // note: it doesn't matter if this ends up getting called more than once
                 // in a race condition - we don't need to block etc (the result will be compatible)
                 interfaceMapping = serviceType.GetInterfaceMap(contractType);
-                _map[contractType] = interfaceMapping;
+                s_map[contractType] = interfaceMapping;
             }
             return interfaceMapping;
         }
