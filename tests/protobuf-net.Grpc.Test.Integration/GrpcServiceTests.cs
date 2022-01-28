@@ -291,7 +291,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
 
         [Fact]
-        public void CanCallAdocService()
+        public void CanCallAdhocService()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
             using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
