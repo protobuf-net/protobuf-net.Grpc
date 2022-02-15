@@ -1,29 +1,19 @@
-﻿using Grpc.Core;
-using ProtoBuf.Grpc.Configuration;
+﻿using ProtoBuf.Grpc.Configuration;
 using System;
-using System.Collections.Generic;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test.Issues
 {
-    class TestServerBinder : ServerBinder // just tracks what methods are observed
-    {
-        public HashSet<string> Methods { get; } = new HashSet<string>();
-        public List<string> Warnings { get; } = new List<string>();
-        public List<string> Errors { get; } = new List<string>();
-        protected override bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
-        {
-            Methods.Add(method.Name);
-            return true;
-        }
-        protected internal override void OnWarn(string message, object?[]? args = null)
-            => Warnings.Add(string.Format(message, args ?? Array.Empty<object>()));
-        protected internal override void OnError(string message, object?[]? args = null)
-            => Errors.Add(string.Format(message, args ?? Array.Empty<object>()));
-    }
+
 
     public class Issue87
     {
+        public Issue87(ITestOutputHelper log)
+            => _log = log;
+        private readonly ITestOutputHelper _log;
+        private void Log(string message) => _log?.WriteLine(message);
+
         [Theory]
         [InlineData(typeof(MyService), null)]
         [InlineData(typeof(MyServiceBase), null)]
@@ -50,21 +40,28 @@ namespace protobuf_net.Grpc.Test.Issues
         }
 
         [Theory]
-        [InlineData(typeof(Foo), new[] { nameof(Foo.PublicDerived), nameof(FooBase.PublicBase), nameof(FooBase.PublicPolymorphic) })]
-        [InlineData(typeof(FooBase), new string[] { })]
-        [InlineData(typeof(Bar), new[] { nameof(Bar.PublicDerived), nameof(BarBase.PublicBase), nameof(BarBase.PublicPolymorphic) })]
-        [InlineData(typeof(BarBase), new[] { nameof(BarBase.PublicBase), nameof(BarBase.PublicPolymorphic) })]
-        [InlineData(typeof(MyServiceBase), new[] { nameof(IBaseService.BaseServiceMethodExplicit), nameof(IBaseService.BaseServiceMethodImplicit) })]
-        [InlineData(typeof(MyService), new[] { nameof(IBaseService.BaseServiceMethodExplicit), nameof(IBaseService.BaseServiceMethodImplicit), nameof(IDerivedService.DerivedServiceMethodExplicit), nameof(IDerivedService.DerivedServiceMethodImplicit) })]
-        public void CanSeeCorrectMethods(Type type, string[] methods)
+        [InlineData(typeof(Foo), "/Foo/", new[] { nameof(Foo.PublicDerived), nameof(FooBase.PublicBase), nameof(FooBase.PublicPolymorphic) })]
+        [InlineData(typeof(FooBase), "/FooBase/", new string[] { })]
+        [InlineData(typeof(Bar), "/Bar/", new[] { nameof(Bar.PublicDerived), nameof(BarBase.PublicBase), nameof(BarBase.PublicPolymorphic) })]
+        [InlineData(typeof(BarBase), "/BarBase/", new[] { nameof(BarBase.PublicBase), nameof(BarBase.PublicPolymorphic) })]
+        [InlineData(typeof(MyServiceBase), "/protobuf_net.Grpc.Test.Issues.BaseService/", new[] { nameof(IBaseService.BaseServiceMethodExplicit), nameof(IBaseService.BaseServiceMethodImplicit) })]
+        [InlineData(typeof(MyService), "/protobuf_net.Grpc.Test.Issues.", new[] {
+            "BaseService/" + nameof(IBaseService.BaseServiceMethodExplicit), "BaseService/" + nameof(IBaseService.BaseServiceMethodImplicit),
+            "DerivedService/" + nameof(IDerivedService.DerivedServiceMethodExplicit), "DerivedService/" + nameof(IDerivedService.DerivedServiceMethodImplicit)
+        })]
+        public void CanSeeCorrectMethods(Type type, string prefix, string[] methods)
         {
             var binder = new TestServerBinder();
             int count = binder.Bind(this, type);
+            foreach (var bound in binder.Methods)
+            {
+                Log(bound);
+            }
             Assert.Equal(methods.Length, count);
             Assert.Equal(methods.Length, binder.Methods.Count);
             foreach (var method in methods)
             {
-                Assert.Contains(method, binder.Methods);
+                Assert.Contains(prefix + method, binder.Methods);
             }
 
             Assert.Empty(binder.Warnings);
