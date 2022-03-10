@@ -37,9 +37,8 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
     }
 
     private readonly Stream _input, _output;
-
     readonly Channel<StreamFrame> _outbound;
-    readonly CallInvoker _callInvoker;
+    readonly StreamCallInvoker _callInvoker;
 
     public StreamChannel(Stream duplexStream, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : this(duplexStream, duplexStream, target, logger, cancellationToken)
     { }
@@ -55,8 +54,9 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         _outbound = StreamFrame.CreateChannel();
         _callInvoker = new StreamCallInvoker(_outbound);
         Complete = StreamFrame.WriteFromOutboundChannelToStream(_outbound, _output, logger, cancellationToken);
-    }
 
+        _ = _callInvoker.ConsumeAsync(input, logger, cancellationToken);
+    }
 
     public Task Complete { get; }
 
@@ -80,19 +80,23 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
     {
         if (ReferenceEquals(input, output))
         {
-            input?.Dispose();
+            try { input?.Dispose(); } catch { }
         }
         else
         {
-            input?.Dispose();
-            output?.Dispose();
+            try { input?.Dispose(); } catch { }
+            try { output?.Dispose(); } catch { }
         }
     }
     internal static ValueTask DisposeAsync(Stream input, Stream output)
     {
         if (ReferenceEquals(input, output))
         {
-            return input is null ? default : input.DisposeAsync();
+            if (input is null) return default;
+            var result = input.DisposeAsync();
+            if (result.IsCompletedSuccessfully) return result;
+
+            return Swallow(result);
         }
         else
         {
@@ -100,8 +104,13 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         }
         static async ValueTask SlowPath(Stream input, Stream output)
         {
-            if (input != null) await input.DisposeAsync();
-            if (output != null) await output.DisposeAsync();
+            if (input != null) try { await input.DisposeAsync(); } catch { }
+            if (output != null) try { await output.DisposeAsync(); } catch { }
+        }
+
+        static async ValueTask Swallow(ValueTask pending)
+        {
+            try { await pending; } catch { }
         }
     }
 }

@@ -22,11 +22,11 @@ interface IHandler
     ValueTask CompleteAsync(CancellationToken cancellationToken);
 }
 
-abstract class HandlerBase<TRequest, TResponse> : IHandler where TResponse : class where TRequest : class
+abstract class HandlerBase<TReceive> : IHandler where TReceive : class
 {
-    private readonly Method<TRequest, TResponse> _method;
-    protected HandlerBase(Method<TRequest, TResponse> method)
-        => _method = method;
+    private readonly Marshaller<TReceive> _marshaller;
+    protected HandlerBase(Marshaller<TReceive> marshaller)
+        => _marshaller = marshaller;
     public abstract ValueTask CompleteAsync(CancellationToken cancellationToken);
 
     Queue<StreamFrame>? _backlog;
@@ -47,11 +47,11 @@ abstract class HandlerBase<TRequest, TResponse> : IHandler where TResponse : cla
             // single frame; simple case
             logger.LogDebug(frame.Length, static (state, _) => $"deserializing request in single buffer, {state} bytes...");
             var ctx = SingleBufferStreamDeserializationContext.Get();
-            TRequest request;
+            TReceive request;
             try
             {
                 ctx.Initialize(frame.Buffer, frame.Offset, frame.Length);
-                request = _method.RequestMarshaller.ContextualDeserializer(ctx);
+                request = _marshaller.ContextualDeserializer(ctx);
             }
             finally
             {
@@ -67,14 +67,14 @@ abstract class HandlerBase<TRequest, TResponse> : IHandler where TResponse : cla
         }
     }
 
-    protected abstract ValueTask PushCompletePayloadAsync(ushort id, ChannelWriter<StreamFrame> output, TRequest value, ILogger? logger, CancellationToken cancellationToken);
+    protected abstract ValueTask PushCompletePayloadAsync(ushort id, ChannelWriter<StreamFrame> output, TReceive value, ILogger? logger, CancellationToken cancellationToken);
     public abstract FrameKind Kind { get; }
 }
-class UnaryHandler<TRequest, TResponse> : HandlerBase<TRequest, TResponse> where TResponse : class where TRequest : class
+class UnaryHandler<TRequest, TResponse> : HandlerBase<TRequest> where TResponse : class where TRequest : class
 {
     private readonly UnaryServerMethod<TRequest, TResponse> _handler;
     private readonly Method<TRequest, TResponse> _method;
-    public UnaryHandler(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler) : base(method)
+    public UnaryHandler(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler) : base(method.RequestMarshaller)
     {
         _handler = handler;
         _method = method;

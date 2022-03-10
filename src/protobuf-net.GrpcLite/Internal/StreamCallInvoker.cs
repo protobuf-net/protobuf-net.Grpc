@@ -1,4 +1,5 @@
 ﻿using Grpc.Core;
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 
@@ -7,7 +8,7 @@ namespace ProtoBuf.Grpc.Lite.Internal;
 internal sealed class StreamCallInvoker : CallInvoker
 {
     private Channel<StreamFrame> _outbound;
-    private ConcurrentDictionary<ushort, IStreamReceiver> _receivers = new();
+    private ConcurrentDictionary<ushort, IStreamReceiver> _activeOperations = new();
     private uint _nextId = ushort.MaxValue; // so that our first id is zero
     private ushort NextId()
     {
@@ -43,6 +44,7 @@ internal sealed class StreamCallInvoker : CallInvoker
     static readonly Func<object, Status> getStatus = static state => ((IStreamReceiver)state).Status;
     static readonly Func<object, Metadata> getTrailers = static state => ((IStreamReceiver)state).Trailers();
     static readonly Action<object> dispose = static state => ((IStreamReceiver)state).Dispose();
+
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
         var receiver = new UnaryStreamReceiver<TResponse>(NextId(), method.ResponseMarshaller, options.CancellationToken);
@@ -50,10 +52,49 @@ internal sealed class StreamCallInvoker : CallInvoker
         return new AsyncUnaryCall<TResponse>(receiver.ResponseAsync, responseHeadersAsync, getStatus, getTrailers, dispose, receiver);
     }
 
+    internal async Task ConsumeAsync(Stream input, ILogger? logger, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var frame = await StreamFrame.ReadAsync(input, cancellationToken);
+            logger.LogDebug(frame, static (state, _) => $"received frame {state}");
+            switch (frame.Kind)
+            {
+                case FrameKind.Close:
+                case FrameKind.Ping:
+                    var generalFlags = (GeneralFlags)frame.KindFlags;
+                    if ((generalFlags & GeneralFlags.IsResponse) == 0)
+                    {
+                        // if this was a request, we reply in kind, but noting that it is a response
+                        await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.Id, (byte)GeneralFlags.IsResponse), cancellationToken);
+                    }
+                    // shutdown if requested
+                    if (frame.Kind == FrameKind.Close)
+                    {
+                        _outbound.Writer.TryComplete();
+                    }
+                    break;
+                case FrameKind.NewUnary:
+                case FrameKind.NewClientStreaming:
+                case FrameKind.NewServerStreaming:
+                case FrameKind.NewDuplex:
+                    logger.LogError(frame, static (state, _) => $"server should not be initializing requests! {state}");
+                    break;
+                case FrameKind.Payload:
+                    if (_activeOperations.TryGetValue(frame.Id, out var handler))
+                    {
+                        await handler.PushPayloadAsync(frame, _outbound.Writer, logger, cancellationToken);
+                    }
+                    break;
+            }
+        }
+    }
+
     private void AddReceiver(IStreamReceiver receiver)
     {
         if (receiver is null) ThrowNull();
-        if (!_receivers.TryAdd(receiver!.Id, receiver)) ThrowDuplicate(receiver.Id);
+        if (!_activeOperations.TryAdd(receiver!.Id, receiver)) ThrowDuplicate(receiver.Id);
 
         static void ThrowNull() => throw new ArgumentNullException(nameof(receiver));
         static void ThrowDuplicate(ushort id) => throw new ArgumentException($"Duplicate receiver key: {id}");
@@ -79,7 +120,7 @@ internal sealed class StreamCallInvoker : CallInvoker
         {
             if (receiver is not null)
             {
-                _receivers.TryRemove(receiver.Id, out _);
+                _activeOperations.TryRemove(receiver.Id, out _);
                 receiver?.Fault("Error writing message", ex);
             }
         }
