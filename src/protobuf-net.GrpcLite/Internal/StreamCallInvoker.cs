@@ -72,7 +72,7 @@ internal sealed class StreamCallInvoker : CallInvoker
             await _outbound.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, receiver.Id, method.FullName, host));
             serializationContext = StreamSerializationContext.Get();
             method.RequestMarshaller.ContextualSerializer(request, serializationContext);
-            await serializationContext.WriteAsync(_outbound.Writer, receiver.Id, options.CancellationToken);
+            await serializationContext.WritePayloadAsync(_outbound.Writer, receiver.Id, options.CancellationToken);
             complete = true;
         }
         catch (Exception ex)

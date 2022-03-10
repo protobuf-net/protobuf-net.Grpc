@@ -90,7 +90,7 @@ namespace ProtoBuf.Grpc.Lite
                     case FrameKind.Payload:
                         if (_activeOperations.TryGetValue(frame.Id, out handler))
                         {
-                            await handler.PushPayloadAsync(frame, _logger, cancellationToken);
+                            await handler.PushPayloadAsync(frame, _outbound.Writer, _logger, cancellationToken);
                         }
                         break;
                 }

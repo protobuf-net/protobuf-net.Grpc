@@ -1,5 +1,6 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -17,7 +18,7 @@ interface IHandler
 {
     FrameKind Kind { get; }
 
-    ValueTask PushPayloadAsync(StreamFrame frame, ILogger? logger, CancellationToken cancellationToken);
+    ValueTask PushPayloadAsync(StreamFrame frame, ChannelWriter<StreamFrame> output, ILogger? logger, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
 }
 
@@ -29,16 +30,16 @@ abstract class HandlerBase<TRequest, TResponse> : IHandler where TResponse : cla
     public abstract ValueTask CompleteAsync(CancellationToken cancellationToken);
 
     Queue<StreamFrame>? _backlog;
-    public ValueTask PushPayloadAsync(StreamFrame frame, ILogger? logger, CancellationToken cancellationToken)
+    public ValueTask PushPayloadAsync(StreamFrame frame, ChannelWriter<StreamFrame> output, ILogger? logger, CancellationToken cancellationToken)
     {
         if ((frame.KindFlags & (byte)PayloadFlags.Final) == 0)
         {
             (_backlog ??= new Queue<StreamFrame>()).Enqueue(frame);
             return default;
         }
-        return PushCompletePayloadAsync(frame, logger, cancellationToken);
+        return PushCompletePayloadAsync(frame, output, logger, cancellationToken);
     }
-    private ValueTask PushCompletePayloadAsync(StreamFrame frame, ILogger? logger, CancellationToken cancellationToken)
+    private ValueTask PushCompletePayloadAsync(StreamFrame frame, ChannelWriter<StreamFrame> output, ILogger? logger, CancellationToken cancellationToken)
     {
         var backlog = _backlog;
         if (backlog is null || backlog.Count == 0)
@@ -46,11 +47,18 @@ abstract class HandlerBase<TRequest, TResponse> : IHandler where TResponse : cla
             // single frame; simple case
             logger.LogDebug(frame.Length, static (state, _) => $"deserializing request in single buffer, {state} bytes...");
             var ctx = SingleBufferStreamDeserializationContext.Get();
-            ctx.Initialize(frame.Buffer, frame.Offset, frame.Length);
-            var value = _method.RequestMarshaller.ContextualDeserializer(ctx);
-            ctx.Recycle();
+            TRequest request;
+            try
+            {
+                ctx.Initialize(frame.Buffer, frame.Offset, frame.Length);
+                request = _method.RequestMarshaller.ContextualDeserializer(ctx);
+            }
+            finally
+            {
+                ctx.Recycle();
+            }
             logger.LogDebug(frame.Length, static (state, _) => $"deserialized {state} bytes; processing request");
-            return PushCompletePayloadAsync(value, logger, cancellationToken);
+            return PushCompletePayloadAsync(frame.Id, output, request, logger, cancellationToken);
         }
         else
         {
@@ -59,7 +67,7 @@ abstract class HandlerBase<TRequest, TResponse> : IHandler where TResponse : cla
         }
     }
 
-    protected abstract ValueTask PushCompletePayloadAsync(TRequest value, ILogger? logger, CancellationToken cancellationToken);
+    protected abstract ValueTask PushCompletePayloadAsync(ushort id, ChannelWriter<StreamFrame> output, TRequest value, ILogger? logger, CancellationToken cancellationToken);
     public abstract FrameKind Kind { get; }
 }
 class UnaryHandler<TRequest, TResponse> : HandlerBase<TRequest, TResponse> where TResponse : class where TRequest : class
@@ -75,17 +83,33 @@ class UnaryHandler<TRequest, TResponse> : HandlerBase<TRequest, TResponse> where
     public override FrameKind Kind => FrameKind.NewUnary;
     public override ValueTask CompleteAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 
-    protected override async ValueTask PushCompletePayloadAsync(TRequest value, ILogger? logger, CancellationToken cancellationToken)
+    protected override async ValueTask PushCompletePayloadAsync(ushort id, ChannelWriter<StreamFrame> output, TRequest value, ILogger? logger, CancellationToken cancellationToken)
     {
         logger.LogDebug(_method, static (state, _) => $"invoking {state.FullName}...");
+        TResponse response;
         try
         {
-            var response = await _handler(value, null!);
+            response = await _handler(value, null!);
             logger.LogDebug(_method, static (state, _) => $"completed {state.FullName}...");
         }
         catch (Exception ex)
         {
-            logger.LogDebug(_method, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
+            logger.LogError(_method, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
+            throw;
+        }
+
+        var serializationContext = StreamSerializationContext.Get();
+        try
+        {
+            logger.LogDebug(_method, static (state, _) => $"serializing {state.FullName} response...");
+            _method.ResponseMarshaller.ContextualSerializer(response, serializationContext);
+            logger.LogDebug(serializationContext, static (state, _) => $"serialized {state.Length} bytes");
+            var frames = await serializationContext.WritePayloadAsync(output, id, cancellationToken);
+            logger.LogDebug(frames, static (state, _) => $"added {state} payload frames");
+        }
+        finally
+        {
+            serializationContext.Recycle();
         }
     }
 }

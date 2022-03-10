@@ -10,9 +10,13 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
     private readonly Queue<(byte[] Buffer, int Offset, int Length, bool ViaWriter)> _buffers = new();
     private byte[] _currentBuffer = Array.Empty<byte>();
     private int _offset, _remaining;
+    private long _totalLength;
 
-    public async ValueTask WriteAsync(ChannelWriter<StreamFrame> writer, ushort id, CancellationToken cancellationToken)
+    public long Length => _totalLength;
+
+    public async ValueTask<int> WritePayloadAsync(ChannelWriter<StreamFrame> writer, ushort id, CancellationToken cancellationToken)
     {
+        var frames = 0;
         if (_buffers.TryDequeue(out var buffer))
         {
             do
@@ -31,11 +35,14 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
             }
             while (_buffers.TryDequeue(out buffer));
         }
-        else
+
+        if (frames == 0)
         {
             // write an empty final payload if nothing was written
             await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)PayloadFlags.Final), cancellationToken);
+            frames++;
         }
+        return frames;
     }
 
     public static StreamSerializationContext Get()
@@ -44,7 +51,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
     private StreamSerializationContext Reset()
     {
         _buffers.Clear();
-        _offset = _remaining = 0;
+        _totalLength = _offset = _remaining = 0;
         if (_currentBuffer.Length != 0)
             ArrayPool<byte>.Shared.Return(_currentBuffer);
         _currentBuffer = Array.Empty<byte>();
@@ -57,7 +64,11 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
 
     public override IBufferWriter<byte> GetBufferWriter() => this;
 
-    public override void Complete(byte[] payload) => _buffers.Enqueue((payload, 0, payload.Length, false));
+    public override void Complete(byte[] payload)
+    {
+        _totalLength += payload.Length;
+        _buffers.Enqueue((payload, 0, payload.Length, false));
+    }
 
     public override void Complete() => Flush(false);
 
@@ -68,6 +79,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         if (written > 0)
         {
             _buffers.Enqueue((_currentBuffer, StreamFrame.HeaderBytes, written, true));
+            _totalLength += written;
         }
         if (getNew)
         {
