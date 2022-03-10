@@ -115,6 +115,8 @@ internal readonly struct StreamFrame : IDisposable
 
                     frame.Dispose(); // recycles buffer if needed; not worried about try/finally here
                 }
+                // since we've hit a pause in the available data: flush
+                await output.FlushAsync(cancellationToken);
             }
         }
         catch (Exception ex)

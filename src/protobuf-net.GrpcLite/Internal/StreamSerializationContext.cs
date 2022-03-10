@@ -30,6 +30,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
                     var payloadFlags = remaining == 0 && _buffers.Count == 0 ? PayloadFlags.Final : PayloadFlags.None;
                     var frameFlags = buffer.ViaWriter ? FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved : FrameFlags.None;
                     await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags), cancellationToken);
+                    frames++;
                     offset += take;
                 }
             }
