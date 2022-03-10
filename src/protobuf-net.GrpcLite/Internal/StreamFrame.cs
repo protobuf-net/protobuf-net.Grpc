@@ -92,7 +92,7 @@ internal readonly struct StreamFrame : IDisposable
             {
                 while (source.Reader.TryRead(out var frame))
                 {
-                    logger?.Log(LogLevel.Debug, default(EventId), frame, null, static (state, ex) => $"received {state}");
+                    logger.LogDebug(frame, static (state, _) => $"received {state}");
                     var frameFlags = frame.FrameFlags;
                     if ((frameFlags & FrameFlags.HeaderReserved) != 0)
                     {
@@ -111,7 +111,7 @@ internal readonly struct StreamFrame : IDisposable
                             await output.WriteAsync(frame.Buffer, frame.Offset, frame.Length, cancellationToken);
                         }
                     }
-                    logger?.Log(LogLevel.Debug, default(EventId), frame.Length, null, static (state, ex) => $"wrote {state+HeaderBytes} to stream");
+                    logger.LogDebug(frame.Length, static (state, _) => $"wrote {state+HeaderBytes} to stream");
 
                     frame.Dispose(); // recycles buffer if needed; not worried about try/finally here
                 }
@@ -145,7 +145,12 @@ internal readonly struct StreamFrame : IDisposable
         var id = (ushort)(buffer[2] | (buffer[3] << 8));
         var length = (ushort)(buffer[4] | (buffer[5] << 8));
 
-        if (length > buffer.Length)
+        if (length == 0)
+        {   // release the buffer immediately
+            ArrayPool<byte>.Shared.Return(buffer);
+            buffer = Array.Empty<byte>();
+        }
+        else if (length > buffer.Length)
         {   // up-size
             ArrayPool<byte>.Shared.Return(buffer);
             buffer = ArrayPool<byte>.Shared.Rent(length);
@@ -159,7 +164,7 @@ internal readonly struct StreamFrame : IDisposable
             offset += bytesRead;
         }
         if (remaining != 0) ThrowEOF();
-        return new StreamFrame(kind, id, kindFlags, buffer, 0, length, FrameFlags.RecycleBuffer);
+        return new StreamFrame(kind, id, kindFlags, buffer, 0, length, length == 0 ? FrameFlags.None : FrameFlags.RecycleBuffer);
 
         static void ThrowEOF() => throw new EndOfStreamException();
     }
@@ -168,8 +173,14 @@ internal enum FrameKind : byte
 {
     Unknown, // prevent silly errors with zeros
     NewUnary,
+    NewClientStreaming,
+    NewServerStreaming,
+    NewDuplex,
     Payload,
     Cancel,
+    Close,
+    Ping,
+    MethodNotFound,
 }
 [Flags]
 internal enum FrameFlags : byte
@@ -184,4 +195,10 @@ internal enum PayloadFlags
 {
     None = 0,
     Final = 1 << 0,
+}
+[Flags]
+internal enum GeneralFlags
+{
+    None = 0,
+    IsResponse = 1 << 0,
 }

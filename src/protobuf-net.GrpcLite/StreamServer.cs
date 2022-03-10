@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace ProtoBuf.Grpc.Lite
@@ -49,10 +50,12 @@ namespace ProtoBuf.Grpc.Lite
         public int MethodCount => _handlers.Count;
 
         readonly ConcurrentDictionary<string, Func<IHandler>> _handlers = new ConcurrentDictionary<string, Func<IHandler>>();
-        internal void Add(string fullName, Func<IHandler> handlerFactory)
+        internal void AddHandler(string fullName, Func<IHandler> handlerFactory)
         {
             if (!_handlers.TryAdd(fullName, handlerFactory)) ThrowDuplicate(fullName);
             static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
         }
+        internal bool TryGetHandler(string fullName, [MaybeNullWhen(false)] out Func<IHandler> handlerFactory)
+            => _handlers.TryGetValue(fullName, out handlerFactory);
     }
 }

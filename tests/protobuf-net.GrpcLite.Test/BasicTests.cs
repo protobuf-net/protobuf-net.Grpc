@@ -62,7 +62,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-2A-00-13-00-" // unary, id 42, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "02-01-2A-00-0D-00-" // payload, final, id 42, length 13
+            + "05-01-2A-00-0D-00-" // payload, final, id 42, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
 
         ms.Position = 0;
@@ -80,8 +80,6 @@ public class BasicTests
             Assert.Equal(42, frame.Id);
             Assert.Equal("hello, world!", Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length));
         }
-
-
     }
 
     static readonly Marshaller<string> StringMarshaller_Simple = new Marshaller<string>(Encoding.UTF8.GetBytes, Encoding.UTF8.GetString);
@@ -110,7 +108,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-00-00-13-00-" // unary, id 0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "02-01-00-00-0D-00-" // payload, final, id 0, length 13
+            + "05-01-00-00-0D-00-" // payload, final, id 0, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -131,7 +129,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-00-00-13-00-" // unary, id 0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "02-01-00-00-0D-00-" // payload, final, id 0, length 13
+            + "05-01-00-00-0D-00-" // payload, final, id 0, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -161,12 +159,19 @@ public class BasicTests
         Assert.NotNull(response);
         cts.Cancel();
         await complete;
-
     }
 
-    class MyService : FooService.FooServiceBase {}
+    class MyService : FooService.FooServiceBase
+    {
+        public override async Task<FooResponse> Bar(FooRequest request, ServerCallContext context)
+        {
+            await Task.Yield();
+            return new FooResponse();
+        }
+    }
 
-    class TestStreamServer : StreamServer {
+    class TestStreamServer : StreamServer
+    {
         public TestStreamServer(ILogger? logger) : base(logger) { }
     }
 

@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal class StreamSerializationContext : SerializationContext, IBufferWriter<byte>
+internal sealed class StreamSerializationContext : SerializationContext, IBufferWriter<byte>
 {
     private static StreamSerializationContext? _spare;
     private readonly Queue<(byte[] Buffer, int Offset, int Length, bool ViaWriter)> _buffers = new();
@@ -51,7 +51,7 @@ internal class StreamSerializationContext : SerializationContext, IBufferWriter<
         return this;
     }
 
-    public void Recycle() => _spare = this;
+    public void Recycle() => _spare = Reset();
 
     private StreamSerializationContext() { }
 
