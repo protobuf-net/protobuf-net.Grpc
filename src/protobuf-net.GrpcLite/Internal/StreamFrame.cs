@@ -1,7 +1,9 @@
-﻿using System.Buffers;
+﻿using Microsoft.Extensions.Logging;
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -69,6 +71,61 @@ internal readonly struct StreamFrame : IDisposable
         static void ThrowMissingMethod() => throw new ArgumentOutOfRangeException(nameof(fullName), "No method name was specified");
         static void ThrowNotSupported() => throw new ArgumentOutOfRangeException(nameof(host), "Non-empty hosts are not currently supported");
         static void ThrowMethodTooLarge(int length) => throw new InvalidOperationException($"The method name is too large at {length} bytes");
+    }
+
+    private static readonly UnboundedChannelOptions OutboundOptions = new()
+    {
+        SingleReader = true,
+        SingleWriter = false,
+        AllowSynchronousContinuations = true,
+    };
+    internal static Channel<StreamFrame> CreateChannel()
+        => Channel.CreateUnbounded<StreamFrame>(OutboundOptions);
+
+    internal async static Task WriteFromOutboundChannelToStream(Channel<StreamFrame> source, Stream output, ILogger? logger, CancellationToken cancellationToken)
+    {
+        await Task.Yield(); // ensure we don't block the constructor
+        byte[]? headerBuffer = null;
+        try
+        {
+            while (await source.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (source.Reader.TryRead(out var frame))
+                {
+                    logger?.Log(LogLevel.Debug, default(EventId), frame, null, static (state, ex) => $"received {state}");
+                    var frameFlags = frame.FrameFlags;
+                    if ((frameFlags & FrameFlags.HeaderReserved) != 0)
+                    {
+                        // we can write the header into the existing buffer, and use a single write
+                        var offset = frame.Offset - StreamFrame.HeaderBytes;
+                        frame.Write(frame.Buffer, offset);
+                        await output.WriteAsync(frame.Buffer, offset, frame.Length + StreamFrame.HeaderBytes, cancellationToken);
+                    }
+                    else
+                    {
+                        // use a scratch-buffer for the header, and write the header and payload separately
+                        frame.Write(headerBuffer ??= ArrayPool<byte>.Shared.Rent(StreamFrame.HeaderBytes), 0);
+                        await output.WriteAsync(headerBuffer, 0, StreamFrame.HeaderBytes, cancellationToken);
+                        if (frame.Length != 0)
+                        {
+                            await output.WriteAsync(frame.Buffer, frame.Offset, frame.Length, cancellationToken);
+                        }
+                    }
+                    logger?.Log(LogLevel.Debug, default(EventId), frame.Length, null, static (state, ex) => $"wrote {state+HeaderBytes} to stream");
+
+                    frame.Dispose(); // recycles buffer if needed; not worried about try/finally here
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // block the writer, since we're doomed
+            source.Writer.TryComplete(ex);
+        }
+        finally
+        {
+            if (headerBuffer is not null) ArrayPool<byte>.Shared.Return(headerBuffer);
+        }
     }
 
     public static async ValueTask<StreamFrame> ReadAsync(Stream stream, CancellationToken cancellationToken)

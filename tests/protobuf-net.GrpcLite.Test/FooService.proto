@@ -1,0 +1,8 @@
+﻿syntax = "proto3";
+
+message FooRequest {}
+message FooResponse {}
+
+service FooService {
+   rpc Bar (FooRequest) returns (FooResponse);
+}

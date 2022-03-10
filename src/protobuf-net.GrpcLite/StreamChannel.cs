@@ -1,6 +1,6 @@
 ﻿using Grpc.Core;
+using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
-using System.Buffers;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Threading.Channels;
@@ -9,41 +9,42 @@ namespace ProtoBuf.Grpc.Lite;
 
 public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
 {
-    private readonly Stream _input, _output;
-    public static async ValueTask<StreamChannel> ForNamedPipe(
-        string pipeName, string serverName = ".",
-        CancellationToken cancellationToken = default)
+    public static async ValueTask<StreamChannel> ConnectNamedPipeAsync(string pipeName, string? serverName = null, CancellationToken cancellationToken = default)
     {
-        var client = new NamedPipeClientStream(serverName, pipeName,
-                PipeDirection.InOut, PipeOptions.WriteThrough | PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly,
-                TokenImpersonationLevel.None, HandleInheritability.None);
+        string target;
+        if (string.IsNullOrWhiteSpace(serverName))
+        {
+            serverName = ".";
+            target = pipeName;
+        }
+        else
+        {
+            target = serverName + "/" + pipeName;
+        }
+        var client = new NamedPipeClientStream(serverName, pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough,
+            TokenImpersonationLevel.None, HandleInheritability.None);
         try
         {
             await client.ConnectAsync(cancellationToken);
-            var target = serverName == "." ? pipeName : (serverName + "/" + pipeName);
-            return new StreamChannel(client, client, target);
+            return new StreamChannel(client, target);
         }
         catch
         {
-            try { await client.DisposeAsync(); } catch { } // best efforts
+            try { await client.DisposeAsync(); }
+            catch { }
             throw;
         }
     }
 
+    private readonly Stream _input, _output;
+
     readonly Channel<StreamFrame> _outbound;
     readonly CallInvoker _callInvoker;
 
-    private static readonly UnboundedChannelOptions OutboundOptions = new()
-    {
-        SingleReader = true,
-        SingleWriter = false,
-        AllowSynchronousContinuations = true,
-    };
-
-    public StreamChannel(Stream duplexStream, string target) : this(duplexStream, duplexStream, target)
+    public StreamChannel(Stream duplexStream, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : this(duplexStream, duplexStream, target, logger, cancellationToken)
     { }
 
-    public StreamChannel(Stream input, Stream output, string target) : base(target)
+    public StreamChannel(Stream input, Stream output, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : base(target)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (output is null) throw new ArgumentNullException(nameof(output));
@@ -51,56 +52,13 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         if (!output.CanWrite) throw new ArgumentException("Cannot write to output stream", nameof(output));
         _input = input;
         _output = output;
-        _outbound = Channel.CreateUnbounded<StreamFrame>(OutboundOptions);
+        _outbound = StreamFrame.CreateChannel();
         _callInvoker = new StreamCallInvoker(_outbound);
-        Writer = WriteFromOutboundChannelToStream(_outbound, _output, CancellationToken.None);
+        Complete = StreamFrame.WriteFromOutboundChannelToStream(_outbound, _output, logger, cancellationToken);
     }
 
-    internal async static Task WriteFromOutboundChannelToStream(Channel<StreamFrame> source, Stream output, CancellationToken cancellationToken)
-    {
-        await Task.Yield(); // ensure we don't block the constructor
-        byte[]? headerBuffer = null;
-        try
-        {
-            while (await source.Reader.WaitToReadAsync(cancellationToken))
-            {
-                while (source.Reader.TryRead(out var frame))
-                {
-                    var frameFlags = frame.FrameFlags;
-                    if ((frameFlags & FrameFlags.HeaderReserved) != 0)
-                    {
-                        // we can write the header into the existing buffer, and use a single write
-                        var offset = frame.Offset - StreamFrame.HeaderBytes;
-                        frame.Write(frame.Buffer, offset);
-                        await output.WriteAsync(frame.Buffer, offset, frame.Length + StreamFrame.HeaderBytes, cancellationToken);
-                    }
-                    else
-                    {
-                        // use a scratch-buffer for the header, and write the header and payload separately
-                        frame.Write(headerBuffer ??= ArrayPool<byte>.Shared.Rent(StreamFrame.HeaderBytes), 0);
-                        await output.WriteAsync(headerBuffer, 0, StreamFrame.HeaderBytes, cancellationToken);
-                        if (frame.Length != 0)
-                        {
-                            await output.WriteAsync(frame.Buffer, frame.Offset, frame.Length, cancellationToken);
-                        }
-                    }
 
-                    frame.Dispose(); // recycles buffer if needed; not worried about try/finally here
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            // block the writer, since we're doomed
-            source.Writer.TryComplete(ex);
-        }
-        finally
-        {
-            if (headerBuffer is not null) ArrayPool<byte>.Shared.Return(headerBuffer);
-        }
-    }
-
-    public Task Writer { get; }
+    public Task Complete { get; }
 
     public override CallInvoker CreateCallInvoker() => _callInvoker;
 
@@ -108,26 +66,37 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
 
     public void Dispose()
     {
-        if (ReferenceEquals(_input, _output))
-        {
-            _input?.Dispose();
-        }
-        else
-        {
-            _input?.Dispose();
-            _output?.Dispose();
-        }
+        _outbound.Writer.TryComplete();
+        Dispose(_input, _output);
     }
 
     public ValueTask DisposeAsync()
     {
-        if (ReferenceEquals(_input, _output))
+        _outbound.Writer.TryComplete();
+        return DisposeAsync(_input, _output);
+    }
+
+    internal static void Dispose(Stream input, Stream output)
+    {
+        if (ReferenceEquals(input, output))
         {
-            return _input is null ? default : _input.DisposeAsync();
+            input?.Dispose();
         }
         else
         {
-            return SlowPath(_input, _output);
+            input?.Dispose();
+            output?.Dispose();
+        }
+    }
+    internal static ValueTask DisposeAsync(Stream input, Stream output)
+    {
+        if (ReferenceEquals(input, output))
+        {
+            return input is null ? default : input.DisposeAsync();
+        }
+        else
+        {
+            return SlowPath(input, output);
         }
         static async ValueTask SlowPath(Stream input, Stream output)
         {
