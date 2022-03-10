@@ -1,8 +1,11 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Buffers;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal readonly struct StreamFrame
+internal readonly struct StreamFrame : IDisposable
 {
     public const int HeaderBytes = 6; // kind=1,kindFlags=1,id=2,length=2
 
@@ -40,10 +43,69 @@ internal readonly struct StreamFrame
         buffer[offset++] = (byte)((Length >> 8) & 0xFF);
     }
 
+    public void Dispose()
+    {
+        if ((FrameFlags & FrameFlags.RecycleBuffer) != 0) ArrayPool<byte>.Shared.Return(Buffer);
+    }
+
     public override string ToString() => $"[{Id}, {Kind}] {Length} bytes ({FrameFlags}, {KindFlags})";
 
     public override bool Equals([NotNullWhen(true)] object? obj) => throw new NotSupportedException();
     public override int GetHashCode() => throw new NotSupportedException();
+
+    public static StreamFrame GetInitializeFrame(FrameKind kind, ushort id, string fullName, string? host)
+    {
+        if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();
+        if (!string.IsNullOrEmpty(host)) ThrowNotSupported(); // in future: delimit?
+        var length = Encoding.UTF8.GetByteCount(fullName);
+        if (length > ushort.MaxValue) ThrowMethodTooLarge(length);
+
+        var buffer = ArrayPool<byte>.Shared.Rent(StreamFrame.HeaderBytes + length);
+        var actualLength = Encoding.UTF8.GetBytes(fullName, 0, fullName.Length, buffer, StreamFrame.HeaderBytes);
+        Debug.Assert(actualLength == length, "length mismatch in encoding!");
+
+        return new StreamFrame(kind, id, 0, buffer, StreamFrame.HeaderBytes, (ushort)length, FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved);
+
+        static void ThrowMissingMethod() => throw new ArgumentOutOfRangeException(nameof(fullName), "No method name was specified");
+        static void ThrowNotSupported() => throw new ArgumentOutOfRangeException(nameof(host), "Non-empty hosts are not currently supported");
+        static void ThrowMethodTooLarge(int length) => throw new InvalidOperationException($"The method name is too large at {length} bytes");
+    }
+
+    public static async ValueTask<StreamFrame> ReadAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(256);
+
+        int remaining = 6, offset = 0, bytesRead;
+        while (remaining > 0 && (bytesRead = await stream.ReadAsync(buffer, offset, remaining, cancellationToken)) > 0)
+        {
+            remaining -= bytesRead;
+            offset += bytesRead;
+        }
+        if (remaining != 0) ThrowEOF();
+
+        var kind = (FrameKind)buffer[0];
+        var kindFlags = buffer[1];
+        var id = (ushort)(buffer[2] | (buffer[3] << 8));
+        var length = (ushort)(buffer[4] | (buffer[5] << 8));
+
+        if (length > buffer.Length)
+        {   // up-size
+            ArrayPool<byte>.Shared.Return(buffer);
+            buffer = ArrayPool<byte>.Shared.Rent(length);
+        }
+
+        remaining = length;
+        offset = 0;
+        while (remaining > 0 && (bytesRead = await stream.ReadAsync(buffer, offset, remaining, cancellationToken)) > 0)
+        {
+            remaining -= bytesRead;
+            offset += bytesRead;
+        }
+        if (remaining != 0) ThrowEOF();
+        return new StreamFrame(kind, id, kindFlags, buffer, 0, length, FrameFlags.RecycleBuffer);
+
+        static void ThrowEOF() => throw new EndOfStreamException();
+    }
 }
 internal enum FrameKind : byte
 {

@@ -58,6 +58,7 @@ internal sealed class StreamCallInvoker : CallInvoker
         static void ThrowNull() => throw new ArgumentNullException(nameof(receiver));
         static void ThrowDuplicate(ushort id) => throw new ArgumentException($"Duplicate receiver key: {id}");
     }
+
     private async Task WriteAsync<TResponse, TRequest>(UnaryStreamReceiver<TResponse> receiver, Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
         where TResponse : class
         where TRequest : class
@@ -68,7 +69,7 @@ internal sealed class StreamCallInvoker : CallInvoker
         try
         {
             AddReceiver(receiver);
-            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.NewUnary, receiver.Id, 0));
+            await _outbound.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, receiver.Id, method.FullName, host));
             serializationContext = StreamSerializationContext.Get();
             method.RequestMarshaller.ContextualSerializer(request, serializationContext);
             await serializationContext.WriteAsync(_outbound.Writer, receiver.Id, options.CancellationToken);

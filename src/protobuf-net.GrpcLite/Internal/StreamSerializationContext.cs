@@ -23,9 +23,9 @@ internal class StreamSerializationContext : SerializationContext, IBufferWriter<
                     var take = Math.Min(remaining, ushort.MaxValue);
 
                     remaining -= take;
-                    byte payloadFlags = remaining == 0 && _buffers.Count == 0 ? (byte)1 : (byte)0; // 1 == "end of payload"
+                    var payloadFlags = remaining == 0 && _buffers.Count == 0 ? PayloadFlags.Final : PayloadFlags.None;
                     var frameFlags = buffer.ViaWriter ? FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved : FrameFlags.None;
-                    await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags), cancellationToken);
+                    await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags), cancellationToken);
                     offset += take;
                 }
             }
@@ -34,7 +34,7 @@ internal class StreamSerializationContext : SerializationContext, IBufferWriter<
         else
         {
             // write an empty final payload if nothing was written
-            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, 1), cancellationToken);
+            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)PayloadFlags.Final), cancellationToken);
         }
     }
 
