@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Internal.Server;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Threading.Channels;
@@ -11,7 +12,8 @@ namespace ProtoBuf.Grpc.Lite
         public int Id { get; }
 
         private readonly StreamServer _server;
-        private Stream _input, _output;
+        private readonly Stream _input;
+        private readonly Stream _output;
         private readonly Channel<StreamFrame> _outbound;
         private readonly ILogger? _logger;
 
@@ -36,7 +38,7 @@ namespace ProtoBuf.Grpc.Lite
             _ = ConsumeAsync(cancellationToken);
         }
 
-        private readonly ConcurrentDictionary<ushort, IHandler> _activeOperations = new ConcurrentDictionary<ushort, IHandler>();
+        private readonly ConcurrentDictionary<ushort, IServerHandler> _activeOperations = new ConcurrentDictionary<ushort, IServerHandler>();
 
         async Task ConsumeAsync(CancellationToken cancellationToken)
         {
@@ -84,6 +86,7 @@ namespace ProtoBuf.Grpc.Lite
                         }
                         else
                         {
+                            handler.Initialize(frame.RequestId, _outbound, _logger);
                             _logger.LogDebug(method, static (state, _) => $"method accepted: {state}");
                         }
                         break;

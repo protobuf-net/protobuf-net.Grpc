@@ -3,21 +3,10 @@ using System.Buffers;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal sealed class SingleBufferDeserializationContext : DeserializationContext
+internal sealed class SingleBufferDeserializationContext : DeserializationContext, IPooled
 {
-    private static SingleBufferDeserializationContext? _spare;
-    private byte[] _buffer = Array.Empty<byte>();
+    private byte[] _buffer = Utilities.EmptyBuffer;
     private int _offset, _length;
-
-    public static SingleBufferDeserializationContext Get()
-        => Interlocked.Exchange(ref _spare, null) ?? new SingleBufferDeserializationContext();
-
-    private SingleBufferDeserializationContext Reset()
-    {
-        _offset = _length = 0;
-        _buffer = Array.Empty<byte>();
-        return this;
-    }
 
     public void Initialize(byte[] buffer, int offset, int length)
     {
@@ -26,12 +15,17 @@ internal sealed class SingleBufferDeserializationContext : DeserializationContex
         _length = length;
     }
 
-    public void Recycle() => _spare = Reset();
+    public void Recycle()
+    {
+        _offset = _length = 0;
+        _buffer = Utilities.EmptyBuffer;
+        Pool<SingleBufferDeserializationContext>.Put(this);
+    }
 
     public override byte[] PayloadAsNewBuffer()
     {
         if (_offset == 0 && _length == _buffer.Length) return _buffer;
-        var copy = _length == 0 ? Array.Empty<byte>() : new byte[_length];
+        var copy = _length == 0 ? Utilities.EmptyBuffer : new byte[_length];
         Buffer.BlockCopy(_buffer, _offset, copy, 0, _length);
         return copy;
     }

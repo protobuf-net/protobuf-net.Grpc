@@ -67,12 +67,14 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
 
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         _outbound.Writer.TryComplete();
         Dispose(_input, _output);
     }
 
     public ValueTask DisposeAsync()
     {
+        GC.SuppressFinalize(this);
         _outbound.Writer.TryComplete();
         return DisposeAsync(_input, _output);
     }

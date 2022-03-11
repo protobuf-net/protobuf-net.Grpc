@@ -7,8 +7,8 @@ namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal sealed class StreamCallInvoker : CallInvoker
 {
-    private Channel<StreamFrame> _outbound;
-    private ConcurrentDictionary<ushort, IStreamReceiver> _activeOperations = new();
+    private readonly Channel<StreamFrame> _outbound;
+    private readonly ConcurrentDictionary<ushort, IClientHandler> _activeOperations = new();
     private int _nextId = -1; // so that our first id is zero
     private ushort NextId()
     {
@@ -36,20 +36,28 @@ internal sealed class StreamCallInvoker : CallInvoker
         where TRequest : class
         where TResponse : class
     {
-        using var call = AsyncUnaryCall(method, host, options, request);
-        return await call.ResponseAsync;
+        var receiver = ClientUnaryHandler<TResponse>.Get(NextId(), method.ResponseMarshaller, options.CancellationToken);
+        _ = WriteAsync(receiver, method, host, options, request, isLastElement: true);
+        try
+        {
+            return await receiver.ResponseAsync;
+        }
+        finally
+        {   // since we've never exposed this to the external world, we can safely recycle it
+            receiver.Recycle();
+        }
     }
 
-    static readonly Func<object, Task<Metadata>> responseHeadersAsync = static state => ((IStreamReceiver)state).ResponseHeadersAsync;
-    static readonly Func<object, Status> getStatus = static state => ((IStreamReceiver)state).Status;
-    static readonly Func<object, Metadata> getTrailers = static state => ((IStreamReceiver)state).Trailers();
-    static readonly Action<object> dispose = static state => ((IStreamReceiver)state).Dispose();
+    static readonly Func<object, Task<Metadata>> s_responseHeadersAsync = static state => ((IClientHandler)state).ResponseHeadersAsync;
+    static readonly Func<object, Status> s_getStatus = static state => ((IClientHandler)state).Status;
+    static readonly Func<object, Metadata> s_getTrailers = static state => ((IClientHandler)state).Trailers();
+    static readonly Action<object> s_dispose = static state => ((IClientHandler)state).Dispose();
 
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        var receiver = new UnaryStreamReceiver<TResponse>(NextId(), method.ResponseMarshaller, options.CancellationToken);
-        _ = WriteAsync(receiver, method, host, options, request);
-        return new AsyncUnaryCall<TResponse>(receiver.ResponseAsync, responseHeadersAsync, getStatus, getTrailers, dispose, receiver);
+        var receiver = ClientUnaryHandler<TResponse>.Get(NextId(), method.ResponseMarshaller, options.CancellationToken);
+        _ = WriteAsync(receiver, method, host, options, request, isLastElement: true);
+        return new AsyncUnaryCall<TResponse>(receiver.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, receiver);
     }
 
     internal async Task ConsumeAsync(Stream input, ILogger? logger, CancellationToken cancellationToken)
@@ -91,7 +99,7 @@ internal sealed class StreamCallInvoker : CallInvoker
         }
     }
 
-    private void AddReceiver(IStreamReceiver receiver)
+    private void AddReceiver(IClientHandler receiver)
     {
         if (receiver is null) ThrowNull();
         if (!_activeOperations.TryAdd(receiver!.Id, receiver)) ThrowDuplicate(receiver.Id);
@@ -100,7 +108,8 @@ internal sealed class StreamCallInvoker : CallInvoker
         static void ThrowDuplicate(ushort id) => throw new ArgumentException($"Duplicate receiver key: {id}");
     }
 
-    private async Task WriteAsync<TResponse, TRequest>(UnaryStreamReceiver<TResponse> receiver, Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+    private async Task WriteAsync<TResponse, TRequest>(ClientUnaryHandler<TResponse> receiver, Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request,
+        bool isLastElement)
         where TResponse : class
         where TRequest : class
     {
@@ -111,9 +120,9 @@ internal sealed class StreamCallInvoker : CallInvoker
         {
             AddReceiver(receiver);
             await _outbound.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, receiver.Id, method.FullName, host));
-            serializationContext = StreamSerializationContext.Get();
+            serializationContext = Pool<StreamSerializationContext>.Get();
             method.RequestMarshaller.ContextualSerializer(request, serializationContext);
-            await serializationContext.WritePayloadAsync(_outbound.Writer, receiver.Id, options.CancellationToken);
+            await serializationContext.WritePayloadAsync(_outbound.Writer, receiver.Id, isLastElement, options.CancellationToken);
             complete = true;
         }
         catch (Exception ex)

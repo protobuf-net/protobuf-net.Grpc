@@ -23,11 +23,11 @@ public class BasicTests
     }
     class BasicLogger : ILogger, IDisposable
     {
-        private ITestOutputHelper _output;
+        private readonly ITestOutputHelper _output;
 
         public BasicLogger(ITestOutputHelper output) => _output = output;
 
-        IDisposable ILogger.BeginScope<TState>(TState state) => this;
+        IDisposable ILogger.BeginScope<TState>(TState state) => null!;
 
         bool ILogger.IsEnabled(LogLevel logLevel) => _output is not null;
 
@@ -54,7 +54,7 @@ public class BasicTests
         var channel = Channel.CreateUnbounded<StreamFrame>();
         await channel.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, 42, "/myservice/mymethod", ""));
         var bytes = Encoding.UTF8.GetBytes("hello, world!");
-        await channel.Writer.WriteAsync(new StreamFrame(FrameKind.Payload, 42, (byte)PayloadFlags.Final, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
+        await channel.Writer.WriteAsync(new StreamFrame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
         channel.Writer.Complete();
         await StreamFrame.WriteFromOutboundChannelToStream(channel, ms, Logger, default);
 
@@ -78,7 +78,7 @@ public class BasicTests
         using (var frame = await StreamFrame.ReadAsync(ms, CancellationToken.None))
         {
             Assert.Equal(FrameKind.Payload, frame.Kind);
-            Assert.Equal((byte)PayloadFlags.Final, frame.KindFlags);
+            Assert.Equal((byte)PayloadFlags.EndItem, frame.KindFlags);
             Assert.Equal(42, frame.RequestId);
             Assert.Equal(3, frame.SequenceId);
             Assert.Equal(13, frame.Length);
@@ -112,7 +112,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-00-00-00-00-13-00-" // unary, id 0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-01-00-00-00-00-0D-00-" // payload, final, id 0, length 13
+            + "05-03-00-00-00-00-0D-00-" // payload, final chunk, final element, id 0, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -133,7 +133,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-00-00-00-00-13-00-" // unary, id 0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-01-00-00-00-00-0D-00-" // payload, final, id 0, length 13
+            + "05-03-00-00-00-00-0D-00-" // payload, final chunk, final element, id 0, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -141,7 +141,7 @@ public class BasicTests
     public void CanBindService()
     {
         var server = new TestStreamServer(Logger);
-        var connection = server.AddConnection(Stream.Null, Stream.Null, CancellationToken.None);
+        server.AddConnection(Stream.Null, Stream.Null, CancellationToken.None);
         server.ManualBind<MyService>();
         Assert.Equal(1, server.MethodCount);
     }

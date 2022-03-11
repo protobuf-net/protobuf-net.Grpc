@@ -4,19 +4,19 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal sealed class StreamSerializationContext : SerializationContext, IBufferWriter<byte>
+internal sealed class StreamSerializationContext : SerializationContext, IBufferWriter<byte>, IPooled
 {
-    private static StreamSerializationContext? _spare;
     private readonly Queue<(byte[] Buffer, int Offset, int Length, bool ViaWriter)> _buffers = new();
-    private byte[] _currentBuffer = Array.Empty<byte>();
+    private byte[] _currentBuffer = Utilities.EmptyBuffer;
     private int _offset, _remaining, _nextSize = InitialBufferSize;
     private long _totalLength;
     const int InitialBufferSize = 1024, MaxBufferSize = 64 * 1024;
 
     public long Length => _totalLength;
 
-    public async ValueTask<int> WritePayloadAsync(ChannelWriter<StreamFrame> writer, ushort id, CancellationToken cancellationToken)
+    public async ValueTask<int> WritePayloadAsync(ChannelWriter<StreamFrame> writer, ushort id, bool isLastElement, CancellationToken cancellationToken)
     {
+        var finalFlags = isLastElement ? (PayloadFlags.EndItem | PayloadFlags.EndAllItems) : PayloadFlags.EndItem;
         var frames = 0;
         if (_buffers.TryDequeue(out var buffer))
         {
@@ -28,7 +28,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
                     var take = Math.Min(remaining, ushort.MaxValue);
 
                     remaining -= take;
-                    var payloadFlags = remaining == 0 && _buffers.Count == 0 ? PayloadFlags.Final : PayloadFlags.None;
+                    var payloadFlags = remaining == 0 && _buffers.Count == 0 ? finalFlags : PayloadFlags.None;
                     var frameFlags = buffer.ViaWriter ? FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved : FrameFlags.None;
                     await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags), cancellationToken);
                     frames++;
@@ -41,29 +41,23 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         if (frames == 0)
         {
             // write an empty final payload if nothing was written
-            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)PayloadFlags.Final), cancellationToken);
+            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)finalFlags), cancellationToken);
             frames++;
         }
         return frames;
     }
-
-    public static StreamSerializationContext Get()
-        => Interlocked.Exchange(ref _spare, null) ?? new StreamSerializationContext();
-
-    private StreamSerializationContext Reset()
+    public void Recycle()
     {
         _buffers.Clear();
         _totalLength = _offset = _remaining = 0;
         _nextSize = InitialBufferSize;
         if (_currentBuffer.Length != 0)
             ArrayPool<byte>.Shared.Return(_currentBuffer);
-        _currentBuffer = Array.Empty<byte>();
-        return this;
+        _currentBuffer = Utilities.EmptyBuffer;
+        Pool<StreamSerializationContext>.Put(this);
     }
 
-    public void Recycle() => _spare = Reset();
-
-    private StreamSerializationContext() { }
+    public StreamSerializationContext() { }
 
     public override IBufferWriter<byte> GetBufferWriter() => this;
 
@@ -94,7 +88,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         }
         else
         {
-            _currentBuffer = Array.Empty<byte>();
+            _currentBuffer = Utilities.EmptyBuffer;
             _remaining = _offset = 0;
         }
     }

@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-interface IHandler
+interface IHandler : IPooled
 {
     FrameKind Kind { get; }
 
@@ -14,15 +14,16 @@ interface IHandler
 
 abstract class HandlerBase<TReceive> : IHandler where TReceive : class
 {
-    private readonly Marshaller<TReceive> _marshaller;
-    protected HandlerBase(Marshaller<TReceive> marshaller)
-        => _marshaller = marshaller;
+    protected abstract Marshaller<TReceive> ReceiveMarshaller { get; }
+
     public abstract ValueTask CompleteAsync(CancellationToken cancellationToken);
+
+    public abstract void Recycle();
 
     Queue<StreamFrame>? _backlog;
     public ValueTask PushPayloadAsync(StreamFrame frame, ChannelWriter<StreamFrame> output, ILogger? logger, CancellationToken cancellationToken)
     {
-        if ((frame.KindFlags & (byte)PayloadFlags.Final) == 0)
+        if ((frame.KindFlags & (byte)PayloadFlags.EndItem) == 0)
         {
             (_backlog ??= new Queue<StreamFrame>()).Enqueue(frame);
             return default;
@@ -36,17 +37,10 @@ abstract class HandlerBase<TReceive> : IHandler where TReceive : class
         {
             // single frame; simple case
             logger.LogDebug(frame.Length, static (state, _) => $"deserializing request in single buffer, {state} bytes...");
-            var ctx = SingleBufferDeserializationContext.Get();
-            TReceive request;
-            try
-            {
-                ctx.Initialize(frame.Buffer, frame.Offset, frame.Length);
-                request = _marshaller.ContextualDeserializer(ctx);
-            }
-            finally
-            {
-                ctx.Recycle();
-            }
+            var ctx = Pool<SingleBufferDeserializationContext>.Get();
+            ctx.Initialize(frame.Buffer, frame.Offset, frame.Length);
+            var request = ReceiveMarshaller.ContextualDeserializer(ctx);
+            ctx.Recycle();
             logger.LogDebug(frame.Length, static (state, _) => $"deserialized {state} bytes; processing request");
             return PushCompletePayloadAsync(frame.RequestId, output, request, logger, cancellationToken);
         }

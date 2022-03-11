@@ -50,8 +50,8 @@ namespace ProtoBuf.Grpc.Lite
 
         public int MethodCount => _handlers.Count;
 
-        readonly ConcurrentDictionary<string, Func<IHandler>> _handlers = new ConcurrentDictionary<string, Func<IHandler>>();
-        internal void AddHandler(string fullName, Func<IHandler> handlerFactory)
+        readonly ConcurrentDictionary<string, Func<Internal.Server.IServerHandler>> _handlers = new ConcurrentDictionary<string, Func<Internal.Server.IServerHandler>>();
+        internal void AddHandler(string fullName, Func<Internal.Server.IServerHandler> handlerFactory)
         {
             if (!_handlers.TryAdd(fullName, handlerFactory)) ThrowDuplicate(fullName);
             static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
@@ -60,7 +60,7 @@ namespace ProtoBuf.Grpc.Lite
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
             [MaybeNullWhen(false)]
 #endif
-            out Func<IHandler> handlerFactory)
+            out Func<Internal.Server.IServerHandler> handlerFactory)
             => _handlers.TryGetValue(fullName, out handlerFactory);
     }
 }

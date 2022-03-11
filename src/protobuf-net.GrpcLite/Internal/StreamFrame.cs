@@ -34,7 +34,7 @@ internal readonly struct StreamFrame : IDisposable
     [FieldOffset(16)]
     public readonly byte[] Buffer;
 
-    public StreamFrame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Array.Empty<byte>(), 0, 0, FrameFlags.None, 0) { }
+    public StreamFrame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Utilities.EmptyBuffer, 0, 0, FrameFlags.None, 0) { }
     public StreamFrame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags, ushort sequenceId = 0)
     {
         Kind = kind;
@@ -94,7 +94,7 @@ internal readonly struct StreamFrame : IDisposable
 #else
         this = default;
 #endif
-        Buffer = Array.Empty<byte>();
+        Buffer = Utilities.EmptyBuffer;
 
         // note values are little-endian; the JIT will remove the appropriate dead branch here
         if (BitConverter.IsLittleEndian)
@@ -272,6 +272,7 @@ internal enum FrameKind : byte
     Cancel,
     Close,
     Ping,
+    [Obsolete("remove this later; should be a structured response status")]
     MethodNotFound,
 }
 [Flags]
@@ -286,7 +287,9 @@ internal enum FrameFlags : byte
 internal enum PayloadFlags
 {
     None = 0,
-    Final = 1 << 0,
+    EndItem = 1 << 0, // terminates a single streaming object (which could be split over multiple frames)
+    EndAllItems = 1 << 1, // terminates a sequence of streaming objects
+    NoPayload = 1 << 2, // signals that this object should be discarded; should only be sent as a stream terminator, i.e. EndItem | EndAllItems | NoPayload
 }
 [Flags]
 internal enum GeneralFlags
