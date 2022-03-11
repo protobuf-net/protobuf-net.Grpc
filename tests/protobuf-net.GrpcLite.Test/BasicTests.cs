@@ -19,31 +19,9 @@ public class BasicTests
     public BasicTests(ITestOutputHelper output)
     {
         _output = output;
-        Logger = new BasicLogger(_output, "");
+        Logger = _output.CreateLogger("");
     }
 
-    private ILogger CreateLogger(string prefix)
-        => new BasicLogger(_output, prefix);
-
-    class BasicLogger : ILogger, IDisposable
-    {
-        private readonly ITestOutputHelper _output;
-        private readonly string _prefix;
-
-        public BasicLogger(ITestOutputHelper output, [CallerMemberName] string prefix = "")
-        {
-            _output = output;
-            _prefix = prefix;
-        }
-
-        IDisposable ILogger.BeginScope<TState>(TState state) => null!;
-
-        bool ILogger.IsEnabled(LogLevel logLevel) => _output is not null;
-
-        void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-            => _output?.WriteLine(string.IsNullOrWhiteSpace(_prefix) ? formatter(state, exception) : "[" + _prefix + "] " + formatter(state, exception));
-        void IDisposable.Dispose() { }
-    }
     ILogger Logger { get; }
 
     static string Me([CallerMemberName] string caller = "") => caller;
@@ -61,7 +39,7 @@ public class BasicTests
     {
         var ms = new MemoryStream();
         var channel = Channel.CreateUnbounded<StreamFrame>();
-        await channel.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, 42, "/myservice/mymethod", ""));
+        await channel.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, 42, 0, "/myservice/mymethod", ""));
         var bytes = Encoding.UTF8.GetBytes("hello, world!");
         await channel.Writer.WriteAsync(new StreamFrame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
         channel.Writer.Complete();
@@ -119,9 +97,9 @@ public class BasicTests
 
         var hex = GetHex(ms);
         Assert.Equal(
-            "01-00-00-00-00-00-13-00-" // unary, id 0, length 19
+            "01-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-03-00-00-00-00-0D-00-" // payload, final chunk, final element, id 0, length 13
+            + "05-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -140,9 +118,9 @@ public class BasicTests
 
         var hex = GetHex(ms);
         Assert.Equal(
-            "01-00-00-00-00-00-13-00-" // unary, id 0, length 19
+            "01-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-03-00-00-00-00-0D-00-" // payload, final chunk, final element, id 0, length 13
+            + "05-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1 length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -152,35 +130,13 @@ public class BasicTests
         var server = new TestStreamServer(Logger);
         server.AddConnection(Stream.Null, Stream.Null, CancellationToken.None);
         server.ManualBind<MyService>();
-        Assert.Equal(1, server.MethodCount);
+        Assert.Equal(2, server.MethodCount);
     }
 
     [Fact]
-    public async Task CanHostServer()
+    public void CanCreateTestFixture()
     {
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var name = Guid.NewGuid().ToString();
-        var server = new NamedPipeServer(CreateLogger("server"));
-        server.ManualBind<MyService>();
-        Assert.Equal(1, server.MethodCount);
-
-        var complete = server.ListenOneAsync(name, cts.Token);
-
-        await using var client = await StreamChannel.ConnectNamedPipeAsync(name, cancellationToken: cts.Token, logger: CreateLogger("client"));
-        var proxy = new FooService.FooServiceClient(client);
-        var response = await proxy.BarAsync(new FooRequest { }, default(CallOptions).WithCancellationToken(cts.Token));
-        Assert.NotNull(response);
-        cts.Cancel();
-        await complete;
-    }
-
-    class MyService : FooService.FooServiceBase
-    {
-        public override async Task<FooResponse> Bar(FooRequest request, ServerCallContext context)
-        {
-            await Task.Yield();
-            return new FooResponse();
-        }
+        using var obj = new TestServerHost();
     }
 
     class TestStreamServer : StreamServer

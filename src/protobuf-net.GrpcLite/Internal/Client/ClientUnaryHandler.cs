@@ -1,6 +1,4 @@
 ﻿using Grpc.Core;
-using Microsoft.Extensions.Logging;
-using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 

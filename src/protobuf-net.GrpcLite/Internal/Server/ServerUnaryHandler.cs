@@ -1,6 +1,4 @@
 ﻿using Grpc.Core;
-using Microsoft.Extensions.Logging;
-using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
@@ -25,39 +23,21 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
     public override FrameKind Kind => FrameKind.NewUnary;
     public override ValueTask CompleteAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 
-    protected override async ValueTask ReceivePayloadAsync(TRequest value, CancellationToken cancellationToken)
+    private TRequest? _request;
+
+    protected override async Task InvokeServerMethod(ServerCallContext context)
     {
-        var method = Method;
-        Logger.LogDebug(method, static (state, _) => $"invoking {state.FullName}...");
-        try
+        var response = await _handler!(_request!, context);
+        if (context.Status.StatusCode == StatusCode.OK)
         {
-            var ctx = CreateServerCallContext();
-            var response = await _handler!(value, null!);
-            ctx.Recycle();
-            Logger.LogDebug(method, static (state, _) => $"completed {state.FullName}...");
+            await WritePayloadAsync(response, true);
+        }
+    }
 
-            if (Status.StatusCode == StatusCode.OK)
-            {
-                await WritePayloadAsync(response, true);
-            }
-        }
-        catch (RpcException rpc)
-        {
-            Logger.LogInformation(method!, static (state, ex) => $"rpc exception {state.FullName}: {ex!.Message}", rpc);
-            var status = rpc.Status;
-            if (status.StatusCode == StatusCode.OK)
-            {
-                // one does not simply fail with success!
-                status = new Status(StatusCode.Unknown, status.Detail, status.DebugException);
-            }
-            Status = status;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(method!, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
-            Status = new Status(StatusCode.Unknown, "The server encountered an error while performing the operation", ex);
-        }
-
-        await WriteStatusAndTrailers();
+    protected override ValueTask ReceivePayloadAsync(TRequest value, CancellationToken cancellationToken)
+    {
+        _request = value;
+        Execute();
+        return default;
     }
 }

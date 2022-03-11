@@ -10,24 +10,13 @@ internal sealed class StreamCallInvoker : CallInvoker
     private readonly ILogger? _logger;
     private readonly Channel<StreamFrame> _outbound;
     private readonly ConcurrentDictionary<ushort, IClientHandler> _activeOperations = new();
-    private int _nextId = -1; // so that our first id is zero
-    private ushort NextId()
-    {
-        while (true)
-        {
-            var id = Interlocked.Increment(ref _nextId);
-            if (id <= ushort.MaxValue && id >= 0) return (ushort)id; // in-range; that'll do
-
-            // try to swap to zero; if we win: we are become zero
-            if (Interlocked.CompareExchange(ref _nextId, 0, id) == id) return 0;
-
-            // otherwise, redo from start
-        }
-    }
+    private int _nextId = ushort.MaxValue; // so that our first id is zero
+    private ushort NextId() => Utilities.IncrementToUInt32(ref _nextId);
 
     public StreamCallInvoker(Channel<StreamFrame> outbound, ILogger? logger)
     {
         this._outbound = outbound;
+        this._logger = logger;
     }
 
     public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)

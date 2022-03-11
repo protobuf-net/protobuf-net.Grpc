@@ -32,5 +32,5 @@ internal sealed class SingleBufferDeserializationContext : DeserializationContex
     public override ReadOnlySequence<byte> PayloadAsReadOnlySequence()
         => new ReadOnlySequence<byte>(_buffer, _offset, _length);
 
-    public override int PayloadLength => throw new NotImplementedException();
+    public override int PayloadLength => _length;
 }

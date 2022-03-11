@@ -10,6 +10,12 @@ interface IHandler : IPooled
     FrameKind Kind { get; }
     ValueTask ReceivePayloadAsync(StreamFrame frame, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
+    ushort NextSequenceId();
+}
+
+interface IReceiver<T>
+{
+    void Receive(T value);
 }
 
 abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where TReceive : class
@@ -23,6 +29,8 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
     public ushort Id => _id;
+    private int _sequenceId;
+    public ushort NextSequenceId() => Utilities.IncrementToUInt32(ref _sequenceId);
     protected ILogger? Logger => _logger;
     protected IMethod Method
     {
@@ -36,6 +44,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         _output = output;
         _logger = logger;
         _id = id;
+        _sequenceId = ushort.MaxValue; // so first is zero
     }
 
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
@@ -78,7 +87,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
 
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
-        => Output.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, Id, Method.FullName, host), options.CancellationToken);
+        => Output.WriteAsync(StreamFrame.GetInitializeFrame(Kind, Id, NextSequenceId(), Method.FullName, host), options.CancellationToken);
 
     internal async Task SendSingleAsync(string? host, CallOptions options, TSend request)
     {
@@ -94,7 +103,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         {
             serializationContext = Pool<StreamSerializationContext>.Get();
             Serializer(value, serializationContext);
-            await serializationContext.WritePayloadAsync(Output, Id, isLastElement, cancellationToken);
+            await serializationContext.WritePayloadAsync(Output, this, isLastElement, cancellationToken);
         }
         finally
         {
@@ -102,6 +111,60 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         }
     }
 
+    public static Task<bool> MoveNextAndCapture(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
+    {
+        // try to get something the cheap way
+        if (source.TryRead(out var value))
+        {
+            destination.Receive(value);
+            return Utilities.AsyncTrue;
+        }
+        return SlowMoveNext(source, destination, cancellationToken);
+
+        static Task<bool> SlowMoveNext(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
+        {
+            TReceive value;
+            do
+            {
+                var waitToReadAsync = source.WaitToReadAsync(cancellationToken);
+                if (!waitToReadAsync.IsCompletedSuccessfully)
+                {   // nothing readily available, and WaitToReadAsync returned incomplete; we'll
+                    // need to switch to async here
+                    return AwaitToRead(source, destination, waitToReadAsync, cancellationToken);
+                }
+
+                var canHaveMore = waitToReadAsync.Result;
+                if (!canHaveMore)
+                {
+                    // nothing readily available, and WaitToReadAsync return false synchronously;
+                    // we're all done!
+                    return Utilities.AsyncFalse;
+                }
+                // otherwise, there *should* be work, but we might be having a race right; try again,
+                // until we succeed
+
+                // try again
+            }
+            while (!source.TryRead(out value!));
+            destination.Receive(value);
+            // we got success on the not-first attempt; I'll take the W
+            return Utilities.AsyncTrue;
+        }
+
+        static async Task<bool> AwaitToRead(ChannelReader<TReceive> source, IReceiver<TReceive> destination, ValueTask<bool> waitToReadAsync, CancellationToken cancellationToken)
+        {
+            while (await waitToReadAsync)
+            {
+                if (source.TryRead(out var value))
+                {
+                    destination.Receive(value);
+                    return true;
+                }
+                waitToReadAsync = source.WaitToReadAsync(cancellationToken);
+            }
+            return false;
+        }
+    }
 
     protected abstract ValueTask ReceivePayloadAsync(TReceive value, CancellationToken cancellationToken);
     public abstract FrameKind Kind { get; }

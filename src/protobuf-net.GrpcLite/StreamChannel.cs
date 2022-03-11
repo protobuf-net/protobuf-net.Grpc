@@ -12,18 +12,7 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
 {
     public static async ValueTask<StreamChannel> ConnectNamedPipeAsync(string pipeName, string? serverName = null, ILogger? logger = null, CancellationToken cancellationToken = default)
     {
-        string target;
-        if (string.IsNullOrWhiteSpace(serverName))
-        {
-            serverName = ".";
-            target = pipeName;
-        }
-        else
-        {
-            target = serverName + "/" + pipeName;
-        }
-        var client = new NamedPipeClientStream(serverName, pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough,
-            TokenImpersonationLevel.None, HandleInheritability.None);
+        var client = CreateClient(pipeName, serverName, out var target);
         try
         {
             await client.ConnectAsync(cancellationToken);
@@ -35,6 +24,37 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
             catch { }
             throw;
         }
+    }
+
+    internal static StreamChannel ConnectNamedPipe(string pipeName, string? serverName = null, ILogger? logger = null, TimeSpan timeout = default)
+    {
+        var client = CreateClient(pipeName, serverName, out var target);
+        try
+        {
+            client.Connect((int)timeout.TotalMilliseconds);
+            return new StreamChannel(client, target, logger);
+        }
+        catch
+        {
+            try { client.Dispose(); }
+            catch { }
+            throw;
+        }
+    }
+
+    static NamedPipeClientStream CreateClient(string pipeName, string? serverName, out string target)
+    {
+        if (string.IsNullOrWhiteSpace(serverName))
+        {
+            serverName = ".";
+            target = pipeName;
+        }
+        else
+        {
+            target = serverName + "/" + pipeName;
+        }
+        return new NamedPipeClientStream(serverName, pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough,
+            TokenImpersonationLevel.None, HandleInheritability.None);
     }
 
     private readonly Stream _input, _output;

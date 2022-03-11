@@ -6,7 +6,7 @@ namespace ProtoBuf.Grpc.Lite
 {
     public sealed class NamedPipeServer : StreamServer
     {
-        public NamedPipeServer(ILogger? logger) : base(logger) { }
+        public NamedPipeServer(ILogger? logger = null) : base(logger) { }
         internal async Task ListenOneAsync(string pipeName, CancellationToken cancellationToken)
         {
             using var stream = new NamedPipeServerStream(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.WriteThrough | PipeOptions.Asynchronous);

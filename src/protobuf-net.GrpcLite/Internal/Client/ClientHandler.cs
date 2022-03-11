@@ -39,9 +39,7 @@ internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TReques
     }
 
     Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message)
-    {
-        throw new NotImplementedException();
-    }
+        => SendAsync(message, false, default).AsTask();
 
     protected const bool AllowClientRecycling = false; // see comments in Dispose()
 

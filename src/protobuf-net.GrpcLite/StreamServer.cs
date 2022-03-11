@@ -10,7 +10,7 @@ namespace ProtoBuf.Grpc.Lite
 {
     public abstract class StreamServer
     {
-        public StreamServer(ILogger? logger)
+        public StreamServer(ILogger? logger = null)
             => Logger = logger;
 
         internal readonly ILogger? Logger;

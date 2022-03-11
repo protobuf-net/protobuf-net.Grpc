@@ -1,8 +1,15 @@
 ﻿syntax = "proto3";
 
-message FooRequest {}
-message FooResponse {}
+message FooRequest {
+	int32 Value = 1;
+}
+message FooResponse {
+	int32 Value = 1;
+}
 
 service FooService {
-   rpc Bar (FooRequest) returns (FooResponse);
+   rpc Unary (FooRequest) returns (FooResponse);
+   rpc Duplex (stream FooRequest) returns (stream FooResponse);
+   rpc ClientStreaming (stream FooRequest) returns (FooResponse);
+   rpc ServerStreaming (FooRequest) returns (stream FooResponse);
 }

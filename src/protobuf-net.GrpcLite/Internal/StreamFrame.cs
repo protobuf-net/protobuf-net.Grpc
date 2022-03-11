@@ -35,7 +35,7 @@ internal readonly struct StreamFrame : IDisposable
     public readonly byte[] Buffer;
 
     public StreamFrame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Utilities.EmptyBuffer, 0, 0, FrameFlags.None, 0) { }
-    public StreamFrame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags, ushort sequenceId = 0)
+    public StreamFrame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags, ushort sequenceId)
     {
         Kind = kind;
         RequestId = id;
@@ -143,12 +143,19 @@ internal readonly struct StreamFrame : IDisposable
         if ((FrameFlags & FrameFlags.RecycleBuffer) != 0) ArrayPool<byte>.Shared.Return(Buffer);
     }
 
-    public override string ToString() => $"[{RequestId}, {Kind}] {Length} bytes ({FrameFlags}, {KindFlags})";
+    private string FormattedFlags => Kind switch
+    {
+        FrameKind.Payload => ((PayloadFlags)KindFlags).ToString(),
+        FrameKind.Close => ((GeneralFlags)KindFlags).ToString(),
+        FrameKind.Ping=> ((GeneralFlags)KindFlags).ToString(),
+        _ => KindFlags.ToString(),
+    };
+    public override string ToString() => $"[{RequestId}/{SequenceId}:{Kind}] {Length} bytes ({FrameFlags}, {FormattedFlags})";
 
     public override bool Equals(object? obj) => throw new NotSupportedException();
     public override int GetHashCode() => throw new NotSupportedException();
 
-    public static StreamFrame GetInitializeFrame(FrameKind kind, ushort id, string fullName, string? host)
+    public static StreamFrame GetInitializeFrame(FrameKind kind, ushort id, ushort sequenceId, string fullName, string? host)
     {
         if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();
         if (!string.IsNullOrEmpty(host)) ThrowNotSupported(); // in future: delimit?
@@ -159,7 +166,7 @@ internal readonly struct StreamFrame : IDisposable
         var actualLength = Encoding.UTF8.GetBytes(fullName, 0, fullName.Length, buffer, StreamFrame.HeaderBytes);
         Debug.Assert(actualLength == length, "length mismatch in encoding!");
 
-        return new StreamFrame(kind, id, 0, buffer, StreamFrame.HeaderBytes, (ushort)length, FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved);
+        return new StreamFrame(kind, id, 0, buffer, StreamFrame.HeaderBytes, (ushort)length, FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved, sequenceId);
 
         static void ThrowMissingMethod() => throw new ArgumentOutOfRangeException(nameof(fullName), "No method name was specified");
         static void ThrowNotSupported() => throw new ArgumentOutOfRangeException(nameof(host), "Non-empty hosts are not currently supported");

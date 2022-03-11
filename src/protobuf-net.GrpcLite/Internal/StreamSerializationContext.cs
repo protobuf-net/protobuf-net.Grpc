@@ -14,7 +14,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
 
     public long Length => _totalLength;
 
-    public async ValueTask<int> WritePayloadAsync(ChannelWriter<StreamFrame> writer, ushort id, bool isLastElement, CancellationToken cancellationToken)
+    public async ValueTask<int> WritePayloadAsync(ChannelWriter<StreamFrame> writer, IHandler handler, bool isLastElement, CancellationToken cancellationToken)
     {
         var finalFlags = isLastElement ? (PayloadFlags.EndItem | PayloadFlags.EndAllItems) : PayloadFlags.EndItem;
         var frames = 0;
@@ -30,7 +30,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
                     remaining -= take;
                     var payloadFlags = remaining == 0 && _buffers.Count == 0 ? finalFlags : PayloadFlags.None;
                     var frameFlags = buffer.ViaWriter ? FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved : FrameFlags.None;
-                    await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags), cancellationToken);
+                    await writer.WriteAsync(new StreamFrame(FrameKind.Payload, handler.Id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags, handler.NextSequenceId()), cancellationToken);
                     frames++;
                     offset += take;
                 }
@@ -41,7 +41,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         if (frames == 0)
         {
             // write an empty final payload if nothing was written
-            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, id, (byte)finalFlags), cancellationToken);
+            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, handler.Id, (byte)finalFlags), cancellationToken);
             frames++;
         }
         return frames;

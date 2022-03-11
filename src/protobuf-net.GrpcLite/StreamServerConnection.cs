@@ -76,7 +76,7 @@ namespace ProtoBuf.Grpc.Lite
                         }
                         else if (handler.Kind != frame.Kind)
                         {
-                            _logger.LogInformation((Expected: handler.Kind, Received: frame.Kind), static (state, _) => $"invalid method kind: expected {state.Expected}, received {state.Received}");
+                            _logger.LogInformation((Handler: handler, Received: frame.Kind), static (state, _) => $"invalid method kind: expected {state.Handler.Kind}, received {state.Received}; {state.Handler.Method}");
                             await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
                         }
                         else if (!_activeOperations.TryAdd(frame.RequestId, handler))
@@ -88,7 +88,17 @@ namespace ProtoBuf.Grpc.Lite
                         {
                             handler.Initialize(frame.RequestId, _outbound, _logger);
                             _logger.LogDebug(method, static (state, _) => $"method accepted: {state}");
+
+
+                            // intiate the server request
+                            switch (frame.Kind)
+                            {
+                                case FrameKind.NewDuplex:
+                                    handler.Execute();
+                                    break;
+                            }
                         }
+
                         break;
                     case FrameKind.Payload:
                         if (_activeOperations.TryGetValue(frame.RequestId, out handler))

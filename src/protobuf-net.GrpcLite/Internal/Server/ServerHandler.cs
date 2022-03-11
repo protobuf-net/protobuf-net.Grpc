@@ -20,8 +20,9 @@ internal interface IServerHandler : IHandler
     WriteOptions WriteOptions { get; set; }
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
+    void Execute();
 }
-internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler where TResponse : class where TRequest : class
+internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler, IServerStreamWriter<TResponse> where TResponse : class where TRequest : class
 {
     protected StreamServerCallContext CreateServerCallContext() => StreamServerCallContext.Get(this);
 
@@ -40,6 +41,55 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
         RequestHeaders = Metadata.Empty;
         WriteOptions = WriteOptions.Default;
         _responseTrailers = null;
+    }
+
+    public void Execute() => ThreadPool.QueueUserWorkItem(static state =>
+    {
+        _ = Unsafe.As<ServerHandler<TRequest, TResponse>>(state!).InvokeAndCompleteAsync();
+    }, this);
+
+    protected abstract Task InvokeServerMethod(ServerCallContext context);
+
+    protected async Task InvokeAndCompleteAsync()
+    {
+        try
+        {
+            var method = Method;
+            Logger.LogDebug(method, static (state, _) => $"invoking {state.FullName}...");
+            try
+            {
+                var ctx = CreateServerCallContext();
+                await InvokeServerMethod(ctx);
+                ctx.Recycle();
+                Logger.LogDebug(method, static (state, _) => $"completed {state.FullName}...");
+            }
+            catch (RpcException rpc)
+            {
+                Logger.LogInformation(method!, static (state, ex) => $"rpc exception {state.FullName}: {ex!.Message}", rpc);
+                var status = rpc.Status;
+                if (status.StatusCode == StatusCode.OK)
+                {
+                    // one does not simply fail with success!
+                    status = new Status(StatusCode.Unknown, status.Detail, status.DebugException);
+                }
+                Status = status;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(method!, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
+                Status = new Status(StatusCode.Unknown, "The server encountered an error while performing the operation", ex);
+            }
+
+            await WriteStatusAndTrailers();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Logger.LogCritical(Method!, static (state, ex) => $"invocation failure {state.FullName}: {ex!.Message}", ex);
+            }
+            catch { }
+        }
     }
 
     string IServerHandler.Method => Method!.FullName;
@@ -71,7 +121,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
             Logger.LogDebug(Method, static (state, _) => $"serializing {state.FullName} response...");
             TypedMethod.ResponseMarshaller.ContextualSerializer(response, serializationContext);
             Logger.LogDebug(serializationContext, static (state, _) => $"serialized {state.Length} bytes");
-            var frames = await serializationContext.WritePayloadAsync(Output, Id, isLastElement, CancellationToken);
+            var frames = await serializationContext.WritePayloadAsync(Output, this, isLastElement, CancellationToken);
             Logger.LogDebug(frames, static (state, _) => $"added {state} payload frames");
         }
         finally
@@ -94,4 +144,6 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
     Task IServerHandler.WriteResponseHeadersAsyncCore(Metadata responseHeaders)
         => WriteHeaders(responseHeaders).AsTask();
 
+    Task IAsyncStreamWriter<TResponse>.WriteAsync(TResponse message)
+        => SendAsync(message, false, CancellationToken.None).AsTask();
 }
