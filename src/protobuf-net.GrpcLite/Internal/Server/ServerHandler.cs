@@ -1,12 +1,13 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
 internal interface IServerHandler : IHandler
 {
-    public void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger);
+    void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger);
     Status Status { get; set; }
     DateTime Deadline { get; }
     string Host { get; }
@@ -20,29 +21,18 @@ internal interface IServerHandler : IHandler
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
 }
-internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRequest>, IServerHandler where TResponse : class where TRequest : class
+internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler where TResponse : class where TRequest : class
 {
-    private ushort _id;
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    // these are all set via initialize
-    private Method<TRequest, TResponse> _method;
-    ChannelWriter<StreamFrame> _output;
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    private ILogger? _logger;
-
-    protected Method<TRequest, TResponse> Method
-    {
-        get => _method;
-        set => _method = value;
-    }
     protected StreamServerCallContext CreateServerCallContext() => StreamServerCallContext.Get(this);
 
-    protected override Marshaller<TRequest> ReceiveMarshaller => _method.RequestMarshaller;
-    public void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger)
+    protected override Action<TResponse, SerializationContext> Serializer => TypedMethod.ResponseMarshaller.ContextualSerializer;
+    protected override Func<DeserializationContext, TRequest> Deserializer => TypedMethod.RequestMarshaller.ContextualDeserializer;
+
+    private Method<TRequest, TResponse> TypedMethod => Unsafe.As<Method<TRequest, TResponse>>(Method);
+
+    public override void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger)
     {
-        _output = output;
-        _logger = logger;
-        _id = id;
+        base.Initialize(id, output, logger);
         Status = Status.DefaultSuccess;
         Deadline = DateTime.MaxValue;
         Host = Peer = "";
@@ -52,7 +42,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TReques
         _responseTrailers = null;
     }
 
-    string IServerHandler.Method => _method?.FullName ?? "";
+    string IServerHandler.Method => Method!.FullName;
 
     private Metadata? _responseTrailers;
     Metadata IServerHandler.ResponseTrailers => _responseTrailers ??= new Metadata();
@@ -78,11 +68,11 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TReques
         var serializationContext = Pool<StreamSerializationContext>.Get();
         try
         {
-            _logger.LogDebug(_method, static (state, _) => $"serializing {state.FullName} response...");
-            _method.ResponseMarshaller.ContextualSerializer(response, serializationContext);
-            _logger.LogDebug(serializationContext, static (state, _) => $"serialized {state.Length} bytes");
-            var frames = await serializationContext.WritePayloadAsync(_output, _id, isLastElement, CancellationToken);
-            _logger.LogDebug(frames, static (state, _) => $"added {state} payload frames");
+            Logger.LogDebug(Method, static (state, _) => $"serializing {state.FullName} response...");
+            TypedMethod.ResponseMarshaller.ContextualSerializer(response, serializationContext);
+            Logger.LogDebug(serializationContext, static (state, _) => $"serialized {state.Length} bytes");
+            var frames = await serializationContext.WritePayloadAsync(Output, Id, isLastElement, CancellationToken);
+            Logger.LogDebug(frames, static (state, _) => $"added {state} payload frames");
         }
         finally
         {

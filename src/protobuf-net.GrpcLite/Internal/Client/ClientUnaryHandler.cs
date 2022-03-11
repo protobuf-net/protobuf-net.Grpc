@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal sealed class ClientUnaryHandler<TResponse> : ClientHandler<TResponse> where TResponse : class
+internal sealed class ClientUnaryHandler<TRequest, TResponse> : ClientHandler<TRequest, TResponse> where TResponse : class where TRequest : class
 {
 
     public override void Recycle()
@@ -12,17 +12,17 @@ internal sealed class ClientUnaryHandler<TResponse> : ClientHandler<TResponse> w
         var tmp = _tcs;
         _tcs = null;
         tmp?.TrySetCanceled();
-        Pool<ClientUnaryHandler<TResponse>>.Put(this);
+        Pool<ClientUnaryHandler<TRequest, TResponse>>.Put(this);
     }
     private TaskCompletionSource<TResponse>? _tcs;
 
     public override FrameKind Kind => FrameKind.NewUnary;
 
-    public static ClientUnaryHandler<TResponse> Get(ushort id, Marshaller<TResponse> marshaller, CancellationToken cancellationToken)
+    public static ClientUnaryHandler<TRequest, TResponse> Get(CancellationToken cancellation)
     {
-        var obj = AllowClientRecycling ? Pool<ClientUnaryHandler<TResponse>>.Get() : new ClientUnaryHandler<TResponse>();
-        obj.Initialize(id, marshaller, cancellationToken);
+        var obj = AllowClientRecycling ? Pool<ClientUnaryHandler<TRequest, TResponse>>.Get() : new ClientUnaryHandler<TRequest, TResponse>();
         obj._tcs = new TaskCompletionSource<TResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        obj.Register(cancellation);
         return obj;
     }
 
@@ -40,16 +40,16 @@ internal sealed class ClientUnaryHandler<TResponse> : ClientHandler<TResponse> w
     public override ValueTask CompleteAsync(CancellationToken cancellationToken)
         => throw new NotImplementedException();
 
-    protected override ValueTask PushCompletePayloadAsync(ushort id, ChannelWriter<StreamFrame> output, TResponse value, ILogger? logger, CancellationToken cancellationToken)
+    protected override ValueTask ReceivePayloadAsync(TResponse value, CancellationToken cancellationToken)
     {
         bool success = _tcs!.TrySetResult(value);
         if (success)
         {
-            logger.LogDebug(id, static (state, _) => $"assigned response for request {state}");
+            Logger.LogDebug(Id, static (state, _) => $"assigned response for request {state}");
         }
         else
         {
-            logger.LogDebug(id, static (state, _) => $"unable to assign response for request {state}");
+            Logger.LogDebug(Id, static (state, _) => $"unable to assign response for request {state}");
         }
         UnregisterCancellation();
         return default;

@@ -7,6 +7,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal sealed class StreamCallInvoker : CallInvoker
 {
+    private readonly ILogger? _logger;
     private readonly Channel<StreamFrame> _outbound;
     private readonly ConcurrentDictionary<ushort, IClientHandler> _activeOperations = new();
     private int _nextId = -1; // so that our first id is zero
@@ -24,7 +25,7 @@ internal sealed class StreamCallInvoker : CallInvoker
         }
     }
 
-    public StreamCallInvoker(Channel<StreamFrame> outbound)
+    public StreamCallInvoker(Channel<StreamFrame> outbound, ILogger? logger)
     {
         this._outbound = outbound;
     }
@@ -36,15 +37,17 @@ internal sealed class StreamCallInvoker : CallInvoker
         where TRequest : class
         where TResponse : class
     {
-        var receiver = ClientUnaryHandler<TResponse>.Get(NextId(), method.ResponseMarshaller, options.CancellationToken);
-        _ = WriteAsync(receiver, method, host, options, request, isLastElement: true);
+        var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
+        handler.Initialize(NextId(), method, _outbound, _logger);
+        AddHandler(handler);
         try
         {
-            return await receiver.ResponseAsync;
+            await handler.SendSingleAsync(host, options, request);
+            return await handler.ResponseAsync;
         }
         finally
         {   // since we've never exposed this to the external world, we can safely recycle it
-            receiver.Recycle();
+            handler.Recycle();
         }
     }
 
@@ -55,9 +58,38 @@ internal sealed class StreamCallInvoker : CallInvoker
 
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        var receiver = ClientUnaryHandler<TResponse>.Get(NextId(), method.ResponseMarshaller, options.CancellationToken);
-        _ = WriteAsync(receiver, method, host, options, request, isLastElement: true);
-        return new AsyncUnaryCall<TResponse>(receiver.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, receiver);
+        var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
+        handler.Initialize(NextId(), method, _outbound, _logger);
+        AddHandler(handler);
+        _ = handler.SendSingleAsync(host, options, request);
+        return new AsyncUnaryCall<TResponse>(handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+    }
+
+    public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
+    {
+        var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
+        handler.Initialize(NextId(), method, _outbound, _logger);
+        AddHandler(handler);
+        _ = handler.SendInitializeAsync(host, options).AsTask();
+        return new AsyncClientStreamingCall<TRequest, TResponse>(handler, handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+    }
+
+    public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
+    {
+        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.NewDuplex);
+        handler.Initialize(NextId(), method, _outbound, _logger);
+        AddHandler(handler);
+        _ = handler.SendInitializeAsync(host, options).AsTask();
+        return new AsyncDuplexStreamingCall<TRequest, TResponse>(handler, handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+    }
+
+    public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
+    {
+        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.NewServerStreaming);
+        handler.Initialize(NextId(), method, _outbound, _logger);
+        AddHandler(handler);
+        _ = handler.SendSingleAsync(host, options, request);
+        return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
 
     internal async Task ConsumeAsync(Stream input, ILogger? logger, CancellationToken cancellationToken)
@@ -92,69 +124,19 @@ internal sealed class StreamCallInvoker : CallInvoker
                 case FrameKind.Payload:
                     if (_activeOperations.TryGetValue(frame.RequestId, out var handler))
                     {
-                        await handler.PushPayloadAsync(frame, _outbound.Writer, logger, cancellationToken);
+                        await handler.ReceivePayloadAsync(frame, cancellationToken);
                     }
                     break;
             }
         }
     }
 
-    private void AddReceiver(IClientHandler receiver)
+    private void AddHandler(IClientHandler receiver)
     {
         if (receiver is null) ThrowNull();
         if (!_activeOperations.TryAdd(receiver!.Id, receiver)) ThrowDuplicate(receiver.Id);
 
         static void ThrowNull() => throw new ArgumentNullException(nameof(receiver));
         static void ThrowDuplicate(ushort id) => throw new ArgumentException($"Duplicate receiver key: {id}");
-    }
-
-    private async Task WriteAsync<TResponse, TRequest>(ClientUnaryHandler<TResponse> receiver, Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request,
-        bool isLastElement)
-        where TResponse : class
-        where TRequest : class
-    {
-        StreamSerializationContext? serializationContext = null;
-        bool complete = false;
-        options.CancellationToken.ThrowIfCancellationRequested();
-        try
-        {
-            AddReceiver(receiver);
-            await _outbound.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, receiver.Id, method.FullName, host));
-            serializationContext = Pool<StreamSerializationContext>.Get();
-            method.RequestMarshaller.ContextualSerializer(request, serializationContext);
-            await serializationContext.WritePayloadAsync(_outbound.Writer, receiver.Id, isLastElement, options.CancellationToken);
-            complete = true;
-        }
-        catch (Exception ex)
-        {
-            if (receiver is not null)
-            {
-                _activeOperations.TryRemove(receiver.Id, out _);
-                receiver?.Fault("Error writing message", ex);
-            }
-        }
-        finally
-        {
-            if (!complete) 
-            {
-                await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, receiver.Id, 0));
-            }
-            serializationContext?.Recycle();
-        }
-    }
-
-    public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
-    {
-        throw new NotImplementedException();
-    }
-
-    public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
-    {
-        throw new NotImplementedException();
-    }
-
-    public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
-    {
-        throw new NotImplementedException();
     }
 }

@@ -20,4 +20,6 @@ internal static class Utilities
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void LogError<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.Log<TState>(LogLevel.Error, default, state, exception, formatter);
+
+    public static readonly Task<bool> AsyncTrue = Task.FromResult(true), AsyncFalse = Task.FromResult(false);
 }

@@ -10,7 +10,7 @@ namespace ProtoBuf.Grpc.Lite;
 
 public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
 {
-    public static async ValueTask<StreamChannel> ConnectNamedPipeAsync(string pipeName, string? serverName = null, CancellationToken cancellationToken = default)
+    public static async ValueTask<StreamChannel> ConnectNamedPipeAsync(string pipeName, string? serverName = null, ILogger? logger = null, CancellationToken cancellationToken = default)
     {
         string target;
         if (string.IsNullOrWhiteSpace(serverName))
@@ -27,7 +27,7 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         try
         {
             await client.ConnectAsync(cancellationToken);
-            return new StreamChannel(client, target);
+            return new StreamChannel(client, target, logger);
         }
         catch
         {
@@ -53,7 +53,7 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         _input = input;
         _output = output;
         _outbound = StreamFrame.CreateChannel();
-        _callInvoker = new StreamCallInvoker(_outbound);
+        _callInvoker = new StreamCallInvoker(_outbound, logger);
         Complete = StreamFrame.WriteFromOutboundChannelToStream(_outbound, _output, logger, cancellationToken);
 
         _ = _callInvoker.ConsumeAsync(input, logger, cancellationToken);

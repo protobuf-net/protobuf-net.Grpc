@@ -1,11 +1,13 @@
 ﻿using Grpc.Core;
+using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal interface IClientHandler : IHandler, IDisposable
 {
-    ushort Id { get; }
+    void Initialize(ushort id, IMethod method, ChannelWriter<StreamFrame> output, ILogger? logger);
     Task<Metadata> ResponseHeadersAsync { get; }
 
     Status Status { get; }
@@ -13,11 +15,33 @@ internal interface IClientHandler : IHandler, IDisposable
     void Cancel();
 }
 
-internal abstract class ClientHandler<TResponse> : HandlerBase<TResponse>, IClientHandler where TResponse : class
+internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientHandler where TRequest : class where TResponse : class
 {
-    CancellationTokenRegistration _ctr;
-    public ushort Id { get; private set;  }
+    public void Initialize(ushort id, IMethod method, ChannelWriter<StreamFrame> output, ILogger? logger)
+    {
+        Initialize(id, output, logger);
+        Method = method;
+    }
 
+    CancellationTokenRegistration _ctr;
+
+    private WriteOptions? _writeOptions;
+    WriteOptions IAsyncStreamWriter<TRequest>.WriteOptions
+    {
+        get => _writeOptions!;
+        set => _writeOptions = value;
+    }
+
+    Task IClientStreamWriter<TRequest>.CompleteAsync()
+    {
+        //CompleteResponseChannel();
+        return Task.CompletedTask;
+    }
+
+    Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message)
+    {
+        throw new NotImplementedException();
+    }
 
     protected const bool AllowClientRecycling = false; // see comments in Dispose()
 
@@ -41,16 +65,14 @@ internal abstract class ClientHandler<TResponse> : HandlerBase<TResponse>, IClie
 
     public Status Status { get; protected set; }
 
-    protected override Marshaller<TResponse> ReceiveMarshaller => _marshaller;
+    protected override Action<TRequest, SerializationContext> Serializer => TypedMethod.RequestMarshaller.ContextualSerializer;
+    protected override Func<DeserializationContext, TResponse> Deserializer => TypedMethod.ResponseMarshaller.ContextualDeserializer;
 
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    private Marshaller<TResponse> _marshaller; // set in Initialize
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+    protected Method<TRequest, TResponse> TypedMethod => Unsafe.As<Method<TRequest, TResponse>>(Method);
 
-    protected void Initialize(ushort id, Marshaller<TResponse> marshaller, CancellationToken cancellationToken)
+    protected void Register(CancellationToken cancellationToken)
     {
-        Id = id;
-        _marshaller = marshaller;
+        _writeOptions = WriteOptions.Default;
         if (cancellationToken.CanBeCanceled)
         {
             cancellationToken.ThrowIfCancellationRequested();

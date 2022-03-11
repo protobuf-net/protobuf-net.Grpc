@@ -25,16 +25,16 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
     public override FrameKind Kind => FrameKind.NewUnary;
     public override ValueTask CompleteAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 
-    protected override async ValueTask PushCompletePayloadAsync(ushort id, ChannelWriter<StreamFrame> output, TRequest value, ILogger? logger, CancellationToken cancellationToken)
+    protected override async ValueTask ReceivePayloadAsync(TRequest value, CancellationToken cancellationToken)
     {
         var method = Method;
-        logger.LogDebug(method, static (state, _) => $"invoking {state.FullName}...");
+        Logger.LogDebug(method, static (state, _) => $"invoking {state.FullName}...");
         try
         {
             var ctx = CreateServerCallContext();
             var response = await _handler!(value, null!);
             ctx.Recycle();
-            logger.LogDebug(method, static (state, _) => $"completed {state.FullName}...");
+            Logger.LogDebug(method, static (state, _) => $"completed {state.FullName}...");
 
             if (Status.StatusCode == StatusCode.OK)
             {
@@ -43,7 +43,7 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
         }
         catch (RpcException rpc)
         {
-            logger.LogInformation(method!, static (state, ex) => $"rpc exception {state.FullName}: {ex!.Message}", rpc);
+            Logger.LogInformation(method!, static (state, ex) => $"rpc exception {state.FullName}: {ex!.Message}", rpc);
             var status = rpc.Status;
             if (status.StatusCode == StatusCode.OK)
             {
@@ -54,7 +54,7 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
         }
         catch (Exception ex)
         {
-            logger.LogError(method!, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
+            Logger.LogError(method!, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
             Status = new Status(StatusCode.Unknown, "The server encountered an error while performing the operation", ex);
         }
 

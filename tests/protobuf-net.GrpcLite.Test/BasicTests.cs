@@ -19,20 +19,29 @@ public class BasicTests
     public BasicTests(ITestOutputHelper output)
     {
         _output = output;
-        Logger = new BasicLogger(_output);
+        Logger = new BasicLogger(_output, "");
     }
+
+    private ILogger CreateLogger(string prefix)
+        => new BasicLogger(_output, prefix);
+
     class BasicLogger : ILogger, IDisposable
     {
         private readonly ITestOutputHelper _output;
+        private readonly string _prefix;
 
-        public BasicLogger(ITestOutputHelper output) => _output = output;
+        public BasicLogger(ITestOutputHelper output, [CallerMemberName] string prefix = "")
+        {
+            _output = output;
+            _prefix = prefix;
+        }
 
         IDisposable ILogger.BeginScope<TState>(TState state) => null!;
 
         bool ILogger.IsEnabled(LogLevel logLevel) => _output is not null;
 
         void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-            => _output?.WriteLine(formatter(state, exception));
+            => _output?.WriteLine(string.IsNullOrWhiteSpace(_prefix) ? formatter(state, exception) : "[" + _prefix + "] " + formatter(state, exception));
         void IDisposable.Dispose() { }
     }
     ILogger Logger { get; }
@@ -151,13 +160,13 @@ public class BasicTests
     {
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var name = Guid.NewGuid().ToString();
-        var server = new NamedPipeServer(Logger);
+        var server = new NamedPipeServer(CreateLogger("server"));
         server.ManualBind<MyService>();
         Assert.Equal(1, server.MethodCount);
 
         var complete = server.ListenOneAsync(name, cts.Token);
 
-        await using var client = await StreamChannel.ConnectNamedPipeAsync(name, cancellationToken: cts.Token);
+        await using var client = await StreamChannel.ConnectNamedPipeAsync(name, cancellationToken: cts.Token, logger: CreateLogger("client"));
         var proxy = new FooService.FooServiceClient(client);
         var response = await proxy.BarAsync(new FooRequest { }, default(CallOptions).WithCancellationToken(cts.Token));
         Assert.NotNull(response);
