@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal sealed class StreamCallInvoker : CallInvoker
 {

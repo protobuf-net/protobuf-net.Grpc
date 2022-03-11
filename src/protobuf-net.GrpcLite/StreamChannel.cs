@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Internal.Client;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Threading.Channels;

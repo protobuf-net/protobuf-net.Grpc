@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Internal.Server;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;

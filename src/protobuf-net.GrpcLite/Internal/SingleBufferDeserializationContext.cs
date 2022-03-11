@@ -3,16 +3,16 @@ using System.Buffers;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal sealed class SingleBufferStreamDeserializationContext : DeserializationContext
+internal sealed class SingleBufferDeserializationContext : DeserializationContext
 {
-    private static SingleBufferStreamDeserializationContext? _spare;
+    private static SingleBufferDeserializationContext? _spare;
     private byte[] _buffer = Array.Empty<byte>();
     private int _offset, _length;
 
-    public static SingleBufferStreamDeserializationContext Get()
-        => Interlocked.Exchange(ref _spare, null) ?? new SingleBufferStreamDeserializationContext();
+    public static SingleBufferDeserializationContext Get()
+        => Interlocked.Exchange(ref _spare, null) ?? new SingleBufferDeserializationContext();
 
-    private SingleBufferStreamDeserializationContext Reset()
+    private SingleBufferDeserializationContext Reset()
     {
         _offset = _length = 0;
         _buffer = Array.Empty<byte>();

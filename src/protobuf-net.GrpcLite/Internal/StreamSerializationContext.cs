@@ -9,8 +9,9 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
     private static StreamSerializationContext? _spare;
     private readonly Queue<(byte[] Buffer, int Offset, int Length, bool ViaWriter)> _buffers = new();
     private byte[] _currentBuffer = Array.Empty<byte>();
-    private int _offset, _remaining;
+    private int _offset, _remaining, _nextSize = InitialBufferSize;
     private long _totalLength;
+    const int InitialBufferSize = 1024, MaxBufferSize = 64 * 1024;
 
     public long Length => _totalLength;
 
@@ -53,6 +54,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
     {
         _buffers.Clear();
         _totalLength = _offset = _remaining = 0;
+        _nextSize = InitialBufferSize;
         if (_currentBuffer.Length != 0)
             ArrayPool<byte>.Shared.Return(_currentBuffer);
         _currentBuffer = Array.Empty<byte>();
@@ -84,7 +86,9 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         }
         if (getNew)
         {
-            _currentBuffer = ArrayPool<byte>.Shared.Rent(2048);
+            var size = _nextSize;
+            if (size < MaxBufferSize) _nextSize <<= 1; // use incrementally bigger buffers, up to a limit
+            _currentBuffer = ArrayPool<byte>.Shared.Rent(size);
             _offset = StreamFrame.HeaderBytes;
             _remaining = _currentBuffer.Length - StreamFrame.HeaderBytes;
         }
