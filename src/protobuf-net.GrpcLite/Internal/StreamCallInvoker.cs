@@ -9,13 +9,13 @@ internal sealed class StreamCallInvoker : CallInvoker
 {
     private Channel<StreamFrame> _outbound;
     private ConcurrentDictionary<ushort, IStreamReceiver> _activeOperations = new();
-    private uint _nextId = ushort.MaxValue; // so that our first id is zero
+    private int _nextId = -1; // so that our first id is zero
     private ushort NextId()
     {
         while (true)
         {
             var id = Interlocked.Increment(ref _nextId);
-            if (id <= ushort.MaxValue) return (ushort)id; // in-range; that'll do
+            if (id <= ushort.MaxValue && id >= 0) return (ushort)id; // in-range; that'll do
 
             // try to swap to zero; if we win: we are become zero
             if (Interlocked.CompareExchange(ref _nextId, 0, id) == id) return 0;
@@ -67,7 +67,7 @@ internal sealed class StreamCallInvoker : CallInvoker
                     if ((generalFlags & GeneralFlags.IsResponse) == 0)
                     {
                         // if this was a request, we reply in kind, but noting that it is a response
-                        await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.Id, (byte)GeneralFlags.IsResponse), cancellationToken);
+                        await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
                     }
                     // shutdown if requested
                     if (frame.Kind == FrameKind.Close)
@@ -82,7 +82,7 @@ internal sealed class StreamCallInvoker : CallInvoker
                     logger.LogError(frame, static (state, _) => $"server should not be initializing requests! {state}");
                     break;
                 case FrameKind.Payload:
-                    if (_activeOperations.TryGetValue(frame.Id, out var handler))
+                    if (_activeOperations.TryGetValue(frame.RequestId, out var handler))
                     {
                         await handler.PushPayloadAsync(frame, _outbound.Writer, logger, cancellationToken);
                     }

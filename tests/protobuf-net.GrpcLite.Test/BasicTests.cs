@@ -54,15 +54,15 @@ public class BasicTests
         var channel = Channel.CreateUnbounded<StreamFrame>();
         await channel.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, 42, "/myservice/mymethod", ""));
         var bytes = Encoding.UTF8.GetBytes("hello, world!");
-        await channel.Writer.WriteAsync(new StreamFrame(FrameKind.Payload, 42, (byte)PayloadFlags.Final, bytes, 0, (ushort)bytes.Length, FrameFlags.None));
+        await channel.Writer.WriteAsync(new StreamFrame(FrameKind.Payload, 42, (byte)PayloadFlags.Final, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
         channel.Writer.Complete();
         await StreamFrame.WriteFromOutboundChannelToStream(channel, ms, Logger, default);
 
         var hex = GetHex(ms);
         Assert.Equal(
-            "01-00-2A-00-13-00-" // unary, id 42, length 19
+            "01-00-2A-00-00-00-13-00-" // unary, id 42, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-01-2A-00-0D-00-" // payload, final, id 42, length 13
+            + "05-01-2A-00-03-00-0D-00-" // payload, final, id 42, length 13, seq 3
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
 
         ms.Position = 0;
@@ -70,14 +70,18 @@ public class BasicTests
         {
             Assert.Equal(FrameKind.NewUnary, frame.Kind);
             Assert.Equal(0, frame.KindFlags);
-            Assert.Equal(42, frame.Id);
+            Assert.Equal(42, frame.RequestId);
+            Assert.Equal(0, frame.SequenceId);
+            Assert.Equal(19, frame.Length);
             Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length));
         }
         using (var frame = await StreamFrame.ReadAsync(ms, CancellationToken.None))
         {
             Assert.Equal(FrameKind.Payload, frame.Kind);
             Assert.Equal((byte)PayloadFlags.Final, frame.KindFlags);
-            Assert.Equal(42, frame.Id);
+            Assert.Equal(42, frame.RequestId);
+            Assert.Equal(3, frame.SequenceId);
+            Assert.Equal(13, frame.Length);
             Assert.Equal("hello, world!", Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length));
         }
     }
@@ -106,9 +110,9 @@ public class BasicTests
 
         var hex = GetHex(ms);
         Assert.Equal(
-            "01-00-00-00-13-00-" // unary, id 0, length 19
+            "01-00-00-00-00-00-13-00-" // unary, id 0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-01-00-00-0D-00-" // payload, final, id 0, length 13
+            + "05-01-00-00-00-00-0D-00-" // payload, final, id 0, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -127,9 +131,9 @@ public class BasicTests
 
         var hex = GetHex(ms);
         Assert.Equal(
-            "01-00-00-00-13-00-" // unary, id 0, length 19
+            "01-00-00-00-00-00-13-00-" // unary, id 0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-01-00-00-0D-00-" // payload, final, id 0, length 13
+            + "05-01-00-00-00-00-0D-00-" // payload, final, id 0, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 

@@ -55,7 +55,11 @@ namespace ProtoBuf.Grpc.Lite
             if (!_handlers.TryAdd(fullName, handlerFactory)) ThrowDuplicate(fullName);
             static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
         }
-        internal bool TryGetHandler(string fullName, [MaybeNullWhen(false)] out Func<IHandler> handlerFactory)
+        internal bool TryGetHandler(string fullName,
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+            [MaybeNullWhen(false)]
+#endif
+            out Func<IHandler> handlerFactory)
             => _handlers.TryGetValue(fullName, out handlerFactory);
     }
 }

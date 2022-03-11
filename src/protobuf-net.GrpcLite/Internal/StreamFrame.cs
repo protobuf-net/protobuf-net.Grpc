@@ -2,47 +2,140 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
+[StructLayout(LayoutKind.Explicit)]
 internal readonly struct StreamFrame : IDisposable
 {
-    public const int HeaderBytes = 6; // kind=1,kindFlags=1,id=2,length=2
+    public const int HeaderBytes = 8; // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
-    // order here is to help packing
-    public byte[] Buffer { get; }
+    [FieldOffset(0)]
+    public readonly FrameKind Kind;
+    [FieldOffset(1)]
+    public readonly byte KindFlags; // kind-specific
+    [FieldOffset(2)]
+    public readonly ushort RequestId;
+    [FieldOffset(4)]
+    public readonly ushort SequenceId;
+    [FieldOffset(6)]
+    public readonly ushort Length;
 
-    public int Offset { get; }
-    public ushort Id { get; }
-    public ushort Length { get; }
+    // everything below here is not part of the binary payload
+    [FieldOffset(8)]
+    public readonly int Offset;
+    [FieldOffset(12)]
+    public readonly FrameFlags FrameFlags;
 
-    public FrameKind Kind { get; }
-    public FrameFlags FrameFlags { get; }
-    public byte KindFlags { get; } // kind-specific
+    [FieldOffset(16)]
+    public readonly byte[] Buffer;
 
-    public StreamFrame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Array.Empty<byte>(), 0, 0, FrameFlags.None) { }
-    public StreamFrame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags)
+    public StreamFrame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Array.Empty<byte>(), 0, 0, FrameFlags.None, 0) { }
+    public StreamFrame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags, ushort sequenceId = 0)
     {
         Kind = kind;
-        Id = id;
+        RequestId = id;
         KindFlags = kindFlags;
         Buffer = buffer;
         Offset = offset;
         Length = length;
         FrameFlags = frameFlags;
+        SequenceId = sequenceId;
     }
 
-    public void Write(byte[] buffer, int offset)
+    public unsafe void Write(byte[] buffer, int offset)
     {
-        buffer[offset++] = (byte)Kind;
-        buffer[offset++] = KindFlags;
-        // note id and length are little-endian
-        buffer[offset++] = (byte)(Id & 0xFF);
-        buffer[offset++] = (byte)((Id >> 8) & 0xFF);
-        buffer[offset++] = (byte)(Length & 0xFF);
-        buffer[offset++] = (byte)((Length >> 8) & 0xFF);
+        // note values are little-endian; the JIT will remove the appropriate dead branch here
+        if (BitConverter.IsLittleEndian)
+        {
+            fixed (void* dest = &buffer[offset])
+            fixed (void* src = &Kind)
+            {
+                if (HeaderBytes == sizeof(ulong))
+                {
+                    *(ulong*)dest = *(ulong*)src;
+                }
+                else
+                {
+                    // unreachable; this will be removed by the compiler, and exists mostly
+                    // so that if we change the defintion, it'll a: keep working, and
+                    // b: raise a non-suppressed CS0162 on the line above, so we fix it!
+#pragma warning disable CS0162
+                    Unsafe.CopyBlockUnaligned(dest, src, HeaderBytes);
+#pragma warning restore CS0162
+                }
+            }
+        }
+        else
+        {
+            fixed (byte* dest = &buffer[offset])
+            {
+                dest[0] = (byte)Kind;
+                dest[1] = KindFlags;
+                dest[2] = (byte)(RequestId & 0xFF);
+                dest[3] = (byte)((RequestId >> 8) & 0xFF);
+                dest[4] = (byte)(SequenceId & 0xFF);
+                dest[5] = (byte)((SequenceId >> 8) & 0xFF);
+                dest[6] = (byte)(Length & 0xFF);
+                dest[7] = (byte)((Length >> 8) & 0xFF);
+            }
+        }
+    }
+    private unsafe StreamFrame(byte[] buffer, int offset)
+    {
+#if NET5_0_OR_GREATER
+        Unsafe.SkipInit(out this);
+        Offset = 0;
+        FrameFlags = FrameFlags.None;
+#else
+        this = default;
+#endif
+        Buffer = Array.Empty<byte>();
+
+        // note values are little-endian; the JIT will remove the appropriate dead branch here
+        if (BitConverter.IsLittleEndian)
+        {
+            fixed (void* src = &buffer[offset])
+            fixed (void* dest = &Kind)
+            {
+                if (HeaderBytes == sizeof(ulong))
+                {
+                    *(ulong*)dest = *(ulong*)src;
+                }
+                else
+                {
+                    // unreachable; this will be removed by the compiler, and exists mostly
+                    // so that if we change the defintion, it'll a: keep working, and
+                    // b: raise a non-suppressed CS0162 on the line above, so we fix it!
+#pragma warning disable CS0162
+                    Unsafe.CopyBlockUnaligned(dest, src, HeaderBytes);
+#pragma warning restore CS0162
+                }
+            }
+        }
+        else
+        {
+            fixed (byte* ptr = &buffer[offset])
+            {
+                Kind = (FrameKind)ptr[0];
+                KindFlags = ptr[1];
+                RequestId = (ushort)(ptr[2] | (ptr[3] << 8));
+                SequenceId = (ushort)(ptr[4] | (ptr[5] << 8));
+                Length = (ushort)(ptr[6] | (ptr[7] << 8));
+            }
+        }
+    }
+
+    private StreamFrame(in StreamFrame from, byte[] buffer, int offset, FrameFlags frameFlags)
+    {
+        this = from;
+        Buffer = buffer;
+        Offset = offset;
+        FrameFlags = frameFlags;
     }
 
     public void Dispose()
@@ -50,9 +143,9 @@ internal readonly struct StreamFrame : IDisposable
         if ((FrameFlags & FrameFlags.RecycleBuffer) != 0) ArrayPool<byte>.Shared.Return(Buffer);
     }
 
-    public override string ToString() => $"[{Id}, {Kind}] {Length} bytes ({FrameFlags}, {KindFlags})";
+    public override string ToString() => $"[{RequestId}, {Kind}] {Length} bytes ({FrameFlags}, {KindFlags})";
 
-    public override bool Equals([NotNullWhen(true)] object? obj) => throw new NotSupportedException();
+    public override bool Equals(object? obj) => throw new NotSupportedException();
     public override int GetHashCode() => throw new NotSupportedException();
 
     public static StreamFrame GetInitializeFrame(FrameKind kind, ushort id, string fullName, string? host)
@@ -111,7 +204,7 @@ internal readonly struct StreamFrame : IDisposable
                             await output.WriteAsync(frame.Buffer, frame.Offset, frame.Length, cancellationToken);
                         }
                     }
-                    logger.LogDebug(frame.Length, static (state, _) => $"wrote {state+HeaderBytes} to stream");
+                    logger.LogDebug(frame.Length, static (state, _) => $"wrote {state + HeaderBytes} to stream");
 
                     frame.Dispose(); // recycles buffer if needed; not worried about try/finally here
                 }
@@ -134,7 +227,7 @@ internal readonly struct StreamFrame : IDisposable
     {
         var buffer = ArrayPool<byte>.Shared.Rent(256);
 
-        int remaining = 6, offset = 0, bytesRead;
+        int remaining = StreamFrame.HeaderBytes, offset = 0, bytesRead;
         while (remaining > 0 && (bytesRead = await stream.ReadAsync(buffer, offset, remaining, cancellationToken)) > 0)
         {
             remaining -= bytesRead;
@@ -142,23 +235,20 @@ internal readonly struct StreamFrame : IDisposable
         }
         if (remaining != 0) ThrowEOF();
 
-        var kind = (FrameKind)buffer[0];
-        var kindFlags = buffer[1];
-        var id = (ushort)(buffer[2] | (buffer[3] << 8));
-        var length = (ushort)(buffer[4] | (buffer[5] << 8));
+        var frame = new StreamFrame(buffer, 0);
 
-        if (length == 0)
+        if (frame.Length == 0)
         {   // release the buffer immediately
             ArrayPool<byte>.Shared.Return(buffer);
-            buffer = Array.Empty<byte>();
+            return frame; // we're done
         }
-        else if (length > buffer.Length)
+        else if (frame.Length > buffer.Length)
         {   // up-size
             ArrayPool<byte>.Shared.Return(buffer);
-            buffer = ArrayPool<byte>.Shared.Rent(length);
+            buffer = ArrayPool<byte>.Shared.Rent(frame.Length);
         }
 
-        remaining = length;
+        remaining = frame.Length;
         offset = 0;
         while (remaining > 0 && (bytesRead = await stream.ReadAsync(buffer, offset, remaining, cancellationToken)) > 0)
         {
@@ -166,7 +256,7 @@ internal readonly struct StreamFrame : IDisposable
             offset += bytesRead;
         }
         if (remaining != 0) ThrowEOF();
-        return new StreamFrame(kind, id, kindFlags, buffer, 0, length, length == 0 ? FrameFlags.None : FrameFlags.RecycleBuffer);
+        return new StreamFrame(frame, buffer, 0, FrameFlags.RecycleBuffer);
 
         static void ThrowEOF() => throw new EndOfStreamException();
     }

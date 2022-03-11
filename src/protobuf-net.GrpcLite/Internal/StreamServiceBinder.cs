@@ -58,7 +58,7 @@ abstract class HandlerBase<TReceive> : IHandler where TReceive : class
                 ctx.Recycle();
             }
             logger.LogDebug(frame.Length, static (state, _) => $"deserialized {state} bytes; processing request");
-            return PushCompletePayloadAsync(frame.Id, output, request, logger, cancellationToken);
+            return PushCompletePayloadAsync(frame.RequestId, output, request, logger, cancellationToken);
         }
         else
         {

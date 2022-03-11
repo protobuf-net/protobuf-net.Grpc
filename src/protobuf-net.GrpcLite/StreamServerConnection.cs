@@ -53,7 +53,7 @@ namespace ProtoBuf.Grpc.Lite
                         if ((generalFlags & GeneralFlags.IsResponse) == 0)
                         {
                             // if this was a request, we reply in kind, but noting that it is a response
-                            await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.Id, (byte)GeneralFlags.IsResponse), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
                         }
                         // shutdown if requested
                         if (frame.Kind == FrameKind.Close)
@@ -70,17 +70,17 @@ namespace ProtoBuf.Grpc.Lite
                         if (handler is null)
                         {
                             _logger.LogDebug(method, static (state, _) => $"method not found: {state}");
-                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.MethodNotFound, frame.Id, 0), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.MethodNotFound, frame.RequestId, 0), cancellationToken);
                         }
                         else if (handler.Kind != frame.Kind)
                         {
                             _logger.LogInformation((Expected: handler.Kind, Received: frame.Kind), static (state, _) => $"invalid method kind: expected {state.Expected}, received {state.Received}");
-                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.Id, 0), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
                         }
-                        else if (!_activeOperations.TryAdd(frame.Id, handler))
+                        else if (!_activeOperations.TryAdd(frame.RequestId, handler))
                         {
-                            _logger.LogError(frame.Id, static (state, _) => $"duplicate id! {state}");
-                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.Id, 0), cancellationToken);
+                            _logger.LogError(frame.RequestId, static (state, _) => $"duplicate id! {state}");
+                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
                         }
                         else
                         {
@@ -88,7 +88,7 @@ namespace ProtoBuf.Grpc.Lite
                         }
                         break;
                     case FrameKind.Payload:
-                        if (_activeOperations.TryGetValue(frame.Id, out handler))
+                        if (_activeOperations.TryGetValue(frame.RequestId, out handler))
                         {
                             await handler.PushPayloadAsync(frame, _outbound.Writer, _logger, cancellationToken);
                         }
