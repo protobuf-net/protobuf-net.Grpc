@@ -7,7 +7,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
 internal interface IServerHandler : IHandler
 {
-    void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger);
+    void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger);
     Status Status { get; set; }
     DateTime Deadline { get; }
     string Host { get; }
@@ -24,14 +24,14 @@ internal interface IServerHandler : IHandler
 }
 internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler, IServerStreamWriter<TResponse> where TResponse : class where TRequest : class
 {
-    protected StreamServerCallContext CreateServerCallContext() => StreamServerCallContext.Get(this);
+    protected LiteServerCallContext CreateServerCallContext() => LiteServerCallContext.Get(this);
 
     protected override Action<TResponse, SerializationContext> Serializer => TypedMethod.ResponseMarshaller.ContextualSerializer;
     protected override Func<DeserializationContext, TRequest> Deserializer => TypedMethod.RequestMarshaller.ContextualDeserializer;
 
     private Method<TRequest, TResponse> TypedMethod => Unsafe.As<Method<TRequest, TResponse>>(Method);
 
-    public override void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger)
+    public override void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger)
     {
         base.Initialize(id, output, logger);
         Status = Status.DefaultSuccess;
@@ -115,7 +115,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
 
     internal async ValueTask WritePayloadAsync(TResponse response, bool isLastElement)
     {
-        var serializationContext = Pool<StreamSerializationContext>.Get();
+        var serializationContext = Pool<FrameSerializationContext>.Get();
         try
         {
             Logger.LogDebug(Method, static (state, _) => $"serializing {state.FullName} response...");

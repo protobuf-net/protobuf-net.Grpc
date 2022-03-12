@@ -2,6 +2,7 @@
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
+using ProtoBuf.Grpc.Lite.Internal;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,7 +42,7 @@ namespace protobuf_net.GrpcLite.Test
         {
             using var log = ServerLog();
             using var timeout = After();
-            using var client = StreamChannel.ConnectNamedPipe(Name, timeout: DefaultTimeout, logger: Logger("client"));
+            using var client = LiteChannel.ConnectNamedPipe(Name, timeout: DefaultTimeout, logger: Logger("client"));
             var proxy = new FooService.FooServiceClient(client);
 
             var response = proxy.Unary(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
@@ -56,7 +57,7 @@ namespace protobuf_net.GrpcLite.Test
         {
             using var log = ServerLog();
             using var timeout = After();
-            await using var client = await StreamChannel.ConnectNamedPipeAsync(Name, cancellationToken: timeout.Token, logger: Logger("client"));
+            await using var client = await LiteChannel.ConnectNamedPipeAsync(Name, cancellationToken: timeout.Token, logger: Logger("client"));
             var proxy = new FooService.FooServiceClient(client);
 
             using var call = proxy.UnaryAsync(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
@@ -72,7 +73,7 @@ namespace protobuf_net.GrpcLite.Test
         {
             using var log = ServerLog();
             using var timeout = After();
-            await using var client = await StreamChannel.ConnectNamedPipeAsync(Name, cancellationToken: timeout.Token, logger: Logger("client"));
+            await using var client = await LiteChannel.ConnectNamedPipeAsync(Name, cancellationToken: timeout.Token, logger: Logger("client"));
             var proxy = new FooService.FooServiceClient(client);
             
             using var call = proxy.Duplex();

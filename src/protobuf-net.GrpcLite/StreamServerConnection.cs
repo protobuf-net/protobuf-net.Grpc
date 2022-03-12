@@ -14,7 +14,7 @@ namespace ProtoBuf.Grpc.Lite
         private readonly StreamServer _server;
         private readonly Stream _input;
         private readonly Stream _output;
-        private readonly Channel<StreamFrame> _outbound;
+        private readonly Channel<Frame> _outbound;
         private readonly ILogger? _logger;
 
         public Task Complete { get; }
@@ -31,9 +31,9 @@ namespace ProtoBuf.Grpc.Lite
             Id = server.NextId();
             _server = server;
 
-            _outbound = StreamFrame.CreateChannel();
+            _outbound = Frame.CreateChannel();
             _logger.LogDebug(Id, static (state, _) => $"connection {state} initialized; processing streams...");
-            Complete = StreamFrame.WriteFromOutboundChannelToStream(_outbound, output, _logger, cancellationToken);
+            Complete = Frame.WriteFromOutboundChannelToStream(_outbound, output, _logger, cancellationToken);
 
             _ = ConsumeAsync(cancellationToken);
         }
@@ -45,7 +45,7 @@ namespace ProtoBuf.Grpc.Lite
             await Task.Yield();
             while (!cancellationToken.IsCancellationRequested)
             {
-                var frame = await StreamFrame.ReadAsync(_input, cancellationToken);
+                var frame = await Frame.ReadAsync(_input, cancellationToken);
                 _logger.LogDebug(frame, static (state, _) => $"received frame {state}");
                 switch (frame.Kind)
                 {
@@ -55,7 +55,7 @@ namespace ProtoBuf.Grpc.Lite
                         if ((generalFlags & GeneralFlags.IsResponse) == 0)
                         {
                             // if this was a request, we reply in kind, but noting that it is a response
-                            await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new Frame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
                         }
                         // shutdown if requested
                         if (frame.Kind == FrameKind.Close)
@@ -72,17 +72,17 @@ namespace ProtoBuf.Grpc.Lite
                         if (handler is null)
                         {
                             _logger.LogDebug(method, static (state, _) => $"method not found: {state}");
-                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.MethodNotFound, frame.RequestId, 0), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new Frame(FrameKind.MethodNotFound, frame.RequestId, 0), cancellationToken);
                         }
                         else if (handler.Kind != frame.Kind)
                         {
                             _logger.LogInformation((Handler: handler, Received: frame.Kind), static (state, _) => $"invalid method kind: expected {state.Handler.Kind}, received {state.Received}; {state.Handler.Method}");
-                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new Frame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
                         }
                         else if (!_activeOperations.TryAdd(frame.RequestId, handler))
                         {
                             _logger.LogError(frame.RequestId, static (state, _) => $"duplicate id! {state}");
-                            await _outbound.Writer.WriteAsync(new StreamFrame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
+                            await _outbound.Writer.WriteAsync(new Frame(FrameKind.Cancel, frame.RequestId, 0), cancellationToken);
                         }
                         else
                         {
@@ -115,12 +115,12 @@ namespace ProtoBuf.Grpc.Lite
         public void Dispose()
         {
             _outbound.Writer.TryComplete();
-            StreamChannel.Dispose(_input, _output);
+            LiteChannel.Dispose(_input, _output);
         }
         public ValueTask DisposeAsync()
         {
             _outbound.Writer.TryComplete();
-            return StreamChannel.DisposeAsync(_input, _output);
+            return LiteChannel.DisposeAsync(_input, _output);
         }
     }
 }

@@ -29,7 +29,7 @@ public class BasicTests
     [Fact]
     public void CanCreateInvoker()
     {
-        using var channel = new StreamChannel(Stream.Null, Stream.Null, Me());
+        using var channel = new LiteChannel(Stream.Null, Stream.Null, Me());
         var invoker = channel.CreateCallInvoker();
     }
 
@@ -38,12 +38,12 @@ public class BasicTests
     public async Task CanWriteAndParseFrame()
     {
         var ms = new MemoryStream();
-        var channel = Channel.CreateUnbounded<StreamFrame>();
-        await channel.Writer.WriteAsync(StreamFrame.GetInitializeFrame(FrameKind.NewUnary, 42, 0, "/myservice/mymethod", ""));
+        var channel = Channel.CreateUnbounded<Frame>();
+        await channel.Writer.WriteAsync(Frame.GetInitializeFrame(FrameKind.NewUnary, 42, 0, "/myservice/mymethod", ""));
         var bytes = Encoding.UTF8.GetBytes("hello, world!");
-        await channel.Writer.WriteAsync(new StreamFrame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
+        await channel.Writer.WriteAsync(new Frame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
         channel.Writer.Complete();
-        await StreamFrame.WriteFromOutboundChannelToStream(channel, ms, Logger, default);
+        await Frame.WriteFromOutboundChannelToStream(channel, ms, Logger, default);
 
         var hex = GetHex(ms);
         Assert.Equal(
@@ -53,7 +53,7 @@ public class BasicTests
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
 
         ms.Position = 0;
-        using (var frame = await StreamFrame.ReadAsync(ms, CancellationToken.None))
+        using (var frame = await Frame.ReadAsync(ms, CancellationToken.None))
         {
             Assert.Equal(FrameKind.NewUnary, frame.Kind);
             Assert.Equal(0, frame.KindFlags);
@@ -62,7 +62,7 @@ public class BasicTests
             Assert.Equal(19, frame.Length);
             Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length));
         }
-        using (var frame = await StreamFrame.ReadAsync(ms, CancellationToken.None))
+        using (var frame = await Frame.ReadAsync(ms, CancellationToken.None))
         {
             Assert.Equal(FrameKind.Payload, frame.Kind);
             Assert.Equal((byte)PayloadFlags.EndItem, frame.KindFlags);
@@ -86,7 +86,7 @@ public class BasicTests
     {
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var ms = new MemoryStream();
-        await using var channel = new StreamChannel(Stream.Null, ms, Me());
+        await using var channel = new LiteChannel(Stream.Null, ms, Me());
         var invoker = channel.CreateCallInvoker();
         using var call = invoker.AsyncUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!");
@@ -108,7 +108,7 @@ public class BasicTests
     {
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var ms = new MemoryStream();
-        await using var channel = new StreamChannel(Stream.Null, ms, Me());
+        await using var channel = new LiteChannel(Stream.Null, ms, Me());
         var invoker = channel.CreateCallInvoker();
 
         // we don't expect a reply

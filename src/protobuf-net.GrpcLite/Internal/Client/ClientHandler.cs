@@ -7,7 +7,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal interface IClientHandler : IHandler, IDisposable
 {
-    void Initialize(ushort id, IMethod method, ChannelWriter<StreamFrame> output, ILogger? logger);
+    void Initialize(ushort id, IMethod method, ChannelWriter<Frame> output, ILogger? logger);
     Task<Metadata> ResponseHeadersAsync { get; }
 
     Status Status { get; }
@@ -17,7 +17,7 @@ internal interface IClientHandler : IHandler, IDisposable
 
 internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientHandler where TRequest : class where TResponse : class
 {
-    public void Initialize(ushort id, IMethod method, ChannelWriter<StreamFrame> output, ILogger? logger)
+    public void Initialize(ushort id, IMethod method, ChannelWriter<Frame> output, ILogger? logger)
     {
         Initialize(id, output, logger);
         Method = method;

@@ -8,7 +8,7 @@ interface IHandler : IPooled
 {
     ushort Id { get; }
     FrameKind Kind { get; }
-    ValueTask ReceivePayloadAsync(StreamFrame frame, CancellationToken cancellationToken);
+    ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
     ushort NextSequenceId();
 }
@@ -25,7 +25,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     // these are all set via initialize
     private IMethod _method;
-    ChannelWriter<StreamFrame> _output;
+    ChannelWriter<Frame> _output;
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
     public ushort Id => _id;
@@ -37,9 +37,9 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         get => _method;
         set => _method = value;
     }
-    protected ChannelWriter<StreamFrame> Output => _output;
+    protected ChannelWriter<Frame> Output => _output;
 
-    public virtual void Initialize(ushort id, ChannelWriter<StreamFrame> output, ILogger? logger)
+    public virtual void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger)
     {
         _output = output;
         _logger = logger;
@@ -54,17 +54,17 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     public abstract void Recycle();
 
-    Queue<StreamFrame>? _backlog;
-    public ValueTask ReceivePayloadAsync(StreamFrame frame, CancellationToken cancellationToken)
+    Queue<Frame>? _backlog;
+    public ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken)
     {
         if ((frame.KindFlags & (byte)PayloadFlags.EndItem) == 0)
         {
-            (_backlog ??= new Queue<StreamFrame>()).Enqueue(frame);
+            (_backlog ??= new Queue<Frame>()).Enqueue(frame);
             return default;
         }
         return ReceiveCompletePayloadAsync(frame, cancellationToken);
     }
-    private ValueTask ReceiveCompletePayloadAsync(StreamFrame frame, CancellationToken cancellationToken)
+    private ValueTask ReceiveCompletePayloadAsync(Frame frame, CancellationToken cancellationToken)
     {
         var backlog = _backlog;
         if (backlog is null || backlog.Count == 0)
@@ -87,7 +87,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
 
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
-        => Output.WriteAsync(StreamFrame.GetInitializeFrame(Kind, Id, NextSequenceId(), Method.FullName, host), options.CancellationToken);
+        => Output.WriteAsync(Frame.GetInitializeFrame(Kind, Id, NextSequenceId(), Method.FullName, host), options.CancellationToken);
 
     internal async Task SendSingleAsync(string? host, CallOptions options, TSend request)
     {
@@ -97,11 +97,11 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     public async ValueTask SendAsync(TSend value, bool isLastElement, CancellationToken cancellationToken)
     {
-        StreamSerializationContext? serializationContext = null;
+        FrameSerializationContext? serializationContext = null;
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            serializationContext = Pool<StreamSerializationContext>.Get();
+            serializationContext = Pool<FrameSerializationContext>.Get();
             Serializer(value, serializationContext);
             await serializationContext.WritePayloadAsync(Output, this, isLastElement, cancellationToken);
         }

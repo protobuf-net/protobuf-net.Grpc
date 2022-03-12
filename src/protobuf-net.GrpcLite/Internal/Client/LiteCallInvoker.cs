@@ -5,15 +5,15 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal sealed class StreamCallInvoker : CallInvoker
+internal sealed class LiteCallInvoker : CallInvoker
 {
     private readonly ILogger? _logger;
-    private readonly Channel<StreamFrame> _outbound;
+    private readonly Channel<Frame> _outbound;
     private readonly ConcurrentDictionary<ushort, IClientHandler> _activeOperations = new();
     private int _nextId = ushort.MaxValue; // so that our first id is zero
     private ushort NextId() => Utilities.IncrementToUInt32(ref _nextId);
 
-    public StreamCallInvoker(Channel<StreamFrame> outbound, ILogger? logger)
+    public LiteCallInvoker(Channel<Frame> outbound, ILogger? logger)
     {
         this._outbound = outbound;
         this._logger = logger;
@@ -86,7 +86,7 @@ internal sealed class StreamCallInvoker : CallInvoker
         await Task.Yield();
         while (!cancellationToken.IsCancellationRequested)
         {
-            var frame = await StreamFrame.ReadAsync(input, cancellationToken);
+            var frame = await Frame.ReadAsync(input, cancellationToken);
             logger.LogDebug(frame, static (state, _) => $"received frame {state}");
             switch (frame.Kind)
             {
@@ -96,7 +96,7 @@ internal sealed class StreamCallInvoker : CallInvoker
                     if ((generalFlags & GeneralFlags.IsResponse) == 0)
                     {
                         // if this was a request, we reply in kind, but noting that it is a response
-                        await _outbound.Writer.WriteAsync(new StreamFrame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
+                        await _outbound.Writer.WriteAsync(new Frame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
                     }
                     // shutdown if requested
                     if (frame.Kind == FrameKind.Close)

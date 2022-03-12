@@ -2,15 +2,15 @@
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
-internal sealed class StreamServerCallContext : ServerCallContext, IPooled
+internal sealed class LiteServerCallContext : ServerCallContext, IPooled
 {
     private IServerHandler? _handler;
 
     private const bool AllowRecycling = false;
 
-    public static StreamServerCallContext Get(IServerHandler handler)
+    public static LiteServerCallContext Get(IServerHandler handler)
     {
-        var obj = AllowRecycling ? Pool<StreamServerCallContext>.Get() : new StreamServerCallContext();
+        var obj = AllowRecycling ? Pool<LiteServerCallContext>.Get() : new LiteServerCallContext();
         obj._handler = handler;
         return obj;
     }
@@ -21,7 +21,7 @@ internal sealed class StreamServerCallContext : ServerCallContext, IPooled
         {
 #pragma warning disable CS0162 // Unreachable code detected - want to make this turn-off-and-onable
             _handler = null;
-            Pool<StreamServerCallContext>.Put(this);
+            Pool<LiteServerCallContext>.Put(this);
 #pragma warning restore CS0162
         }
     }

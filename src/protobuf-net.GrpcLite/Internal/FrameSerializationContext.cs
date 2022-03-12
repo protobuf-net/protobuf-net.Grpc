@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal sealed class StreamSerializationContext : SerializationContext, IBufferWriter<byte>, IPooled
+internal sealed class FrameSerializationContext : SerializationContext, IBufferWriter<byte>, IPooled
 {
     private readonly Queue<(byte[] Buffer, int Offset, int Length, bool ViaWriter)> _buffers = new();
     private byte[] _currentBuffer = Utilities.EmptyBuffer;
@@ -14,7 +14,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
 
     public long Length => _totalLength;
 
-    public async ValueTask<int> WritePayloadAsync(ChannelWriter<StreamFrame> writer, IHandler handler, bool isLastElement, CancellationToken cancellationToken)
+    public async ValueTask<int> WritePayloadAsync(ChannelWriter<Frame> writer, IHandler handler, bool isLastElement, CancellationToken cancellationToken)
     {
         var finalFlags = isLastElement ? (PayloadFlags.EndItem | PayloadFlags.EndAllItems) : PayloadFlags.EndItem;
         var frames = 0;
@@ -30,7 +30,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
                     remaining -= take;
                     var payloadFlags = remaining == 0 && _buffers.Count == 0 ? finalFlags : PayloadFlags.None;
                     var frameFlags = buffer.ViaWriter ? FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved : FrameFlags.None;
-                    await writer.WriteAsync(new StreamFrame(FrameKind.Payload, handler.Id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags, handler.NextSequenceId()), cancellationToken);
+                    await writer.WriteAsync(new Frame(FrameKind.Payload, handler.Id, (byte)payloadFlags, buffer.Buffer, buffer.Offset, (ushort)take, frameFlags, handler.NextSequenceId()), cancellationToken);
                     frames++;
                     offset += take;
                 }
@@ -41,7 +41,7 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         if (frames == 0)
         {
             // write an empty final payload if nothing was written
-            await writer.WriteAsync(new StreamFrame(FrameKind.Payload, handler.Id, (byte)finalFlags), cancellationToken);
+            await writer.WriteAsync(new Frame(FrameKind.Payload, handler.Id, (byte)finalFlags), cancellationToken);
             frames++;
         }
         return frames;
@@ -54,10 +54,10 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
         if (_currentBuffer.Length != 0)
             ArrayPool<byte>.Shared.Return(_currentBuffer);
         _currentBuffer = Utilities.EmptyBuffer;
-        Pool<StreamSerializationContext>.Put(this);
+        Pool<FrameSerializationContext>.Put(this);
     }
 
-    public StreamSerializationContext() { }
+    public FrameSerializationContext() { }
 
     public override IBufferWriter<byte> GetBufferWriter() => this;
 
@@ -72,10 +72,10 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
     //private int Available => _active.Length - _activeCommitted;
     private void Flush(bool getNew)
     {
-        var written = _offset - StreamFrame.HeaderBytes;
+        var written = _offset - Frame.HeaderBytes;
         if (written > 0)
         {
-            _buffers.Enqueue((_currentBuffer, StreamFrame.HeaderBytes, written, true));
+            _buffers.Enqueue((_currentBuffer, Frame.HeaderBytes, written, true));
             _totalLength += written;
         }
         if (getNew)
@@ -83,8 +83,8 @@ internal sealed class StreamSerializationContext : SerializationContext, IBuffer
             var size = _nextSize;
             if (size < MaxBufferSize) _nextSize <<= 1; // use incrementally bigger buffers, up to a limit
             _currentBuffer = ArrayPool<byte>.Shared.Rent(size);
-            _offset = StreamFrame.HeaderBytes;
-            _remaining = _currentBuffer.Length - StreamFrame.HeaderBytes;
+            _offset = Frame.HeaderBytes;
+            _remaining = _currentBuffer.Length - Frame.HeaderBytes;
         }
         else
         {

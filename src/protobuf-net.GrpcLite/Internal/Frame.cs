@@ -10,7 +10,7 @@ using System.Threading.Channels;
 namespace ProtoBuf.Grpc.Lite.Internal;
 
 [StructLayout(LayoutKind.Explicit)]
-internal readonly struct StreamFrame : IDisposable
+internal readonly struct Frame : IDisposable
 {
     public const int HeaderBytes = 8; // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
@@ -34,8 +34,8 @@ internal readonly struct StreamFrame : IDisposable
     [FieldOffset(16)]
     public readonly byte[] Buffer;
 
-    public StreamFrame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Utilities.EmptyBuffer, 0, 0, FrameFlags.None, 0) { }
-    public StreamFrame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags, ushort sequenceId)
+    public Frame(FrameKind kind, ushort id, byte kindFlags) : this(kind, id, kindFlags, Utilities.EmptyBuffer, 0, 0, FrameFlags.None, 0) { }
+    public Frame(FrameKind kind, ushort id, byte kindFlags, byte[] buffer, int offset, ushort length, FrameFlags frameFlags, ushort sequenceId)
     {
         Kind = kind;
         RequestId = id;
@@ -47,50 +47,42 @@ internal readonly struct StreamFrame : IDisposable
         SequenceId = sequenceId;
     }
 
-    public unsafe void Write(byte[] buffer, int offset)
+    internal void UnsafeWrite(ref byte destination)
     {
         // note values are little-endian; the JIT will remove the appropriate dead branch here
         if (BitConverter.IsLittleEndian)
         {
-            fixed (void* dest = &buffer[offset])
-            fixed (void* src = &Kind)
-            {
-                if (HeaderBytes == sizeof(ulong))
-                {
-                    *(ulong*)dest = *(ulong*)src;
-                }
-                else
-                {
-                    // unreachable; this will be removed by the compiler, and exists mostly
-                    // so that if we change the defintion, it'll a: keep working, and
-                    // b: raise a non-suppressed CS0162 on the line above, so we fix it!
-#pragma warning disable CS0162
-                    Unsafe.CopyBlockUnaligned(dest, src, HeaderBytes);
-#pragma warning restore CS0162
-                }
-            }
+            // overstomp the header bytes directly ("Kind" is the first field)
+            Unsafe.As<byte, ulong>(ref destination) = Unsafe.As<FrameKind, ulong>(ref Unsafe.AsRef(in this.Kind));
         }
         else
         {
-            fixed (byte* dest = &buffer[offset])
+            unsafe
             {
-                dest[0] = (byte)Kind;
-                dest[1] = KindFlags;
-                dest[2] = (byte)(RequestId & 0xFF);
-                dest[3] = (byte)((RequestId >> 8) & 0xFF);
-                dest[4] = (byte)(SequenceId & 0xFF);
-                dest[5] = (byte)((SequenceId >> 8) & 0xFF);
-                dest[6] = (byte)(Length & 0xFF);
-                dest[7] = (byte)((Length >> 8) & 0xFF);
+                fixed (byte* dest = &destination)
+                {
+                    dest[0] = (byte)Kind;
+                    dest[1] = KindFlags;
+                    dest[2] = (byte)(RequestId & 0xFF);
+                    dest[3] = (byte)((RequestId >> 8) & 0xFF);
+                    dest[4] = (byte)(SequenceId & 0xFF);
+                    dest[5] = (byte)((SequenceId >> 8) & 0xFF);
+                    dest[6] = (byte)(Length & 0xFF);
+                    dest[7] = (byte)((Length >> 8) & 0xFF);
+                }
             }
         }
     }
-    private unsafe StreamFrame(byte[] buffer, int offset)
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Frame UnsafeRead(ref byte source) => new Frame(ref source);
+    private Frame(ref byte source) // unsafe direct initialize
     {
 #if NET5_0_OR_GREATER
         Unsafe.SkipInit(out this);
-        Offset = 0;
-        FrameFlags = FrameFlags.None;
+        Offset = 0; // still need to make sure that these get set
+        FrameFlags = FrameFlags.None; // to something
 #else
         this = default;
 #endif
@@ -99,38 +91,26 @@ internal readonly struct StreamFrame : IDisposable
         // note values are little-endian; the JIT will remove the appropriate dead branch here
         if (BitConverter.IsLittleEndian)
         {
-            fixed (void* src = &buffer[offset])
-            fixed (void* dest = &Kind)
-            {
-                if (HeaderBytes == sizeof(ulong))
-                {
-                    *(ulong*)dest = *(ulong*)src;
-                }
-                else
-                {
-                    // unreachable; this will be removed by the compiler, and exists mostly
-                    // so that if we change the defintion, it'll a: keep working, and
-                    // b: raise a non-suppressed CS0162 on the line above, so we fix it!
-#pragma warning disable CS0162
-                    Unsafe.CopyBlockUnaligned(dest, src, HeaderBytes);
-#pragma warning restore CS0162
-                }
-            }
+            // overstomp the header bytes directly ("Kind" is the first field)
+            Unsafe.As<FrameKind, ulong>(ref this.Kind) = Unsafe.As<byte, ulong>(ref source);
         }
         else
         {
-            fixed (byte* ptr = &buffer[offset])
+            unsafe
             {
-                Kind = (FrameKind)ptr[0];
-                KindFlags = ptr[1];
-                RequestId = (ushort)(ptr[2] | (ptr[3] << 8));
-                SequenceId = (ushort)(ptr[4] | (ptr[5] << 8));
-                Length = (ushort)(ptr[6] | (ptr[7] << 8));
+                fixed (byte* ptr = &source)
+                {
+                    Kind = (FrameKind)ptr[0];
+                    KindFlags = ptr[1];
+                    RequestId = (ushort)(ptr[2] | (ptr[3] << 8));
+                    SequenceId = (ushort)(ptr[4] | (ptr[5] << 8));
+                    Length = (ushort)(ptr[6] | (ptr[7] << 8));
+                }
             }
         }
     }
 
-    private StreamFrame(in StreamFrame from, byte[] buffer, int offset, FrameFlags frameFlags)
+    internal Frame(in Frame from, byte[] buffer, int offset, FrameFlags frameFlags)
     {
         this = from;
         Buffer = buffer;
@@ -155,18 +135,18 @@ internal readonly struct StreamFrame : IDisposable
     public override bool Equals(object? obj) => throw new NotSupportedException();
     public override int GetHashCode() => throw new NotSupportedException();
 
-    public static StreamFrame GetInitializeFrame(FrameKind kind, ushort id, ushort sequenceId, string fullName, string? host)
+    public static Frame GetInitializeFrame(FrameKind kind, ushort id, ushort sequenceId, string fullName, string? host)
     {
         if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();
         if (!string.IsNullOrEmpty(host)) ThrowNotSupported(); // in future: delimit?
         var length = Encoding.UTF8.GetByteCount(fullName);
         if (length > ushort.MaxValue) ThrowMethodTooLarge(length);
 
-        var buffer = ArrayPool<byte>.Shared.Rent(StreamFrame.HeaderBytes + length);
-        var actualLength = Encoding.UTF8.GetBytes(fullName, 0, fullName.Length, buffer, StreamFrame.HeaderBytes);
+        var buffer = ArrayPool<byte>.Shared.Rent(Frame.HeaderBytes + length);
+        var actualLength = Encoding.UTF8.GetBytes(fullName, 0, fullName.Length, buffer, Frame.HeaderBytes);
         Debug.Assert(actualLength == length, "length mismatch in encoding!");
 
-        return new StreamFrame(kind, id, 0, buffer, StreamFrame.HeaderBytes, (ushort)length, FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved, sequenceId);
+        return new Frame(kind, id, 0, buffer, Frame.HeaderBytes, (ushort)length, FrameFlags.RecycleBuffer | FrameFlags.HeaderReserved, sequenceId);
 
         static void ThrowMissingMethod() => throw new ArgumentOutOfRangeException(nameof(fullName), "No method name was specified");
         static void ThrowNotSupported() => throw new ArgumentOutOfRangeException(nameof(host), "Non-empty hosts are not currently supported");
@@ -179,10 +159,10 @@ internal readonly struct StreamFrame : IDisposable
         SingleWriter = false,
         AllowSynchronousContinuations = true,
     };
-    internal static Channel<StreamFrame> CreateChannel()
-        => Channel.CreateUnbounded<StreamFrame>(OutboundOptions);
+    internal static Channel<Frame> CreateChannel()
+        => Channel.CreateUnbounded<Frame>(OutboundOptions);
 
-    internal async static Task WriteFromOutboundChannelToStream(Channel<StreamFrame> source, Stream output, ILogger? logger, CancellationToken cancellationToken)
+    internal async static Task WriteFromOutboundChannelToStream(Channel<Frame> source, Stream output, ILogger? logger, CancellationToken cancellationToken)
     {
         await Task.Yield(); // ensure we don't block the constructor
         byte[]? headerBuffer = null;
@@ -197,15 +177,16 @@ internal readonly struct StreamFrame : IDisposable
                     if ((frameFlags & FrameFlags.HeaderReserved) != 0)
                     {
                         // we can write the header into the existing buffer, and use a single write
-                        var offset = frame.Offset - StreamFrame.HeaderBytes;
-                        frame.Write(frame.Buffer, offset);
-                        await output.WriteAsync(frame.Buffer, offset, frame.Length + StreamFrame.HeaderBytes, cancellationToken);
+                        var offset = frame.Offset - Frame.HeaderBytes;
+                        frame.UnsafeWrite(ref frame.Buffer[offset]);
+                        await output.WriteAsync(frame.Buffer, offset, frame.Length + Frame.HeaderBytes, cancellationToken);
                     }
                     else
                     {
                         // use a scratch-buffer for the header, and write the header and payload separately
-                        frame.Write(headerBuffer ??= ArrayPool<byte>.Shared.Rent(StreamFrame.HeaderBytes), 0);
-                        await output.WriteAsync(headerBuffer, 0, StreamFrame.HeaderBytes, cancellationToken);
+                        headerBuffer ??= ArrayPool<byte>.Shared.Rent(Frame.HeaderBytes);
+                        frame.UnsafeWrite(ref headerBuffer[0]);
+                        await output.WriteAsync(headerBuffer, 0, Frame.HeaderBytes, cancellationToken);
                         if (frame.Length != 0)
                         {
                             await output.WriteAsync(frame.Buffer, frame.Offset, frame.Length, cancellationToken);
@@ -230,11 +211,11 @@ internal readonly struct StreamFrame : IDisposable
         }
     }
 
-    public static async ValueTask<StreamFrame> ReadAsync(Stream stream, CancellationToken cancellationToken)
+    public static async ValueTask<Frame> ReadAsync(Stream stream, CancellationToken cancellationToken)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(256);
 
-        int remaining = StreamFrame.HeaderBytes, offset = 0, bytesRead;
+        int remaining = Frame.HeaderBytes, offset = 0, bytesRead;
         while (remaining > 0 && (bytesRead = await stream.ReadAsync(buffer, offset, remaining, cancellationToken)) > 0)
         {
             remaining -= bytesRead;
@@ -242,7 +223,7 @@ internal readonly struct StreamFrame : IDisposable
         }
         if (remaining != 0) ThrowEOF();
 
-        var frame = new StreamFrame(buffer, 0);
+        var frame = Frame.UnsafeRead(ref buffer[0]);
 
         if (frame.Length == 0)
         {   // release the buffer immediately
@@ -263,7 +244,7 @@ internal readonly struct StreamFrame : IDisposable
             offset += bytesRead;
         }
         if (remaining != 0) ThrowEOF();
-        return new StreamFrame(frame, buffer, 0, FrameFlags.RecycleBuffer);
+        return new Frame(frame, buffer, 0, FrameFlags.RecycleBuffer);
 
         static void ThrowEOF() => throw new EndOfStreamException();
     }

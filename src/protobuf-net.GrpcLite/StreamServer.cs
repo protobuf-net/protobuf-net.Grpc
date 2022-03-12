@@ -20,7 +20,7 @@ namespace ProtoBuf.Grpc.Lite
         internal StreamServerConnection AddConnection(Stream input, Stream output, CancellationToken cancellationToken)
             => new StreamServerConnection(this, input, output, cancellationToken);
 
-        private StreamServiceBinder? _serviceBinder;
+        private LiteServiceBinder? _serviceBinder;
         public void ManualBind<T>(T? server = null) where T : class
         {
             var binder = typeof(T).GetCustomAttribute<BindServiceMethodAttribute>(true);
@@ -44,7 +44,7 @@ namespace ProtoBuf.Grpc.Lite
             if (method is null) throw new InvalidOperationException("No suitable " + binder.BindType.Name + "." + binder.BindMethodName + " method found");
 
             server ??= Activator.CreateInstance<T>();
-            _serviceBinder ??= new StreamServiceBinder(this);
+            _serviceBinder ??= new LiteServiceBinder(this);
             method.Invoke(null, new object[] { _serviceBinder, server });
         }
 

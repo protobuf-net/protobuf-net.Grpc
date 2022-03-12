@@ -6,17 +6,17 @@ using System.IO.Pipes;
 using System.Security.Principal;
 using System.Threading.Channels;
 
-namespace ProtoBuf.Grpc.Lite;
+namespace ProtoBuf.Grpc.Lite.Internal;
 
-public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
+internal class LiteChannel : ChannelBase, IAsyncDisposable, IDisposable
 {
-    public static async ValueTask<StreamChannel> ConnectNamedPipeAsync(string pipeName, string? serverName = null, ILogger? logger = null, CancellationToken cancellationToken = default)
+    public static async ValueTask<LiteChannel> ConnectNamedPipeAsync(string pipeName, string? serverName = null, ILogger? logger = null, CancellationToken cancellationToken = default)
     {
         var client = CreateClient(pipeName, serverName, out var target);
         try
         {
             await client.ConnectAsync(cancellationToken);
-            return new StreamChannel(client, target, logger);
+            return new LiteChannel(client, target, logger);
         }
         catch
         {
@@ -26,13 +26,13 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         }
     }
 
-    internal static StreamChannel ConnectNamedPipe(string pipeName, string? serverName = null, ILogger? logger = null, TimeSpan timeout = default)
+    internal static LiteChannel ConnectNamedPipe(string pipeName, string? serverName = null, ILogger? logger = null, TimeSpan timeout = default)
     {
         var client = CreateClient(pipeName, serverName, out var target);
         try
         {
             client.Connect((int)timeout.TotalMilliseconds);
-            return new StreamChannel(client, target, logger);
+            return new LiteChannel(client, target, logger);
         }
         catch
         {
@@ -58,13 +58,13 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
     }
 
     private readonly Stream _input, _output;
-    readonly Channel<StreamFrame> _outbound;
-    readonly StreamCallInvoker _callInvoker;
+    readonly Channel<Frame> _outbound;
+    readonly LiteCallInvoker _callInvoker;
 
-    public StreamChannel(Stream duplexStream, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : this(duplexStream, duplexStream, target, logger, cancellationToken)
+    public LiteChannel(Stream duplexStream, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : this(duplexStream, duplexStream, target, logger, cancellationToken)
     { }
 
-    public StreamChannel(Stream input, Stream output, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : base(target)
+    public LiteChannel(Stream input, Stream output, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : base(target)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (output is null) throw new ArgumentNullException(nameof(output));
@@ -72,9 +72,9 @@ public class StreamChannel : ChannelBase, IAsyncDisposable, IDisposable
         if (!output.CanWrite) throw new ArgumentException("Cannot write to output stream", nameof(output));
         _input = input;
         _output = output;
-        _outbound = StreamFrame.CreateChannel();
-        _callInvoker = new StreamCallInvoker(_outbound, logger);
-        Complete = StreamFrame.WriteFromOutboundChannelToStream(_outbound, _output, logger, cancellationToken);
+        _outbound = Frame.CreateChannel();
+        _callInvoker = new LiteCallInvoker(_outbound, logger);
+        Complete = Frame.WriteFromOutboundChannelToStream(_outbound, _output, logger, cancellationToken);
 
         _ = _callInvoker.ConsumeAsync(input, logger, cancellationToken);
     }
