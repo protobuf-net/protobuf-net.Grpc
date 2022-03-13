@@ -39,7 +39,7 @@ public class BasicTests
     {
         var ms = new MemoryStream();
         var channel = Channel.CreateUnbounded<Frame>();
-        await channel.Writer.WriteAsync(Frame.GetInitializeFrame(FrameKind.NewUnary, 42, 0, "/myservice/mymethod", ""));
+        await channel.Writer.WriteAsync(Frame.GetInitializeFrame(FrameKind.Unary, 42, 0, "/myservice/mymethod", ""));
         var bytes = Encoding.UTF8.GetBytes("hello, world!");
         await channel.Writer.WriteAsync(new Frame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
         channel.Writer.Complete();
@@ -55,7 +55,7 @@ public class BasicTests
         ms.Position = 0;
         using (var frame = await Frame.ReadAsync(ms, CancellationToken.None))
         {
-            Assert.Equal(FrameKind.NewUnary, frame.Kind);
+            Assert.Equal(FrameKind.Unary, frame.Kind);
             Assert.Equal(0, frame.KindFlags);
             Assert.Equal(42, frame.RequestId);
             Assert.Equal(0, frame.SequenceId);

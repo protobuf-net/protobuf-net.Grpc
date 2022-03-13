@@ -249,20 +249,7 @@ internal readonly struct Frame : IDisposable
         static void ThrowEOF() => throw new EndOfStreamException();
     }
 }
-internal enum FrameKind : byte
-{
-    Unknown, // prevent silly errors with zeros
-    NewUnary,
-    NewClientStreaming,
-    NewServerStreaming,
-    NewDuplex,
-    Payload,
-    Cancel,
-    Close,
-    Ping,
-    [Obsolete("remove this later; should be a structured response status")]
-    MethodNotFound,
-}
+
 [Flags]
 internal enum FrameFlags : byte
 {

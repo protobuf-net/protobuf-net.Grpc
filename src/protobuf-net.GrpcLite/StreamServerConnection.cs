@@ -63,10 +63,10 @@ namespace ProtoBuf.Grpc.Lite
                             _outbound.Writer.TryComplete();
                         }
                         break;
-                    case FrameKind.NewUnary:
-                    case FrameKind.NewClientStreaming:
-                    case FrameKind.NewServerStreaming:
-                    case FrameKind.NewDuplex:
+                    case FrameKind.Unary:
+                    case FrameKind.ClientStreaming:
+                    case FrameKind.ServerStreaming:
+                    case FrameKind.DuplexStreaming:
                         var method = Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length);
                         var handler = _server.TryGetHandler(method, out var handlerFactory) ? handlerFactory() : null;
                         if (handler is null)
@@ -93,7 +93,7 @@ namespace ProtoBuf.Grpc.Lite
                             // intiate the server request
                             switch (frame.Kind)
                             {
-                                case FrameKind.NewDuplex:
+                                case FrameKind.DuplexStreaming:
                                     handler.Execute();
                                     break;
                             }

@@ -14,7 +14,7 @@ internal sealed class ClientUnaryHandler<TRequest, TResponse> : ClientHandler<TR
     }
     private TaskCompletionSource<TResponse>? _tcs;
 
-    public override FrameKind Kind => FrameKind.NewUnary;
+    public override FrameKind Kind => FrameKind.Unary;
 
     public static ClientUnaryHandler<TRequest, TResponse> Get(CancellationToken cancellation)
     {

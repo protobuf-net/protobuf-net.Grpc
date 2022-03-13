@@ -9,14 +9,14 @@ namespace ProtoBuf.Grpc.Lite.Connections;
 
 public static class ConnectionFactory
 {
-    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> ConnectNamedPipe(string pipeName, string serverName = ".", ILogger? logger = null) => async cancellationToken =>
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ConnectNamedPipe(string pipeName, string serverName = ".", ILogger? logger = null) => async cancellationToken =>
         {
             var pipe = new NamedPipeClientStream(pipeName, serverName,
                 PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
             try
             {
                 await pipe.ConnectAsync(cancellationToken);
-                return new ConnectionState<StreamPair>(new StreamPair(pipe), pipeName)
+                return new ConnectionState<Stream>(pipe, pipeName)
                 {
                     Logger = logger,
                 };
@@ -32,6 +32,14 @@ public static class ConnectionFactory
         this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
         Func<ConnectionState<T>, ConnectionState<T>> selector)
         => async cancellationToken => selector(await factory(cancellationToken));
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<TTarget>>> With<TSource, TTarget>(
+        this Func<CancellationToken, ValueTask<ConnectionState<TSource>>> factory,
+        Func<TSource, TTarget> selector)
+        => async cancellationToken => {
+            var source = await factory(cancellationToken);
+            return source.ChangeType(selector(source.Connection));
+        };
 
     public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> WithGZip(
         this Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> factory,
@@ -53,42 +61,60 @@ public static class ConnectionFactory
             throw;
         }
     };
-    
-    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> WithTls(
-        this Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> factory,
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> SplitDuplex(
+        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory)
+        => With(factory, static duplex => new StreamPair(duplex));
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> WithGZip(
+        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
+        CompressionLevel compreessionLevel = CompressionLevel.Optimal)
+        => factory.SplitDuplex().WithGZip();
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithTls(
+        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
         RemoteCertificateValidationCallback? userCertificateValidationCallback = null,
         LocalCertificateSelectionCallback? userCertificateSelectionCallback = null,
         EncryptionPolicy encryptionPolicy = default)
         => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
-            var pair = source.Connection;
             try
             {
-                if (!ReferenceEquals(pair.Input, pair.Output))
-                {
-                    throw new InvalidOperationException("TLS requires a duplex stream");
-                }
-                ;
-                source.Connection = new StreamPair(new SslStream(pair.Input, false,
-                    userCertificateValidationCallback, userCertificateSelectionCallback, encryptionPolicy));
+                source.Connection = new SslStream(source.Connection, false,
+                    userCertificateValidationCallback, userCertificateSelectionCallback, encryptionPolicy);
                 return source;
             }
             catch
             {
-                await pair.SafeDisposeAsync();
+                await source.Connection.SafeDisposeAsync();
                 throw;
             }
         };
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<T>>> Buffer<T>(
-        this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
-        int inputFrames, int outputFrames) => factory.With(source =>
+    public static Func<CancellationToken, ValueTask<ConnectionState<ITerminator>>> WithFrameBuffer(
+        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
+        int inputFrames, int outputFrames) => factory.SplitDuplex().WithFrameBuffer(inputFrames, outputFrames);
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<ITerminator>>> WithFrameBuffer(
+        this Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> factory,
+        int inputFrames, int outputFrames) => async cancellationToken =>
         {
-            source.InputBuffer = inputFrames;
-            source.OutputBuffer = outputFrames;
-            return source;
-        });
+            var source = await factory(cancellationToken);
+            try
+            {
+                ITerminator nonGated = new StreamTerminator(source.Connection.Input, source.Connection.Output),
+                    gated = inputFrames > 0
+                    ? new BufferedGate(nonGated, inputFrames, outputFrames)
+                    : new SynchronizedGate(nonGated, outputFrames);
+                return source.ChangeType<ITerminator>(gated);
+            }
+            catch
+            {
+                await source.Connection.SafeDisposeAsync();
+                throw;
+            }
+        };
 
     public static Func<CancellationToken, ValueTask<ConnectionState<T>>> Log<T>(
         this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
@@ -98,20 +124,23 @@ public static class ConnectionFactory
             return source;
         });
 
+    public static ValueTask<ChannelBase> CreateChannelAsync(
+        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
+        CancellationToken cancellationToken = default)
+        => factory.WithFrameBuffer(0, 0).CreateChannelAsync();
+
     public static async ValueTask<ChannelBase> CreateChannelAsync(
-        this Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> factory,
+        this Func<CancellationToken, ValueTask<ConnectionState<ITerminator>>> factory,
         CancellationToken cancellationToken = default)
     {
         var source = await factory(cancellationToken);
-        var pair = source.Connection;
         try
         {
-            IGatedTerminator terminator = new StreamTerminator(pair.Input, pair.Output).Gate(source.InputBuffer, source.OutputBuffer);
-            return new LiteChannel(pair.Input, pair.Output, source.Name, source.Logger);
+            return new LiteChannel(source.Connection, source.Name, source.Logger);
         }
         catch
         {
-            await pair.SafeDisposeAsync();
+            await source.Connection.SafeDisposeAsync();
             throw;
         }
     }
@@ -122,13 +151,14 @@ static class Demo
     static async ValueTask Usage()
     {
         await Task.Delay(20);
-        var channel = ConnectionFactory.ConnectNamedPipe("foo").WithTls().Buffer(0, 0).CreateChannelAsync();
+        ChannelBase simple = await ConnectionFactory.ConnectNamedPipe("foo").CreateChannelAsync();
+        ChannelBase nuanced = await ConnectionFactory.ConnectNamedPipe("foo").WithTls().WithGZip().WithFrameBuffer(0, 0).CreateChannelAsync();
     }
 }
 
-internal interface ITerminator : IEnumerable<Frame>
+public interface ITerminator : IAsyncEnumerable<NewFrame>, IAsyncDisposable
 {
-    ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken);
+    ValueTask WriteAsync(BufferSegment frame, CancellationToken cancellationToken);
 }
 
 
@@ -159,8 +189,11 @@ public sealed class ConnectionState<T>
 
     public T Connection { get; set; }
     /// <summary>The size of the input buffer, in frames</summary>
-    public int InputBuffer { get; set; }
-    /// <summary>The size of the output buffer, in frames</summary>
-    public int OutputBuffer { get; set; }
     public ILogger? Logger { get; set; }
+
+    internal ConnectionState<TTarget> ChangeType<TTarget>(TTarget connection)
+        => new ConnectionState<TTarget>(connection, Name)
+        {
+            Logger = Logger
+        };
 }

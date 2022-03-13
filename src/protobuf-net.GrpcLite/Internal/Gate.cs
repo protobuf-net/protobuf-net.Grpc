@@ -1,24 +1,25 @@
-﻿using System.Threading.Channels;
+﻿using ProtoBuf.Grpc.Lite.Connections;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal abstract class Gate : IGatedTerminator
+internal abstract class Gate : ITerminator
 {
-    protected ITerminator Terminator { get; }
-    private Channel<Frame>? _outputBuffer;
+    protected ITerminator Tail { get; }
+    private Channel<NewFrame>? _outputBuffer;
     protected Gate(ITerminator terminator, int outputBuffer)
     {
-        Terminator = terminator;
+        Tail = terminator;
         if (outputBuffer > 0)
         {
             _outputBuffer = outputBuffer == int.MaxValue
-                ? Channel.CreateUnbounded<Frame>(_unbounded ??= new UnboundedChannelOptions
+                ? Channel.CreateUnbounded<NewFrame>(_unbounded ??= new UnboundedChannelOptions
                 {
                     SingleReader = true,
                     SingleWriter = true,
                     AllowSynchronousContinuations = false,
                 })
-                : Channel.CreateBounded<Frame>(new BoundedChannelOptions(outputBuffer)
+                : Channel.CreateBounded<NewFrame>(new BoundedChannelOptions(outputBuffer)
                 {
                     AllowSynchronousContinuations = false,
                     SingleReader = true,
@@ -30,16 +31,16 @@ internal abstract class Gate : IGatedTerminator
 
     private static UnboundedChannelOptions? _unbounded;
 
-    public virtual ValueTask DisposeAsync() => Terminator.DisposeAsync();
-    public IAsyncEnumerator<Frame> GetAsyncEnumerator(CancellationToken cancellationToken)
+    public virtual ValueTask DisposeAsync() => Tail.DisposeAsync();
+    public IAsyncEnumerator<NewFrame> GetAsyncEnumerator(CancellationToken cancellationToken)
     {
-        var inner = Terminator.GetAsyncEnumerator(cancellationToken);
+        var inner = Tail.GetAsyncEnumerator(cancellationToken);
         if (_outputBuffer is null) return inner;
         _ = BufferAsync(inner, _outputBuffer.Writer, cancellationToken);
         return ReadAllAsync(_outputBuffer, cancellationToken);
     }
 
-    private static async IAsyncEnumerator<Frame> ReadAllAsync(Channel<Frame> channel, CancellationToken cancellationToken)
+    private static async IAsyncEnumerator<NewFrame> ReadAllAsync(Channel<NewFrame> channel, CancellationToken cancellationToken)
     {
         while (true)
         {
@@ -56,7 +57,7 @@ internal abstract class Gate : IGatedTerminator
         }
     }
 
-    private static async Task BufferAsync(IAsyncEnumerator<Frame> source, ChannelWriter<Frame> destination, CancellationToken cancellationToken)
+    private static async Task BufferAsync(IAsyncEnumerator<NewFrame> source, ChannelWriter<NewFrame> destination, CancellationToken cancellationToken)
     {
         try
         {
@@ -79,7 +80,7 @@ internal abstract class Gate : IGatedTerminator
         }
     }
 
-    public abstract ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken);
+    public abstract ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken);
 }
 
 internal sealed class SynchronizedGate : Gate
@@ -87,7 +88,7 @@ internal sealed class SynchronizedGate : Gate
     public SynchronizedGate(ITerminator terminator, int outputBuffer) : base(terminator, outputBuffer) { }
 
     private readonly SemaphoreSlim _mutex = new SemaphoreSlim(1, 1);
-    public override ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
+    public override ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken)
     {
         bool release = false;
         try
@@ -95,7 +96,7 @@ internal sealed class SynchronizedGate : Gate
             release = _mutex.Wait(0);
             if (release)
             {
-                var pending = Terminator.WriteAsync(frame, cancellationToken);
+                var pending = Tail.WriteAsync(frames, cancellationToken);
                 if (pending.IsCompleted)
                 {
                     pending.GetAwaiter().GetResult();
@@ -109,7 +110,7 @@ internal sealed class SynchronizedGate : Gate
             }
             else
             {
-                return FullAsync(this, frame, cancellationToken);
+                return FullAsync(this, frames, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -124,12 +125,12 @@ internal sealed class SynchronizedGate : Gate
         {
             if (release) _mutex.Release();
         }
-        static async ValueTask FullAsync(SynchronizedGate gate, Frame value, CancellationToken cancellationToken)
+        static async ValueTask FullAsync(SynchronizedGate gate, BufferSegment frames, CancellationToken cancellationToken)
         {
             await gate._mutex.WaitAsync(cancellationToken);
             try
             {
-                await gate.Terminator.WriteAsync(value, cancellationToken);
+                await gate.Tail.WriteAsync(frames, cancellationToken);
             }
             finally
             {
@@ -157,30 +158,30 @@ internal sealed class SynchronizedGate : Gate
 
 internal sealed class BufferedGate : Gate
 {
-    readonly Channel<Frame> _channel;
+    readonly Channel<BufferSegment> _inputBuffer;
     public BufferedGate(ITerminator terminator, int inputBuffer, int outputBuffer) : base(terminator, outputBuffer)
     {
-        _channel = inputBuffer == int.MaxValue
-            ? Channel.CreateUnbounded<Frame>(_unboundedOptions ??= new UnboundedChannelOptions
+        _inputBuffer = inputBuffer == int.MaxValue
+            ? Channel.CreateUnbounded<BufferSegment>(_unboundedOptions ??= new UnboundedChannelOptions
             {
                 SingleWriter = false,
                 SingleReader = true,
-                AllowSynchronousContinuations = true,
+                AllowSynchronousContinuations = false,
             })
-            : Channel.CreateBounded<Frame>(new BoundedChannelOptions(inputBuffer)
+            : Channel.CreateBounded<BufferSegment>(new BoundedChannelOptions(inputBuffer)
             {
                 SingleWriter = false,
                 SingleReader = true,
-                AllowSynchronousContinuations = true,
+                AllowSynchronousContinuations = false,
             });
     }
-    public override ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
-        => _channel.Writer.WriteAsync(frame, cancellationToken);
+    public override ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken)
+        => _inputBuffer.Writer.WriteAsync(frames, cancellationToken);
 
     static UnboundedChannelOptions? _unboundedOptions;
     public override ValueTask DisposeAsync()
     {
-        _channel.Writer.TryComplete();
+        _inputBuffer.Writer.TryComplete();
         return default;
     }
 

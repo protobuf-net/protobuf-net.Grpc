@@ -91,12 +91,4 @@ internal static class Utilities
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ushort IncrementToUInt32(ref int value)
         => unchecked((ushort)Interlocked.Increment(ref value));
-
-    public static IGatedTerminator Gate(this ITerminator terminator, int inputBuffer, int outputBuffer)
-    {
-        if (terminator is IGatedTerminator gated) return gated; // already gated
-
-        return inputBuffer == 0 ? new SynchronizedGate(terminator, outputBuffer)
-            : new BufferedGate(terminator, inputBuffer, outputBuffer);
-    }
 }

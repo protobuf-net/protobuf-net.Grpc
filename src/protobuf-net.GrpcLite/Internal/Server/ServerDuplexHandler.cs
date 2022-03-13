@@ -5,7 +5,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
 internal sealed class ServerDuplexHandler<TRequest, TResponse> : ServerHandler<TRequest, TResponse>, IAsyncStreamReader<TRequest>, IReceiver<TRequest> where TResponse : class where TRequest : class
 {
-    public override FrameKind Kind => FrameKind.NewDuplex;
+    public override FrameKind Kind => FrameKind.DuplexStreaming;
 
     private DuplexStreamingServerMethod<TRequest, TResponse>? _handler;
     private Channel<TRequest>? _requests;

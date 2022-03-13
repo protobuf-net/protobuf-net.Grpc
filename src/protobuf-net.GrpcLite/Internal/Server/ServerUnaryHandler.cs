@@ -20,7 +20,7 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
         Pool<ServerUnaryHandler<TRequest, TResponse>>.Put(this);
     }
 
-    public override FrameKind Kind => FrameKind.NewUnary;
+    public override FrameKind Kind => FrameKind.Unary;
     public override ValueTask CompleteAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 
     private TRequest? _request;
