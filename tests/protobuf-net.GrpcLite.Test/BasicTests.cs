@@ -27,9 +27,9 @@ public class BasicTests
     static string Me([CallerMemberName] string caller = "") => caller;
 
     [Fact]
-    public void CanCreateInvoker()
+    public async ValueTask CanCreateInvoker()
     {
-        using var channel = new LiteChannel(Stream.Null, Stream.Null, Me());
+        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null, Stream.Null), Me());
         var invoker = channel.CreateCallInvoker();
     }
 
@@ -43,7 +43,7 @@ public class BasicTests
         var bytes = Encoding.UTF8.GetBytes("hello, world!");
         await channel.Writer.WriteAsync(new Frame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
         channel.Writer.Complete();
-        await Frame.WriteFromOutboundChannelToStream(channel, ms, Logger, default);
+        await Frame.WriteAllAsync(channel, ms, Logger, default);
 
         var hex = GetHex(ms);
         Assert.Equal(
@@ -86,7 +86,7 @@ public class BasicTests
     {
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var ms = new MemoryStream();
-        await using var channel = new LiteChannel(Stream.Null, ms, Me());
+        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null, ms), Me());
         var invoker = channel.CreateCallInvoker();
         using var call = invoker.AsyncUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!");
@@ -108,7 +108,7 @@ public class BasicTests
     {
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var ms = new MemoryStream();
-        await using var channel = new LiteChannel(Stream.Null, ms, Me());
+        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null, ms), Me());
         var invoker = channel.CreateCallInvoker();
 
         // we don't expect a reply

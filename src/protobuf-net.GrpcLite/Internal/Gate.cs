@@ -3,13 +3,14 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal abstract class Gate : ITerminator
+internal abstract class Gate : IFrameConnection
 {
-    protected ITerminator Tail { get; }
+    bool IFrameConnection.ThreadSafeWrite => true;
+    protected IFrameConnection Tail { get; }
     private Channel<NewFrame>? _outputBuffer;
-    protected Gate(ITerminator terminator, int outputBuffer)
+    protected Gate(IFrameConnection tail, int outputBuffer)
     {
-        Tail = terminator;
+        Tail = tail;
         if (outputBuffer > 0)
         {
             _outputBuffer = outputBuffer == int.MaxValue
@@ -85,7 +86,7 @@ internal abstract class Gate : ITerminator
 
 internal sealed class SynchronizedGate : Gate
 {
-    public SynchronizedGate(ITerminator terminator, int outputBuffer) : base(terminator, outputBuffer) { }
+    public SynchronizedGate(IFrameConnection tail, int outputBuffer) : base(tail, outputBuffer) { }
 
     private readonly SemaphoreSlim _mutex = new SemaphoreSlim(1, 1);
     public override ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken)
@@ -159,7 +160,7 @@ internal sealed class SynchronizedGate : Gate
 internal sealed class BufferedGate : Gate
 {
     readonly Channel<BufferSegment> _inputBuffer;
-    public BufferedGate(ITerminator terminator, int inputBuffer, int outputBuffer) : base(terminator, outputBuffer)
+    public BufferedGate(IFrameConnection tail, int inputBuffer, int outputBuffer) : base(tail, outputBuffer)
     {
         _inputBuffer = inputBuffer == int.MaxValue
             ? Channel.CreateUnbounded<BufferSegment>(_unboundedOptions ??= new UnboundedChannelOptions

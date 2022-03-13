@@ -162,7 +162,7 @@ internal readonly struct Frame : IDisposable
     internal static Channel<Frame> CreateChannel()
         => Channel.CreateUnbounded<Frame>(OutboundOptions);
 
-    internal async static Task WriteFromOutboundChannelToStream(Channel<Frame> source, Stream output, ILogger? logger, CancellationToken cancellationToken)
+    internal async static Task WriteAllAsync(Channel<Frame> source, Stream output, ILogger? logger, CancellationToken cancellationToken)
     {
         await Task.Yield(); // ensure we don't block the constructor
         byte[]? headerBuffer = null;

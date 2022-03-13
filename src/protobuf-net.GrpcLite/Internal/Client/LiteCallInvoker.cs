@@ -1,21 +1,32 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Connections;
 using System.Collections.Concurrent;
-using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal sealed class LiteCallInvoker : CallInvoker
 {
     private readonly ILogger? _logger;
-    private readonly Channel<Frame> _outbound;
-    private readonly ConcurrentDictionary<ushort, IClientHandler> _activeOperations = new();
+    private readonly IFrameConnection _connection;
+    private readonly ConcurrentDictionary<ushort, IClientHandler> _streams = new();
     private int _nextId = ushort.MaxValue; // so that our first id is zero
-    private ushort NextId() => Utilities.IncrementToUInt32(ref _nextId);
-
-    public LiteCallInvoker(Channel<Frame> outbound, ILogger? logger)
+    private ushort AddStream(IClientHandler handler)
     {
-        this._outbound = outbound;
+        for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
+        {
+            var id = Utilities.IncrementToUInt32(ref _nextId);
+            handler.Id = id;
+            if (_streams.TryAdd(id, handler)) return id;
+        }
+        return ThrowUnableToReserve(_streams.Count);
+        static ushort ThrowUnableToReserve(int count)
+            => throw new InvalidOperationException($"It was not possible to reserve a new stream id; {count} streams are currently in use");
+    }
+
+    public LiteCallInvoker(IFrameConnection connection, ILogger? logger)
+    {
+        this._connection = connection;
         this._logger = logger;
     }
 
@@ -27,8 +38,7 @@ internal sealed class LiteCallInvoker : CallInvoker
         where TResponse : class
     {
         var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        handler.Initialize(NextId(), method, _outbound, _logger);
-        AddHandler(handler);
+        handler.Initialize(AddStream(handler), method, _connection, _logger);
         try
         {
             await handler.SendSingleAsync(host, options, request);
@@ -48,8 +58,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
         var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        handler.Initialize(NextId(), method, _outbound, _logger);
-        AddHandler(handler);
+        handler.Initialize(AddStream(handler), method, _connection, _logger);
         _ = handler.SendSingleAsync(host, options, request);
         return new AsyncUnaryCall<TResponse>(handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
@@ -57,7 +66,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        handler.Initialize(NextId(), method, _outbound, _logger);
+        handler.Initialize(AddStream(), method, _connection, _logger);
         AddHandler(handler);
         _ = handler.SendInitializeAsync(host, options).AsTask();
         return new AsyncClientStreamingCall<TRequest, TResponse>(handler, handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
@@ -66,8 +75,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.DuplexStreaming);
-        handler.Initialize(NextId(), method, _outbound, _logger);
-        AddHandler(handler);
+        handler.Initialize(AddStream(handler), method, _connection, _logger);
         _ = handler.SendInitializeAsync(host, options).AsTask();
         return new AsyncDuplexStreamingCall<TRequest, TResponse>(handler, handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
@@ -75,31 +83,31 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
         var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.ServerStreaming);
-        handler.Initialize(NextId(), method, _outbound, _logger);
-        AddHandler(handler);
+        handler.Initialize(AddStream(handler), method, _connection, _logger);
         _ = handler.SendSingleAsync(host, options, request);
         return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
 
-    internal async Task ConsumeAsync(Stream input, ILogger? logger, CancellationToken cancellationToken)
+    internal async Task ReadAllAsync(ILogger? logger, CancellationToken cancellationToken)
     {
         await Task.Yield();
-        while (!cancellationToken.IsCancellationRequested)
+        await using var iter = _connection.GetAsyncEnumerator(cancellationToken);
+        while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
         {
-            var frame = await Frame.ReadAsync(input, cancellationToken);
-            logger.LogDebug(frame, static (state, _) => $"received frame {state}");
-            switch (frame.Kind)
+            var (header, payload) = iter.Current;
+            logger.LogDebug(header, static (state, _) => $"received frame {state}");
+            switch (header.Kind)
             {
                 case FrameKind.Close:
                 case FrameKind.Ping:
-                    var generalFlags = (GeneralFlags)frame.KindFlags;
+                    var generalFlags = (GeneralFlags)header.KindFlags;
                     if ((generalFlags & GeneralFlags.IsResponse) == 0)
                     {
                         // if this was a request, we reply in kind, but noting that it is a response
                         await _outbound.Writer.WriteAsync(new Frame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
                     }
                     // shutdown if requested
-                    if (frame.Kind == FrameKind.Close)
+                    if (header.Kind == FrameKind.Close)
                     {
                         _outbound.Writer.TryComplete();
                     }
@@ -108,24 +116,15 @@ internal sealed class LiteCallInvoker : CallInvoker
                 case FrameKind.ClientStreaming:
                 case FrameKind.ServerStreaming:
                 case FrameKind.DuplexStreaming:
-                    logger.LogError(frame, static (state, _) => $"server should not be initializing requests! {state}");
+                    logger.LogError(header, static (state, _) => $"server should not be initializing requests! {state}");
                     break;
                 case FrameKind.Payload:
-                    if (_activeOperations.TryGetValue(frame.RequestId, out var handler))
+                    if (_streams.TryGetValue(header.StreamId, out var handler))
                     {
-                        await handler.ReceivePayloadAsync(frame, cancellationToken);
+                        await handler.ReceivePayloadAsync(payload, cancellationToken);
                     }
                     break;
             }
         }
-    }
-
-    private void AddHandler(IClientHandler receiver)
-    {
-        if (receiver is null) ThrowNull();
-        if (!_activeOperations.TryAdd(receiver!.Id, receiver)) ThrowDuplicate(receiver.Id);
-
-        static void ThrowNull() => throw new ArgumentNullException(nameof(receiver));
-        static void ThrowDuplicate(ushort id) => throw new ArgumentException($"Duplicate receiver key: {id}");
     }
 }

@@ -43,11 +43,11 @@ internal sealed class ClientUnaryHandler<TRequest, TResponse> : ClientHandler<TR
         bool success = _tcs!.TrySetResult(value);
         if (success)
         {
-            Logger.LogDebug(Id, static (state, _) => $"assigned response for request {state}");
+            Logger.LogDebug(StreamId, static (state, _) => $"assigned response for request {state}");
         }
         else
         {
-            Logger.LogDebug(Id, static (state, _) => $"unable to assign response for request {state}");
+            Logger.LogDebug(StreamId, static (state, _) => $"unable to assign response for request {state}");
         }
         UnregisterCancellation();
         return default;

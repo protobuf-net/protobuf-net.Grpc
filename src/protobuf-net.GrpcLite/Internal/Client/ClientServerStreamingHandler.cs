@@ -42,7 +42,7 @@ internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : Client
 
     protected override ValueTask ReceivePayloadAsync(TResponse value, CancellationToken cancellationToken)
     {
-        Logger.LogDebug(Id, static (state, ex) => $"adding item to sequence {state}");
+        Logger.LogDebug(StreamId, static (state, ex) => $"adding item to sequence {state}");
         return _channel!.Writer.WriteAsync(value, cancellationToken);
     }
     public override ValueTask CompleteAsync(CancellationToken cancellationToken)

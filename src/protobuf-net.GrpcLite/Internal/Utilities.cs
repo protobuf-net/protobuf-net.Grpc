@@ -91,4 +91,11 @@ internal static class Utilities
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ushort IncrementToUInt32(ref int value)
         => unchecked((ushort)Interlocked.Increment(ref value));
+
+    private static readonly ArraySegment<byte> EmptySegment = new ArraySegment<byte>(EmptyBuffer);
+    internal static bool TryGetEmptySegment(out ArraySegment<byte> segment)
+    {
+        segment = EmptySegment;
+        return true;
+    }
 }

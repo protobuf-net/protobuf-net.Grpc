@@ -27,6 +27,32 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
 {
     public const int Size = sizeof(ulong); // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
+    internal void UnsafeWrite(ref byte destination)
+    {
+        // note values are little-endian; the JIT will remove the appropriate dead branch here
+        if (BitConverter.IsLittleEndian)
+        {
+            Unsafe.As<byte, ulong>(ref destination) = RawValue;
+        }
+        else
+        {
+            unsafe
+            {
+                fixed (byte* dest = &destination)
+                {
+                    dest[0] = (byte)Kind;
+                    dest[1] = KindFlags;
+                    dest[2] = (byte)(StreamId & 0xFF);
+                    dest[3] = (byte)((StreamId >> 8) & 0xFF);
+                    dest[4] = (byte)(SequenceId & 0xFF);
+                    dest[5] = (byte)((SequenceId >> 8) & 0xFF);
+                    dest[6] = (byte)(Length & 0xFF);
+                    dest[7] = (byte)((Length >> 8) & 0xFF);
+                }
+            }
+        }
+    }
+
     // this overlaps everything and can be considered "the value", in CPU-endianness
     [FieldOffset(0)]
     private readonly ulong RawValue;
@@ -105,29 +131,57 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
 public readonly struct BufferSegment
 {
     public static BufferSegment Empty = new BufferSegment(Utilities.EmptyBuffer, 0, 0);
+    private readonly int _offset, _length;
     public BufferSegment(byte[] array, int offset, int length)
     {
-        Array = array;
-        Offset = offset;
-        Length = length;
+        _source = array;
+        _offset = offset;
+        _length = length;
     }
-    public int Offset { get; }
-    public int Length { get; }
-    public byte[] Array { get; }
-    public void Release() { }
+    internal BufferSegment(Slab slab, int offset, int length)
+    {
+        _source = slab;
+        _offset = offset;
+        _length = length;
+    }
 
-    public static implicit operator ArraySegment<byte>(in BufferSegment segment)
-        => new ArraySegment<byte>(segment.Array, segment.Offset, segment.Length);
-    public static  implicit operator Span<byte>(in BufferSegment segment)
-        => new Span<byte>(segment.Array, segment.Offset, segment.Length);
-    public static implicit operator ReadOnlySpan<byte>(in BufferSegment segment)
-        => new ReadOnlySpan<byte>(segment.Array, segment.Offset, segment.Length);
-    public static implicit operator Memory<byte>(in BufferSegment segment)
-        => new Memory<byte>(segment.Array, segment.Offset, segment.Length);
-    public static implicit operator ReadOnlyMemory<byte>(in BufferSegment segment)
-        => new ReadOnlyMemory<byte>(segment.Array, segment.Offset, segment.Length);
-    public static implicit operator ReadOnlySequence<byte>(in BufferSegment segment)
-        => new ReadOnlySequence<byte>(segment.Array, segment.Offset, segment.Length);
+    public readonly object _source;
+
+    public int Length => _length;
+
+    public ref byte this[int index]
+    {
+        get
+        {
+            if (index < 0 || index >= _length) Throw();
+            return ref _source is Slab slab ? ref slab[_offset + index] : ref ((byte[])_source)[_offset + index];
+
+            static void Throw() => throw new IndexOutOfRangeException();
+        }
+    }
+
+    public bool TryGetArray(out ArraySegment<byte> buffer)
+    {
+        if (_source is Slab slab) return slab.TryGetArray(_offset, _length, out buffer);
+        if (_length == 0) return Utilities.TryGetEmptySegment(out buffer);
+        buffer = new ArraySegment<byte>((byte[])_source, _offset, _length);
+        return true;
+    }
+
+    public Memory<byte> Memory
+    {
+        get
+        {
+            if (_length == 0) return default;
+            if (_source is Slab slab) return slab.Memory.Slice(_offset, _length);
+            return new Memory<byte>((byte[])_source, _offset, _length);
+        }
+    }
+
+    public void Release()
+    {
+        if (_source is Slab slab) slab.RemoveReference();
+    }
 } 
 public readonly struct NewFrame
 {
@@ -146,4 +200,11 @@ public readonly struct NewFrame
 
     public FrameHeader Header { get; }
     public BufferSegment Payload { get; }
+
+    public void Deconstruct(out FrameHeader header, out BufferSegment payload)
+    {
+        header = Header;
+        payload = Payload;
+    }
+
 }

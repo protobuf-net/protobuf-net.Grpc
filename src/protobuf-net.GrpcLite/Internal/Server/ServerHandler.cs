@@ -1,13 +1,13 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Connections;
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
 internal interface IServerHandler : IHandler
 {
-    void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger);
+    void Initialize(ushort id, IFrameConnection output, ILogger? logger);
     Status Status { get; set; }
     DateTime Deadline { get; }
     string Host { get; }
@@ -31,7 +31,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
 
     private Method<TRequest, TResponse> TypedMethod => Unsafe.As<Method<TRequest, TResponse>>(Method);
 
-    public override void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger)
+    public override void Initialize(ushort id, IFrameConnection output, ILogger? logger)
     {
         base.Initialize(id, output, logger);
         Status = Status.DefaultSuccess;
@@ -115,7 +115,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
 
     internal async ValueTask WritePayloadAsync(TResponse response, bool isLastElement)
     {
-        var serializationContext = Pool<FrameSerializationContext>.Get();
+        var serializationContext = FrameSerializationContext.Get();
         try
         {
             Logger.LogDebug(Method, static (state, _) => $"serializing {state.FullName} response...");

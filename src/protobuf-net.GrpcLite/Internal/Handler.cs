@@ -1,12 +1,13 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Connections;
 using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
 interface IHandler : IPooled
 {
-    ushort Id { get; }
+    ushort StreamId { get; }
     FrameKind Kind { get; }
     ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
@@ -25,10 +26,10 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     // these are all set via initialize
     private IMethod _method;
-    ChannelWriter<Frame> _output;
+    IFrameConnection _output;
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
-    public ushort Id => _id;
+    public ushort StreamId => _id;
     private int _sequenceId;
     public ushort NextSequenceId() => Utilities.IncrementToUInt32(ref _sequenceId);
     protected ILogger? Logger => _logger;
@@ -37,9 +38,9 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         get => _method;
         set => _method = value;
     }
-    protected ChannelWriter<Frame> Output => _output;
+    protected IFrameConnection Output => _output;
 
-    public virtual void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger)
+    public virtual void Initialize(ushort id, IFrameConnection output, ILogger? logger)
     {
         _output = output;
         _logger = logger;
@@ -87,7 +88,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
 
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
-        => Output.WriteAsync(Frame.GetInitializeFrame(Kind, Id, NextSequenceId(), Method.FullName, host), options.CancellationToken);
+        => Output.WriteAsync(Frame.GetInitializeFrame(Kind, StreamId, NextSequenceId(), Method.FullName, host), options.CancellationToken);
 
     internal async Task SendSingleAsync(string? host, CallOptions options, TSend request)
     {
@@ -101,7 +102,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            serializationContext = Pool<FrameSerializationContext>.Get();
+            serializationContext = FrameSerializationContext.Get();
             Serializer(value, serializationContext);
             await serializationContext.WritePayloadAsync(Output, this, isLastElement, cancellationToken);
         }

@@ -2,6 +2,7 @@
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
+using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using System;
 using System.Threading;
@@ -38,11 +39,11 @@ namespace protobuf_net.GrpcLite.Test
             => Server.WithLog(_output, prefix);
 
         [Fact]
-        public void CanCallUnarySync()
+        public async Task CanCallUnarySync()
         {
             using var log = ServerLog();
             using var timeout = After();
-            using var client = LiteChannel.ConnectNamedPipe(Name, timeout: DefaultTimeout, logger: Logger("client"));
+            await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
             var proxy = new FooService.FooServiceClient(client);
 
             var response = proxy.Unary(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
@@ -57,7 +58,8 @@ namespace protobuf_net.GrpcLite.Test
         {
             using var log = ServerLog();
             using var timeout = After();
-            await using var client = await LiteChannel.ConnectNamedPipeAsync(Name, cancellationToken: timeout.Token, logger: Logger("client"));
+            await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
+
             var proxy = new FooService.FooServiceClient(client);
 
             using var call = proxy.UnaryAsync(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
@@ -73,7 +75,7 @@ namespace protobuf_net.GrpcLite.Test
         {
             using var log = ServerLog();
             using var timeout = After();
-            await using var client = await LiteChannel.ConnectNamedPipeAsync(Name, cancellationToken: timeout.Token, logger: Logger("client"));
+            await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
             var proxy = new FooService.FooServiceClient(client);
             
             using var call = proxy.Duplex();
