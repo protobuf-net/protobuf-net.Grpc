@@ -101,6 +101,7 @@ internal sealed class LiteCallInvoker : CallInvoker
             while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
             {
                 var frame = iter.Current;
+                bool releaseFrame = false;
                 var header = frame.GetHeader();
                 logger.LogDebug(header, static (state, _) => $"received frame {state}");
                 switch (header.Kind)
@@ -118,16 +119,33 @@ internal sealed class LiteCallInvoker : CallInvoker
                         {
                             _connection.Close();
                         }
+                        releaseFrame = true;
                         break;
                     case FrameKind.NewStream:
                         logger.LogError(header, static (state, _) => $"server should not be initializing requests! {state}");
+                        releaseFrame = true;
                         break;
                     case FrameKind.Payload:
                         if (_streams.TryGetValue(header.StreamId, out var handler))
                         {
+                            _logger.LogDebug((handler: handler, frame: frame), static (state, _) => $"pushing {state.frame} to {state.handler.Method} ({state.handler.MethodType})");
                             await handler.ReceivePayloadAsync(frame, cancellationToken);
                         }
+                        else
+                        {
+                            _logger.LogInformation(frame, static (state, _) => $"unexpected frame type {state}");
+                            releaseFrame = true;
+                        }
                         break;
+                    default:
+                        _logger.LogInformation(frame, static (state, _) => $"unexpected frame type {state}");
+                        releaseFrame = true;
+                        break;
+                }
+                if (releaseFrame)
+                {
+                    _logger.LogInformation(frame.Buffer, static (state, _) => $"releasing {state.Length} bytes");
+                    frame.Release();
                 }
             }
         }

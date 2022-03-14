@@ -12,7 +12,6 @@ internal interface IServerHandler : IHandler
     DateTime Deadline { get; }
     string Host { get; }
     string Peer { get; }
-    string Method { get; }
     CancellationToken CancellationToken { get; }
     Metadata RequestHeaders { get; }
     Metadata ResponseTrailers { get; }
@@ -103,8 +102,6 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
             catch { }
         }
     }
-
-    string IServerHandler.Method => Method!.FullName;
 
     private Metadata? _responseTrailers;
     Metadata IServerHandler.ResponseTrailers => _responseTrailers ??= new Metadata();

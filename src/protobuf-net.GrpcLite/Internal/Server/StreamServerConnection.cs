@@ -106,6 +106,7 @@ namespace ProtoBuf.Grpc.Lite.Internal
                     if (releaseFrame)
                     {
                         _logger.LogInformation(frame.Buffer, static (state, _) => $"releasing {state.Length} bytes");
+                        frame.Release();
                     }
                 }
             }

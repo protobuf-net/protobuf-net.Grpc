@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;

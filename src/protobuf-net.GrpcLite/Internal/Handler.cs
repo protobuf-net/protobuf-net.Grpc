@@ -14,6 +14,7 @@ interface IHandler : IPooled
     ValueTask CompleteAsync(CancellationToken cancellationToken);
     ushort NextSequenceId();
     MethodType MethodType { get; }
+    string Method { get; }
 }
 
 interface IReceiver<T>
@@ -23,6 +24,7 @@ interface IReceiver<T>
 
 abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where TReceive : class
 {
+    string IHandler.Method => Method!.FullName;
     protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
 
     private ushort _streamId;
@@ -70,51 +72,67 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     public abstract void Recycle();
 
-    Queue<ReadOnlyMemory<byte>>? _backlog;
-    private void AddBacklog(in ReadOnlyMemory<byte> payload)
-    {
-        if (!payload.IsEmpty)
-        {
-            (_backlog ??= new Queue<ReadOnlyMemory<byte>>()).Enqueue(payload);
-        }
-    }
+    private readonly List<Frame> _frames = new();
 
-    private ReadOnlySequence<byte> Flush(in ReadOnlyMemory<byte> final)
+    private ReadOnlySequence<byte> MergePayload()
     {
-        var backlog = _backlog;
-        if (backlog is null || backlog.Count == 0)
-        {   // single-frame payload
-            return final.IsEmpty ? default : new ReadOnlySequence<byte>(final);
-        }
-        backlog.Enqueue(final);
-        throw new NotImplementedException("build the chain");
+        switch (_frames.Count)
+        {
+            case 0: return default;
+            case 1: return new ReadOnlySequence<byte>(_frames[0].GetPayload());
+            default:
+                throw new NotImplementedException("build a ROS over the payload data");
+        }        
     }
     public ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken)
     {
         var header = frame.GetHeader();
         
-        var payload = frame.GetPayload();
         bool isComplete = (header.KindFlags & (byte)PayloadFlags.EndItem) != 0;
-
-        if (isComplete)
+        if (header.PayloadLength == 0)
         {
-            return ReceiveCompletePayloadAsync(Flush(payload), cancellationToken);
+            frame.Release(); // no longer needed
         }
         else
         {
-            AddBacklog(payload);
+            _frames.Add(frame);
+        }
+        if (isComplete)
+        {
+            return ReceiveCompletePayloadAsync(MergePayload(), cancellationToken);
+        }
+        else
+        {
             return default;
         }
     }
     private ValueTask ReceiveCompletePayloadAsync(ReadOnlySequence<byte> payload, CancellationToken cancellationToken)
     {
-        _logger.LogDebug(payload.Length, static (state, _) => $"deserializing payload, {state} bytes...");
-        var ctx = Pool<SingleBufferDeserializationContext>.Get();
-        ctx.Initialize(payload);
-        var request = Deserializer(ctx);
-        ctx.Recycle();
-        _logger.LogDebug(payload.Length, static (state, _) => $"deserialized {state} bytes; processing request");
-        return ReceivePayloadAsync(request, cancellationToken);
+        TReceive value;
+        try
+        {
+            _logger.LogDebug(payload.Length, static (state, _) => $"deserializing payload, {state} bytes...");
+            var ctx = Pool<SingleBufferDeserializationContext>.Get();
+            ctx.Initialize(payload);
+            value = Deserializer(ctx);
+            ctx.Recycle();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex);
+            throw;
+        }
+        finally
+        {
+            _logger.LogDebug((buffers: _frames.Count, bytes: _frames.Sum(x => x.Buffer.Length)), static (state, _) => $"releasing {state.bytes} bytes from {state.buffers} payload buffers");
+            foreach (var frame in _frames)
+            {
+                frame.Release();
+            }    
+            _frames.Clear();
+        }
+        _logger.LogDebug(value, static (state, _) => $"pushing value to consumer: {state}");
+        return ReceivePayloadAsync(value, cancellationToken);
     }
 
 
