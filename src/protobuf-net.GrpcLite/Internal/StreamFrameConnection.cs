@@ -1,4 +1,5 @@
-﻿using ProtoBuf.Grpc.Lite.Connections;
+﻿using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Connections;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks.Sources;
 
@@ -7,6 +8,8 @@ namespace ProtoBuf.Grpc.Lite.Internal;
 internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
 {
     bool IFrameConnection.ThreadSafeWrite => false;
+
+    private readonly ILogger? _logger;
     private readonly Stream _input, _output;
 
     private readonly Action _writeComplete;
@@ -14,27 +17,26 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
     private ManualResetValueTaskSourceCore<bool> _vts;
     private object? _completion;
 
-
-
-
     Frame _writingFrame;
 
-    public StreamFrameConnection(Stream input, Stream output)
+    public StreamFrameConnection(Stream input, Stream output, ILogger? logger = null)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (output is null) throw new ArgumentNullException(nameof(output));
         if (!input.CanRead) throw new ArgumentException("Cannot read from input stream", nameof(input));
         if (!output.CanWrite) throw new ArgumentException("Cannot write to output stream", nameof(output));
+        _logger = logger;
         _input = input;
         _output = output;
         _writeComplete = () =>
         {
             var frame = _writingFrame;
             var pending = _pendingWrite;
-            frame = default;
+            _writingFrame = default;
             _pendingWrite = default;
             try
             {
+                _logger.LogDebug(frame, (state, _) => $"write complete (async, releasing {state.Buffer.Length} bytes)");
                 frame.Release();
                 pending.GetResult();
                 _vts.SetResult(true);
@@ -105,6 +107,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
             if (remaining != 0) ThrowEOF();
 
             var header = FrameHeader.ReadUnsafe(in headerBuffer[0]);
+            _logger.LogDebug(header, (state, _) => $"reading {state}...");
 
             // note we rent a new buffer even for zero-length payloads, so we can return a frame based on that segment
             Frame.AssertValidLength(header.PayloadLength);
@@ -128,6 +131,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
             {
                 slab?.Return();
             }
+            _logger.LogDebug(frame, (state, _) => $"yielding {state}...");
             yield return frame;
 
         }
@@ -136,9 +140,11 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
 
     public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
     {
+        _logger.LogDebug(frame, (state, _) => $"writing {state}, {state.Buffer.Length} bytes...");
         var pending = _output.WriteAsync(frame.Buffer, cancellationToken);
         if (pending.IsCompleted)
         {
+            _logger.LogDebug(frame, (state, _) => $"write complete (sync, releasing {state.Buffer.Length} bytes)");
             frame.Release();
             return pending;
         }
@@ -148,21 +154,14 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
     {
         _pendingWrite = pending.GetAwaiter();
         _writingFrame = frame;
+        _vts.Reset();
+        var result = new ValueTask(this, _vts.Version);
         _pendingWrite.UnsafeOnCompleted(_writeComplete);
-        return new ValueTask(this, _vts.Version);
+        return result;
     }
 
     void IValueTaskSource.GetResult(short token)
-    {
-        try
-        {
-            _vts.GetResult(token);
-        }
-        finally
-        {
-            _vts.Reset();
-        }
-    }
+        => _vts.GetResult(token);
 
     ValueTaskSourceStatus IValueTaskSource.GetStatus(short token)
         => _vts.GetStatus(token);

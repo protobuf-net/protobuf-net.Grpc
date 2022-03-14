@@ -1,11 +1,9 @@
 ﻿using ProtoBuf.Grpc.Lite.Internal;
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace ProtoBuf.Grpc.Lite;
-
-
-
 
 public readonly struct Frame
 {
@@ -27,6 +25,13 @@ public readonly struct Frame
         frame = default;
         return false;
     }
+
+    public override string ToString() => GetHeader().ToString();
+
+    public override int GetHashCode() => GetHeader().GetHashCode();
+
+    public override bool Equals([NotNullWhen(true)] object? obj)
+        => obj is Frame other && GetHeader().Equals(other.GetHeader());
 
     internal static void AssertValidLength(ushort length)
     {

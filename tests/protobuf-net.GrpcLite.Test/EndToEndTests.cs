@@ -5,6 +5,7 @@ using ProtoBuf.Grpc.Lite;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -38,12 +39,15 @@ namespace protobuf_net.GrpcLite.Test
         private LogCapture? ServerLog(string prefix = "server")
             => Server.WithLog(_output, prefix);
 
+        ValueTask<LiteChannel> ConnectAsync(CancellationToken cancellationToken)
+            => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(cancellationToken);
+
         [Fact]
         public async Task CanCallUnarySync()
         {
             using var log = ServerLog();
             using var timeout = After();
-            await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
+            await using var client = await ConnectAsync(timeout.Token);
             var proxy = new FooService.FooServiceClient(client);
 
             var response = proxy.Unary(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
@@ -75,6 +79,7 @@ namespace protobuf_net.GrpcLite.Test
         {
             using var log = ServerLog();
             using var timeout = After();
+            Debug.WriteLine($"[client] connecting {Name}...");
             await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
             var proxy = new FooService.FooServiceClient(client);
             
@@ -120,23 +125,23 @@ namespace protobuf_net.GrpcLite.Test
         public LogCapture? WithLog(ITestOutputHelper output, string prefix)
             => output is null ? default : new LogCapture(this, output, prefix);
 
-        private readonly CancellationTokenSource _cts;
+        private readonly LiteServer _server;
         public string Name { get; }
 
         public TestServerHost()
         {
-            _cts = new CancellationTokenSource();
 
             Name = Guid.NewGuid().ToString();
-            var server = new NamedPipeServer(logger: this);
+            _server = new LiteServer(logger: this);
             var svc = new MyService();
             svc.Log += message => Log?.Invoke(message);
-            server.ManualBind<MyService>(svc);
+            _server.ManualBind<MyService>(svc);
 
-            _ = server.ListenOneAsync(Name, _cts.Token);
+            Debug.WriteLine($"[server] starting listener {Name}...");
+            _server.ListenAsync(ConnectionFactory.ListenNamedPipe(Name));
         }
 
-        public void Dispose() => _cts.Cancel();
+        public void Dispose() => _server.Stop();
 
         void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             => Log?.Invoke(formatter(state, exception));

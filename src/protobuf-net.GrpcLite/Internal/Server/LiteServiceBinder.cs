@@ -4,9 +4,9 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
 internal class LiteServiceBinder : ServiceBinderBase
 {
-    private readonly StreamServer _server;
+    private readonly LiteServer _server;
 
-    public LiteServiceBinder(StreamServer server) => _server = server;
+    public LiteServiceBinder(LiteServer server) => _server = server;
 
     public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
         => _server.AddHandler(method.FullName, () => ServerUnaryHandler<TRequest, TResponse>.Get(method, handler));

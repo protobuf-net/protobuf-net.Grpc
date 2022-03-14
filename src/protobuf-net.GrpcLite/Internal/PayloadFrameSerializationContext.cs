@@ -71,9 +71,12 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 
     void IBufferWriter<byte>.Advance(int count)
     {
-        _totalLength += count;
-        Debug.WriteLine($"[serialize] committed {count} for a total of {_totalLength}; {_current!.DebugSummarize(count)}: {_current!.DebugGetHex(count)}");
-        _current!.Advance(count);
+        if (count != 0) // some serializers call Advance(0) without ever calling GetMemory()/GetSpan(); ask me how I know
+        {
+            _totalLength += count;
+            Debug.WriteLine($"[serialize] committed {count} for a total of {_totalLength}; {_current!.DebugSummarize(count)}: {_current!.DebugGetHex(count)}");
+            _current!.Advance(count);
+        }
     }
 
     public Memory<byte> GetMemory(int sizeHint)

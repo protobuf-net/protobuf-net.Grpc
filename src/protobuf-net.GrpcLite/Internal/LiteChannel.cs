@@ -12,8 +12,8 @@ public sealed class LiteChannel : ChannelBase, IAsyncDisposable, IDisposable
 
     internal LiteChannel(IFrameConnection connection, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : base(target)
     {
-        if (!connection.ThreadSafeWrite) connection = new SynchronizedGate(connection, 0);
-        _connection = connection;
+        connection = connection.WithThreadSafeWrite();
+        _connection = connection; 
         _callInvoker = new LiteCallInvoker(connection, logger);
         
         Complete = _callInvoker.ReadAllAsync(logger, cancellationToken);

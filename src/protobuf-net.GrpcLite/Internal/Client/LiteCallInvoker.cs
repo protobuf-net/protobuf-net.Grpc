@@ -94,38 +94,49 @@ internal sealed class LiteCallInvoker : CallInvoker
     internal async Task ReadAllAsync(ILogger? logger, CancellationToken cancellationToken)
     {
         await Task.Yield();
-        await using var iter = _connection.GetAsyncEnumerator(cancellationToken);
-        while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
+        try
         {
-            var frame = iter.Current;
-            var header = frame.GetHeader();
-            logger.LogDebug(header, static (state, _) => $"received frame {state}");
-            switch (header.Kind)
+            await using var iter = _connection.GetAsyncEnumerator(cancellationToken);
+            logger.LogDebug(true, static (state, _) => $"listening for messages from the server...");
+            while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
             {
-                case FrameKind.Close:
-                case FrameKind.Ping:
-                    var generalFlags = (GeneralFlags)header.KindFlags;
-                    if ((generalFlags & GeneralFlags.IsResponse) == 0)
-                    {
-                        // if this was a request, we reply in kind, but noting that it is a response
-                        await _connection.WriteAsync(new FrameHeader(header.Kind, (byte)GeneralFlags.IsResponse, header.StreamId, header.SequenceId, 0), cancellationToken);
-                    }
-                    // shutdown if requested
-                    if (header.Kind == FrameKind.Close)
-                    {
-                        _connection.Close();
-                    }
-                    break;
-                case FrameKind.NewStream:
-                    logger.LogError(header, static (state, _) => $"server should not be initializing requests! {state}");
-                    break;
-                case FrameKind.Payload:
-                    if (_streams.TryGetValue(header.StreamId, out var handler))
-                    {
-                        await handler.ReceivePayloadAsync(frame, cancellationToken);
-                    }
-                    break;
+                var frame = iter.Current;
+                var header = frame.GetHeader();
+                logger.LogDebug(header, static (state, _) => $"received frame {state}");
+                switch (header.Kind)
+                {
+                    case FrameKind.Close:
+                    case FrameKind.Ping:
+                        var generalFlags = (GeneralFlags)header.KindFlags;
+                        if ((generalFlags & GeneralFlags.IsResponse) == 0)
+                        {
+                            // if this was a request, we reply in kind, but noting that it is a response
+                            await _connection.WriteAsync(new FrameHeader(header.Kind, (byte)GeneralFlags.IsResponse, header.StreamId, header.SequenceId, 0), cancellationToken);
+                        }
+                        // shutdown if requested
+                        if (header.Kind == FrameKind.Close)
+                        {
+                            _connection.Close();
+                        }
+                        break;
+                    case FrameKind.NewStream:
+                        logger.LogError(header, static (state, _) => $"server should not be initializing requests! {state}");
+                        break;
+                    case FrameKind.Payload:
+                        if (_streams.TryGetValue(header.StreamId, out var handler))
+                        {
+                            await handler.ReceivePayloadAsync(frame, cancellationToken);
+                        }
+                        break;
+                }
             }
+        }
+        catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
+        { }
+        catch (Exception ex)
+        {
+            logger.LogError(ex);
+            throw;
         }
     }
 }

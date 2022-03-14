@@ -152,8 +152,7 @@ public class BasicTests
     [Fact]
     public void CanBindService()
     {
-        var server = new TestStreamServer(Logger);
-        server.AddConnection(new StreamFrameConnection(Stream.Null, Stream.Null), CancellationToken.None);
+        var server = new LiteServer(Logger);
         server.ManualBind<MyService>();
         Assert.Equal(2, server.MethodCount);
     }
@@ -162,11 +161,6 @@ public class BasicTests
     public void CanCreateTestFixture()
     {
         using var obj = new TestServerHost();
-    }
-
-    class TestStreamServer : StreamServer
-    {
-        public TestStreamServer(ILogger? logger) : base(logger) { }
     }
 
 

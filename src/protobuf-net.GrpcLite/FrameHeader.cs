@@ -113,7 +113,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     };
 
     /// <inheritdoc>
-    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}],{PayloadLength},{FormattedFlags}";
+    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}],{PayloadLength}; {FormattedFlags}";
 
     /// <inheritdoc>
     public override int GetHashCode() => RawValue.GetHashCode();

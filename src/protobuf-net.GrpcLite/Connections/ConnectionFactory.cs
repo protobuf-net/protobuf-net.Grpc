@@ -11,28 +11,53 @@ namespace ProtoBuf.Grpc.Lite.Connections;
 public static class ConnectionFactory
 {
     public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ConnectNamedPipe(string pipeName, string serverName = ".", ILogger? logger = null) => async cancellationToken =>
+    {
+        if (string.IsNullOrWhiteSpace(serverName)) serverName = ".";
+        var pipe = new NamedPipeClientStream(serverName, pipeName,
+            PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
+        try
         {
-            var pipe = new NamedPipeClientStream(pipeName, serverName,
-                PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
-            try
+            await pipe.ConnectAsync(cancellationToken);
+            return new ConnectionState<Stream>(pipe, pipeName)
             {
-                await pipe.ConnectAsync(cancellationToken);
-                return new ConnectionState<Stream>(pipe, pipeName)
-                {
-                    Logger = logger,
-                };
-            }
-            catch
+                Logger = logger,
+            };
+        }
+        catch
+        {
+            await pipe.SafeDisposeAsync();
+            throw;
+        }
+    };
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ListenNamedPipe(string pipeName, ILogger? logger = null) => async cancellationToken =>
+    {
+        var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.WriteThrough | PipeOptions.Asynchronous);
+        try
+        {
+            logger.LogDebug(pipeName, static (state, _) => $"waiting for connection... {state}");
+            await pipe.WaitForConnectionAsync(cancellationToken);
+            logger.LogDebug(pipeName, static (state, _) => $"client connected to {state}");
+            return new ConnectionState<Stream>(pipe, pipeName)
             {
-                await pipe.SafeDisposeAsync();
-                throw;
-            }
-        };
+                Logger = logger,
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex);
+            await pipe.SafeDisposeAsync();
+            throw;
+        }
+    };
 
     public static Func<CancellationToken, ValueTask<ConnectionState<T>>> With<T>(
         this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
         Func<ConnectionState<T>, ConnectionState<T>> selector)
         => async cancellationToken => selector(await factory(cancellationToken));
+
+    internal static IFrameConnection WithThreadSafeWrite(this IFrameConnection connection)
+        => connection.ThreadSafeWrite ? connection : new SynchronizedGate(connection, 0);
 
     public static Func<CancellationToken, ValueTask<ConnectionState<TTarget>>> With<TSource, TTarget>(
         this Func<CancellationToken, ValueTask<ConnectionState<TSource>>> factory,
@@ -105,7 +130,7 @@ public static class ConnectionFactory
             var source = await factory(cancellationToken);
             try
             {
-                IFrameConnection nonGated = new StreamFrameConnection(source.Connection.Input, source.Connection.Output),
+                IFrameConnection nonGated = new StreamFrameConnection(source.Connection.Input, source.Connection.Output, source.Logger),
                     gated = inputFrames > 0
                     ? new BufferedGate(nonGated, inputFrames, outputFrames)
                     : new SynchronizedGate(nonGated, outputFrames);
