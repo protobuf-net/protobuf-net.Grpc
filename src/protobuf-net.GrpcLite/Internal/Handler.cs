@@ -74,16 +74,6 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     private readonly List<Frame> _frames = new();
 
-    private ReadOnlySequence<byte> MergePayload()
-    {
-        switch (_frames.Count)
-        {
-            case 0: return default;
-            case 1: return new ReadOnlySequence<byte>(_frames[0].GetPayload());
-            default:
-                throw new NotImplementedException("build a ROS over the payload data");
-        }        
-    }
     public ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken)
     {
         var header = frame.GetHeader();
@@ -99,7 +89,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         }
         if (isComplete)
         {
-            return ReceiveCompletePayloadAsync(MergePayload(), cancellationToken);
+            return ReceiveCompletePayloadAsync(FrameSequenceSegment.Create(_frames), cancellationToken);
         }
         else
         {

@@ -16,7 +16,7 @@ namespace protobuf_net.Grpc.Test.Issues
         {
             var binder = new MyBinder();
             binder.Add(typeof(IMyService), "Foo");
-            binder.Add(typeof(IMyService).GetMethod(nameof(IMyService.SomeMethodAsync)), "Bar");
+            binder.Add(typeof(IMyService).GetMethod(nameof(IMyService.SomeMethodAsync))!, "Bar");
 
             // server
             var serverBinder = new TestServerBinder();
