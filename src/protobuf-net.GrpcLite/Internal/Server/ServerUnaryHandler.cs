@@ -30,14 +30,14 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
         var response = await _handler!(_request!, context);
         if (context.Status.StatusCode == StatusCode.OK)
         {
-            await WritePayloadAsync(response, true);
+            await SendAsync(response, PayloadFlags.FinalItem, context.CancellationToken);
         }
     }
 
     protected override ValueTask ReceivePayloadAsync(TRequest value, CancellationToken cancellationToken)
     {
         _request = value;
-        Execute();
+        BeginBackgroundExecute();
         return default;
     }
 }

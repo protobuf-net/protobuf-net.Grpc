@@ -128,7 +128,7 @@ public class BasicTests
     public void CanBindService()
     {
         var server = new TestStreamServer(Logger);
-        server.AddConnection(Stream.Null, Stream.Null, CancellationToken.None);
+        server.AddConnection(new StreamFrameConnection(Stream.Null, Stream.Null), CancellationToken.None);
         server.ManualBind<MyService>();
         Assert.Equal(2, server.MethodCount);
     }

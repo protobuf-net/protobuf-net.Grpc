@@ -1,36 +1,42 @@
 ﻿using Grpc.Core;
 using System.Buffers;
+using System.Runtime.InteropServices;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
 internal sealed class SingleBufferDeserializationContext : DeserializationContext, IPooled
 {
-    private byte[] _buffer = Utilities.EmptyBuffer;
-    private int _offset, _length;
+    private ReadOnlySequence<byte> _payload;
 
-    public void Initialize(byte[] buffer, int offset, int length)
+    public void Initialize(in ReadOnlySequence<byte> payload)
     {
-        _buffer = buffer;
-        _offset = offset;
-        _length = length;
+        _payload = payload;
     }
 
     public void Recycle()
     {
-        _offset = _length = 0;
-        _buffer = Utilities.EmptyBuffer;
+        _payload = default;
         Pool<SingleBufferDeserializationContext>.Put(this);
     }
 
     public override byte[] PayloadAsNewBuffer()
     {
-        if (_offset == 0 && _length == _buffer.Length) return _buffer;
-        var copy = _length == 0 ? Utilities.EmptyBuffer : new byte[_length];
-        Buffer.BlockCopy(_buffer, _offset, copy, 0, _length);
-        return copy;
+        var payload = _payload;
+        if (payload.IsEmpty) return Utilities.EmptyBuffer;
+
+        if (payload.IsSingleSegment)
+        {
+            var single = payload.First;
+            if (MemoryMarshal.TryGetArray(single, out var segment)
+                && segment.Offset == 0 && segment.Count == single.Length)
+            {
+                return segment.Array!;
+            }
+        }
+        return payload.ToArray();
     }
     public override ReadOnlySequence<byte> PayloadAsReadOnlySequence()
-        => new ReadOnlySequence<byte>(_buffer, _offset, _length);
+        => _payload;
 
-    public override int PayloadLength => _length;
+    public override int PayloadLength => checked((int)_payload.Length);
 }

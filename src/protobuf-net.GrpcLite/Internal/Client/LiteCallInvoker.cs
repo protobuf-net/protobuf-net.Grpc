@@ -11,16 +11,20 @@ internal sealed class LiteCallInvoker : CallInvoker
     private readonly IFrameConnection _connection;
     private readonly ConcurrentDictionary<ushort, IClientHandler> _streams = new();
     private int _nextId = ushort.MaxValue; // so that our first id is zero
-    private ushort AddStream(IClientHandler handler)
+    private void AddStream(IClientHandler handler, IMethod method)
     {
         for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
         {
             var id = Utilities.IncrementToUInt32(ref _nextId);
-            handler.Id = id;
-            if (_streams.TryAdd(id, handler)) return id;
+            handler.StreamId = id;
+            if (_streams.TryAdd(id, handler))
+            {
+                handler.Initialize(method, _connection, _logger);
+                return;
+            }
         }
-        return ThrowUnableToReserve(_streams.Count);
-        static ushort ThrowUnableToReserve(int count)
+        ThrowUnableToReserve(_streams.Count);
+        static void ThrowUnableToReserve(int count)
             => throw new InvalidOperationException($"It was not possible to reserve a new stream id; {count} streams are currently in use");
     }
 
@@ -38,7 +42,7 @@ internal sealed class LiteCallInvoker : CallInvoker
         where TResponse : class
     {
         var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        handler.Initialize(AddStream(handler), method, _connection, _logger);
+        AddStream(handler, method);
         try
         {
             await handler.SendSingleAsync(host, options, request);
@@ -58,7 +62,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
         var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        handler.Initialize(AddStream(handler), method, _connection, _logger);
+        AddStream(handler, method);
         _ = handler.SendSingleAsync(host, options, request);
         return new AsyncUnaryCall<TResponse>(handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
@@ -66,8 +70,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        handler.Initialize(AddStream(), method, _connection, _logger);
-        AddHandler(handler);
+        AddStream(handler, method);
         _ = handler.SendInitializeAsync(host, options).AsTask();
         return new AsyncClientStreamingCall<TRequest, TResponse>(handler, handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
@@ -75,7 +78,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.DuplexStreaming);
-        handler.Initialize(AddStream(handler), method, _connection, _logger);
+        AddStream(handler, method);
         _ = handler.SendInitializeAsync(host, options).AsTask();
         return new AsyncDuplexStreamingCall<TRequest, TResponse>(handler, handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
@@ -83,7 +86,7 @@ internal sealed class LiteCallInvoker : CallInvoker
     public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
         var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.ServerStreaming);
-        handler.Initialize(AddStream(handler), method, _connection, _logger);
+        AddStream(handler, method);
         _ = handler.SendSingleAsync(host, options, request);
         return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
@@ -94,7 +97,8 @@ internal sealed class LiteCallInvoker : CallInvoker
         await using var iter = _connection.GetAsyncEnumerator(cancellationToken);
         while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
         {
-            var (header, payload) = iter.Current;
+            var frame = iter.Current;
+            var header = frame.GetHeader();
             logger.LogDebug(header, static (state, _) => $"received frame {state}");
             switch (header.Kind)
             {
@@ -104,12 +108,12 @@ internal sealed class LiteCallInvoker : CallInvoker
                     if ((generalFlags & GeneralFlags.IsResponse) == 0)
                     {
                         // if this was a request, we reply in kind, but noting that it is a response
-                        await _outbound.Writer.WriteAsync(new Frame(frame.Kind, frame.RequestId, (byte)GeneralFlags.IsResponse), cancellationToken);
+                        await _connection.WriteAsync(new FrameHeader(header.Kind, (byte)GeneralFlags.IsResponse, header.StreamId, header.SequenceId, 0), cancellationToken);
                     }
                     // shutdown if requested
                     if (header.Kind == FrameKind.Close)
                     {
-                        _outbound.Writer.TryComplete();
+                        _connection.Close();
                     }
                     break;
                 case FrameKind.Unary:
@@ -121,7 +125,7 @@ internal sealed class LiteCallInvoker : CallInvoker
                 case FrameKind.Payload:
                     if (_streams.TryGetValue(header.StreamId, out var handler))
                     {
-                        await handler.ReceivePayloadAsync(payload, cancellationToken);
+                        await handler.ReceivePayloadAsync(frame, cancellationToken);
                     }
                     break;
             }

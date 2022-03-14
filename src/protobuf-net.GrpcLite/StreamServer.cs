@@ -1,6 +1,6 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
-using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal.Server;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
@@ -17,8 +17,8 @@ namespace ProtoBuf.Grpc.Lite
 
         private int id = -1;
         internal int NextId() => Interlocked.Increment(ref id);
-        internal StreamServerConnection AddConnection(Stream input, Stream output, CancellationToken cancellationToken)
-            => new StreamServerConnection(this, input, output, cancellationToken);
+        internal StreamServerConnection AddConnection(IFrameConnection connection, CancellationToken cancellationToken)
+            => new StreamServerConnection(this, connection, cancellationToken);
 
         private LiteServiceBinder? _serviceBinder;
         public void ManualBind<T>(T? server = null) where T : class

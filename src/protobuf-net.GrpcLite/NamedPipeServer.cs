@@ -14,7 +14,10 @@ namespace ProtoBuf.Grpc.Lite
             Logger.LogDebug(pipeName, static (state, _) => $"waiting for connection... {state}");
             await stream.WaitForConnectionAsync(cancellationToken);
             Logger.LogDebug(pipeName, static (state, _) => $"client connected to {state}");
-            using var connection = AddConnection(stream, stream, cancellationToken);
+
+            var conn = new SynchronizedGate(new StreamFrameConnection(stream, stream), 0);
+
+            await using var connection = AddConnection(conn, cancellationToken);
             using var ctr = cancellationToken.Register(static state => ((StreamServerConnection)state!).Dispose(), connection);
             Logger.LogDebug(pipeName, static (state, _) => $"handed off to connection {state}");
             await connection.Complete;

@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+﻿using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -27,6 +27,8 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
 {
     public const int Size = sizeof(ulong); // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
+    public const ushort MaxPayloadSize = ushort.MaxValue - Size; // so that header+payload fit in 64k
+
     internal void UnsafeWrite(ref byte destination)
     {
         // note values are little-endian; the JIT will remove the appropriate dead branch here
@@ -46,8 +48,8 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
                     dest[3] = (byte)((StreamId >> 8) & 0xFF);
                     dest[4] = (byte)(SequenceId & 0xFF);
                     dest[5] = (byte)((SequenceId >> 8) & 0xFF);
-                    dest[6] = (byte)(Length & 0xFF);
-                    dest[7] = (byte)((Length >> 8) & 0xFF);
+                    dest[6] = (byte)(PayloadLength & 0xFF);
+                    dest[7] = (byte)((PayloadLength >> 8) & 0xFF);
                 }
             }
         }
@@ -57,7 +59,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [FieldOffset(0)]
     private readonly ulong RawValue;
 
-    public FrameHeader(FrameKind kind, byte kindFlags, ushort streamId, ushort sequenceId, ushort length)
+    public FrameHeader(FrameKind kind, byte kindFlags, ushort streamId, ushort sequenceId, ushort length = 0)
     {
 #if NET5_0_OR_GREATER
         Unsafe.SkipInit(out this);
@@ -68,21 +70,34 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         KindFlags = kindFlags;
         StreamId = streamId;
         SequenceId = sequenceId;
-        Length = length;
+        PayloadLength = length;
     }
 
     [field:FieldOffset(0)]
     public FrameKind Kind { get; }
+
+    public FrameHeader(in FrameHeader template, ushort sequenceId)
+    {
+        this = template;
+        SequenceId = sequenceId;
+    }
+
+    public FrameHeader(in FrameHeader template, byte kindFlags)
+    {
+        this = template;
+        KindFlags = kindFlags;
+    }
+
     [field: FieldOffset(1)]
     public byte KindFlags { get; } // kind-specific
     [field: FieldOffset(2)]
     public ushort StreamId { get; }
 
-    internal static FrameHeader ReadUnsafe(ref byte source)
+    internal static FrameHeader ReadUnsafe(in byte source)
     {
         if (BitConverter.IsLittleEndian)
         {
-            return Unsafe.As<byte, FrameHeader>(ref source);
+            return Unsafe.As<byte, FrameHeader>(ref Unsafe.AsRef(in source));
         }
         else
         {
@@ -105,7 +120,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [field: FieldOffset(4)]
     public ushort SequenceId { get; }
     [field: FieldOffset(6)]
-    public ushort Length { get; }
+    public ushort PayloadLength { get; }
 
     private string FormattedFlags => Kind switch
     {
@@ -116,7 +131,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     };
 
     /// <inheritdoc>
-    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}],{Length},{FormattedFlags}";
+    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}],{PayloadLength},{FormattedFlags}";
 
     /// <inheritdoc>
     public override int GetHashCode() => RawValue.GetHashCode();
@@ -128,83 +143,65 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     public bool Equals(FrameHeader other) => RawValue == other.RawValue;
 }
 
-public readonly struct BufferSegment
+
+public readonly struct NewFrame
 {
-    public static BufferSegment Empty = new BufferSegment(Utilities.EmptyBuffer, 0, 0);
-    private readonly int _offset, _length;
-    public BufferSegment(byte[] array, int offset, int length)
+    public static bool TryRead(in ReadOnlyMemory<byte> buffer, out NewFrame frame, out int bytesRead)
     {
-        _source = array;
-        _offset = offset;
-        _length = length;
-    }
-    internal BufferSegment(Slab slab, int offset, int length)
-    {
-        _source = slab;
-        _offset = offset;
-        _length = length;
-    }
-
-    public readonly object _source;
-
-    public int Length => _length;
-
-    public ref byte this[int index]
-    {
-        get
+        var bufferLength = buffer.Length;
+        if (bufferLength >= FrameHeader.Size)
         {
-            if (index < 0 || index >= _length) Throw();
-            return ref _source is Slab slab ? ref slab[_offset + index] : ref ((byte[])_source)[_offset + index];
-
-            static void Throw() => throw new IndexOutOfRangeException();
+            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(6, 2));
+            AssertValidLength(declaredLength);
+            bytesRead = FrameHeader.Size + declaredLength;
+            if (bufferLength >= bytesRead)
+            {
+                frame = new NewFrame(buffer.Slice(0, bytesRead), true);
+                return true;
+            }
         }
+        bytesRead = 0;
+        frame = default;
+        return false;
     }
 
-    public bool TryGetArray(out ArraySegment<byte> buffer)
+    internal static void AssertValidLength(ushort length)
     {
-        if (_source is Slab slab) return slab.TryGetArray(_offset, _length, out buffer);
-        if (_length == 0) return Utilities.TryGetEmptySegment(out buffer);
-        buffer = new ArraySegment<byte>((byte[])_source, _offset, _length);
-        return true;
+        if (length > FrameHeader.MaxPayloadSize) ThrowOversized(length);
+        static void ThrowOversized(ushort length) => throw new InvalidOperationException($"The declared payload length {length} exceeds the permitted maxiumum length of {FrameHeader.MaxPayloadSize}");
     }
-
-    public Memory<byte> Memory
+    public NewFrame(in ReadOnlyMemory<byte> buffer) : this(buffer, false) { }
+    internal NewFrame(in ReadOnlyMemory<byte> buffer, bool trusted)
     {
-        get
+#if DEBUG
+        trusted = false; // always validate in debug
+#endif
+        if (!trusted)
         {
-            if (_length == 0) return default;
-            if (_source is Slab slab) return slab.Memory.Slice(_offset, _length);
-            return new Memory<byte>((byte[])_source, _offset, _length);
+            if (buffer.Length < FrameHeader.Size) ThrowTooSmall();
+            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(6, 2));
+            AssertValidLength(declaredLength);
+            if (buffer.Length != FrameHeader.Size + declaredLength) ThrowLengthMismatch();
         }
+        Buffer = buffer;
+
+        static void ThrowTooSmall() => throw new ArgumentException($"The buffer must include at least {FrameHeader.Size} bytes for the frame header", nameof(buffer));
+        static void ThrowLengthMismatch() => throw new ArgumentException("The length of the buffer must match the declared length in the frame header, plus the size of the frame header itself", nameof(buffer));
+    }
+
+    public ReadOnlyMemory<byte> Buffer { get; }
+    public FrameHeader GetHeader() => FrameHeader.ReadUnsafe(in Buffer.Span[0]); // length checked in .ctor
+    public ReadOnlyMemory<byte> GetPayload() => Buffer.Slice(start: FrameHeader.Size);
+
+    public void Deconstruct(out FrameHeader header, out ReadOnlyMemory<byte> payload)
+    {
+        header = GetHeader();
+        payload = GetPayload();
     }
 
     public void Release()
     {
-        if (_source is Slab slab) slab.RemoveReference();
+        if (MemoryMarshal.TryGetMemoryManager<byte, FrameBufferManager.Slab>(Buffer, out var slab))
+            slab.RemoveReference();
     }
-} 
-public readonly struct NewFrame
-{
-    public NewFrame(FrameHeader header) : this()
-    {
-        Header = header;
-        Payload = BufferSegment.Empty;
-    }
-    public NewFrame(FrameHeader header, BufferSegment payload)
-    {
-        if (header.Length != payload.Length) ThrowLengthMismatch();
-        Header = header;
-        Payload = payload;
-        static void ThrowLengthMismatch() => throw new ArgumentException("The length of the header and payload must agree", nameof(payload));
-    }
-
-    public FrameHeader Header { get; }
-    public BufferSegment Payload { get; }
-
-    public void Deconstruct(out FrameHeader header, out BufferSegment payload)
-    {
-        header = Header;
-        payload = Payload;
-    }
-
 }

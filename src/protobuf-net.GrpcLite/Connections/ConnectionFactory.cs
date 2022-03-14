@@ -179,12 +179,6 @@ static class Demo
     }
 }
 
-public interface IFrameConnection : IAsyncEnumerable<NewFrame>, IAsyncDisposable
-{
-    ValueTask WriteAsync(BufferSegment frame, CancellationToken cancellationToken);
-    bool ThreadSafeWrite { get; }
-}
-
 
 public readonly struct StreamPair
 {

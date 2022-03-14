@@ -1,6 +1,8 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using System.Buffers;
+using System.Text;
 using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
@@ -9,7 +11,7 @@ interface IHandler : IPooled
 {
     ushort StreamId { get; }
     FrameKind Kind { get; }
-    ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken);
+    ValueTask ReceivePayloadAsync(NewFrame frame, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
     ushort NextSequenceId();
 }
@@ -21,7 +23,9 @@ interface IReceiver<T>
 
 abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where TReceive : class
 {
-    private ushort _id;
+    protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
+
+    private ushort _streamId;
     private ILogger? _logger;
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     // these are all set via initialize
@@ -29,9 +33,20 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
     IFrameConnection _output;
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
-    public ushort StreamId => _id;
+    public ushort StreamId
+    {
+        get => _streamId;
+        set => _streamId = value;
+    }
     private int _sequenceId;
-    public ushort NextSequenceId() => Utilities.IncrementToUInt32(ref _sequenceId);
+
+    protected abstract bool IsClient { get; }
+    public ushort NextSequenceId()
+    {
+        // MSB bit is always off for clients, and always on for servers
+        var next = Utilities.IncrementToUInt32(ref _sequenceId) & 0x7FFF;
+        return (ushort)(IsClient ? next : next | 0x8000);
+    }
     protected ILogger? Logger => _logger;
     protected IMethod Method
     {
@@ -40,11 +55,11 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
     }
     protected IFrameConnection Output => _output;
 
-    public virtual void Initialize(ushort id, IFrameConnection output, ILogger? logger)
+    public virtual void Initialize(ushort streamId, IFrameConnection output, ILogger? logger)
     {
         _output = output;
         _logger = logger;
-        _id = id;
+        _streamId = streamId;
         _sequenceId = ushort.MaxValue; // so first is zero
     }
 
@@ -55,56 +70,97 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     public abstract void Recycle();
 
-    Queue<Frame>? _backlog;
-    public ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken)
+    Queue<ReadOnlyMemory<byte>>? _backlog;
+    private void AddBacklog(in ReadOnlyMemory<byte> payload)
     {
-        if ((frame.KindFlags & (byte)PayloadFlags.EndItem) == 0)
+        if (!payload.IsEmpty)
         {
-            (_backlog ??= new Queue<Frame>()).Enqueue(frame);
-            return default;
+            (_backlog ??= new Queue<ReadOnlyMemory<byte>>()).Enqueue(payload);
         }
-        return ReceiveCompletePayloadAsync(frame, cancellationToken);
     }
-    private ValueTask ReceiveCompletePayloadAsync(Frame frame, CancellationToken cancellationToken)
+
+    private ReadOnlySequence<byte> Flush(in ReadOnlyMemory<byte> final)
     {
         var backlog = _backlog;
         if (backlog is null || backlog.Count == 0)
+        {   // single-frame payload
+            return final.IsEmpty ? default : new ReadOnlySequence<byte>(final);
+        }
+        backlog.Enqueue(final);
+        throw new NotImplementedException("build the chain");
+    }
+    public ValueTask ReceivePayloadAsync(NewFrame frame, CancellationToken cancellationToken)
+    {
+        var header = frame.GetHeader();
+        
+        var payload = frame.GetPayload();
+        bool isComplete = (header.KindFlags & (byte)PayloadFlags.EndItem) == 0;
+
+        if (isComplete)
         {
-            // single frame; simple case
-            _logger.LogDebug(frame.Length, static (state, _) => $"deserializing request in single buffer, {state} bytes...");
-            var ctx = Pool<SingleBufferDeserializationContext>.Get();
-            ctx.Initialize(frame.Buffer, frame.Offset, frame.Length);
-            var request = Deserializer(ctx);
-            ctx.Recycle();
-            _logger.LogDebug(frame.Length, static (state, _) => $"deserialized {state} bytes; processing request");
-            return ReceivePayloadAsync(request, cancellationToken);
+            return ReceiveCompletePayloadAsync(Flush(payload), cancellationToken);
         }
         else
         {
-            // we have multiple frames to marry
-            throw new NotImplementedException();
+            AddBacklog(payload);
+            return default;
         }
+    }
+    private ValueTask ReceiveCompletePayloadAsync(ReadOnlySequence<byte> payload, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug(payload.Length, static (state, _) => $"deserializing payload, {state} bytes...");
+        var ctx = Pool<SingleBufferDeserializationContext>.Get();
+        ctx.Initialize(payload);
+        var request = Deserializer(ctx);
+        ctx.Recycle();
+        _logger.LogDebug(payload.Length, static (state, _) => $"deserialized {state} bytes; processing request");
+        return ReceivePayloadAsync(request, cancellationToken);
     }
 
 
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
-        => Output.WriteAsync(Frame.GetInitializeFrame(Kind, StreamId, NextSequenceId(), Method.FullName, host), options.CancellationToken);
+        => Output.WriteAsync(GetInitializeFrame(host), options.CancellationToken);
+
+    private NewFrame GetInitializeFrame(string? host)
+    {
+        var fullName = Method.FullName;
+        if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();
+        if (!string.IsNullOrEmpty(host)) ThrowNotSupported(); // in future: delimit?
+        var length = Encoding.UTF8.GetByteCount(fullName);
+        if (length > FrameHeader.MaxPayloadSize) ThrowMethodTooLarge(length);
+
+        var slab = BufferManager.Rent(length);
+        try
+        {
+            var header = new FrameHeader(Kind, 0, StreamId, NextSequenceId(), (ushort)length);
+            slab.Advance(Encoding.UTF8.GetBytes(fullName, slab.ActiveBuffer.Span));
+            return slab.CreateFrameAndInvalidate(header, updateHeaderLength: false); // this will validate etc
+        }
+        finally
+        {
+            slab?.Return();
+        }
+
+        static void ThrowMissingMethod() => throw new ArgumentOutOfRangeException(nameof(fullName), "No method name was specified");
+        static void ThrowNotSupported() => throw new ArgumentOutOfRangeException(nameof(host), "Non-empty hosts are not currently supported");
+        static void ThrowMethodTooLarge(int length) => throw new InvalidOperationException($"The method name is too large at {length} bytes");
+    }
 
     internal async Task SendSingleAsync(string? host, CallOptions options, TSend request)
     {
         await SendInitializeAsync(host, options);
-        await SendAsync(request, true, options.CancellationToken);
+        await SendAsync(request, PayloadFlags.FinalItem, options.CancellationToken);
     }
 
-    public async ValueTask SendAsync(TSend value, bool isLastElement, CancellationToken cancellationToken)
+    public async ValueTask SendAsync(TSend value, PayloadFlags flags, CancellationToken cancellationToken)
     {
-        FrameSerializationContext? serializationContext = null;
+        PayloadFrameSerializationContext? serializationContext = null;
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            serializationContext = FrameSerializationContext.Get();
+            serializationContext = PayloadFrameSerializationContext.Get(this, BufferManager, StreamId, flags);
             Serializer(value, serializationContext);
-            await serializationContext.WritePayloadAsync(Output, this, isLastElement, cancellationToken);
+            await serializationContext.WritePayloadAsync(Output, cancellationToken);
         }
         finally
         {

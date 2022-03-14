@@ -263,8 +263,8 @@ internal enum PayloadFlags
 {
     None = 0,
     EndItem = 1 << 0, // terminates a single streaming object (which could be split over multiple frames)
-    EndAllItems = 1 << 1, // terminates a sequence of streaming objects
-    NoPayload = 1 << 2, // signals that this object should be discarded; should only be sent as a stream terminator, i.e. EndItem | EndAllItems | NoPayload
+    FinalItem = 1 << 1, // terminates a sequence of streaming objects
+    NoItem = 1 << 2, // signals that this object should be discarded; should only be sent as a stream terminator, i.e. EndItem | EndAllItems | NoPayload
 }
 [Flags]
 internal enum GeneralFlags

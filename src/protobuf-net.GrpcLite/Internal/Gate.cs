@@ -30,6 +30,14 @@ internal abstract class Gate : IFrameConnection
         }
     }
 
+    public virtual Task Complete => _outputBuffer?.Reader.Completion ?? Tail.Complete;
+
+    public virtual void Close(Exception? exception)
+    {
+        Tail?.Close(exception);
+        _outputBuffer?.Writer.Complete(exception);
+    }
+
     private static UnboundedChannelOptions? _unbounded;
 
     public virtual ValueTask DisposeAsync() => Tail.DisposeAsync();
@@ -81,7 +89,10 @@ internal abstract class Gate : IFrameConnection
         }
     }
 
-    public abstract ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken);
+    public abstract ValueTask WriteAsync(NewFrame frame, CancellationToken cancellationToken);
+
+    public virtual ValueTask WriteAsync(ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken = default)
+        => this.WriteAllAsync(frames, cancellationToken);
 }
 
 internal sealed class SynchronizedGate : Gate
@@ -89,7 +100,7 @@ internal sealed class SynchronizedGate : Gate
     public SynchronizedGate(IFrameConnection tail, int outputBuffer) : base(tail, outputBuffer) { }
 
     private readonly SemaphoreSlim _mutex = new SemaphoreSlim(1, 1);
-    public override ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken)
+    public override ValueTask WriteAsync(NewFrame frame, CancellationToken cancellationToken)
     {
         bool release = false;
         try
@@ -97,7 +108,7 @@ internal sealed class SynchronizedGate : Gate
             release = _mutex.Wait(0);
             if (release)
             {
-                var pending = Tail.WriteAsync(frames, cancellationToken);
+                var pending = Tail.WriteAsync(frame, cancellationToken);
                 if (pending.IsCompleted)
                 {
                     pending.GetAwaiter().GetResult();
@@ -111,27 +122,23 @@ internal sealed class SynchronizedGate : Gate
             }
             else
             {
-                return FullAsync(this, frames, cancellationToken);
+                return FullAsync(this, frame, cancellationToken);
             }
         }
         catch (Exception ex)
         {
-#if NET5_0_OR_GREATER
-            return ValueTask.FromException(ex);
-#else
-            return new ValueTask(Task.FromException(ex));
-#endif
+            return ex.AsValueTask();
         }
         finally
         {
             if (release) _mutex.Release();
         }
-        static async ValueTask FullAsync(SynchronizedGate gate, BufferSegment frames, CancellationToken cancellationToken)
+        static async ValueTask FullAsync(SynchronizedGate gate, NewFrame frame, CancellationToken cancellationToken)
         {
             await gate._mutex.WaitAsync(cancellationToken);
             try
             {
-                await gate.Tail.WriteAsync(frames, cancellationToken);
+                await gate.Tail.WriteAsync(frame, cancellationToken);
             }
             finally
             {
@@ -159,25 +166,25 @@ internal sealed class SynchronizedGate : Gate
 
 internal sealed class BufferedGate : Gate
 {
-    readonly Channel<BufferSegment> _inputBuffer;
+    readonly Channel<NewFrame> _inputBuffer;
     public BufferedGate(IFrameConnection tail, int inputBuffer, int outputBuffer) : base(tail, outputBuffer)
     {
         _inputBuffer = inputBuffer == int.MaxValue
-            ? Channel.CreateUnbounded<BufferSegment>(_unboundedOptions ??= new UnboundedChannelOptions
+            ? Channel.CreateUnbounded<NewFrame>(_unboundedOptions ??= new UnboundedChannelOptions
             {
                 SingleWriter = false,
                 SingleReader = true,
                 AllowSynchronousContinuations = false,
             })
-            : Channel.CreateBounded<BufferSegment>(new BoundedChannelOptions(inputBuffer)
+            : Channel.CreateBounded<NewFrame>(new BoundedChannelOptions(inputBuffer)
             {
                 SingleWriter = false,
                 SingleReader = true,
                 AllowSynchronousContinuations = false,
             });
     }
-    public override ValueTask WriteAsync(BufferSegment frames, CancellationToken cancellationToken)
-        => _inputBuffer.Writer.WriteAsync(frames, cancellationToken);
+    public override ValueTask WriteAsync(NewFrame frame, CancellationToken cancellationToken)
+        => _inputBuffer.Writer.WriteAsync(frame, cancellationToken);
 
     static UnboundedChannelOptions? _unboundedOptions;
     public override ValueTask DisposeAsync()

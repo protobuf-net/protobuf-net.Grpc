@@ -20,10 +20,13 @@ internal interface IServerHandler : IHandler
     WriteOptions WriteOptions { get; set; }
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
-    void Execute();
+    void BeginBackgroundExecute();
 }
-internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler, IServerStreamWriter<TResponse> where TResponse : class where TRequest : class
+internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler, IServerStreamWriter<TResponse>
+    , IThreadPoolWorkItem
+    where TResponse : class where TRequest : class
 {
+    protected sealed override bool IsClient => false;
     protected LiteServerCallContext CreateServerCallContext() => LiteServerCallContext.Get(this);
 
     protected override Action<TResponse, SerializationContext> Serializer => TypedMethod.ResponseMarshaller.ContextualSerializer;
@@ -43,14 +46,19 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
         _responseTrailers = null;
     }
 
-    public void Execute() => ThreadPool.QueueUserWorkItem(static state =>
+    public void BeginBackgroundExecute()
     {
-        _ = Unsafe.As<ServerHandler<TRequest, TResponse>>(state!).InvokeAndCompleteAsync();
-    }, this);
+        ThreadPool.UnsafeQueueUserWorkItem(this, true);
+        ThreadPool.UnsafeQueueUserWorkItem(static state => {
+            _ = Unsafe.As<ServerHandler<TRequest, TResponse>>(state!).InvokeAndCompleteAsync();
+        }, this);
+    }
+
+    void IThreadPoolWorkItem.Execute() => _ = InvokeAndCompleteAsync();
 
     protected abstract Task InvokeServerMethod(ServerCallContext context);
 
-    protected async Task InvokeAndCompleteAsync()
+    private async Task InvokeAndCompleteAsync()
     {
         try
         {
@@ -113,23 +121,6 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
     public ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options) => throw new NotSupportedException();
     public AuthContext AuthContext => throw new NotSupportedException();
 
-    internal async ValueTask WritePayloadAsync(TResponse response, bool isLastElement)
-    {
-        var serializationContext = FrameSerializationContext.Get();
-        try
-        {
-            Logger.LogDebug(Method, static (state, _) => $"serializing {state.FullName} response...");
-            TypedMethod.ResponseMarshaller.ContextualSerializer(response, serializationContext);
-            Logger.LogDebug(serializationContext, static (state, _) => $"serialized {state.Length} bytes");
-            var frames = await serializationContext.WritePayloadAsync(Output, this, isLastElement, CancellationToken);
-            Logger.LogDebug(frames, static (state, _) => $"added {state} payload frames");
-        }
-        finally
-        {
-            serializationContext.Recycle();
-        }
-    }
-
     internal ValueTask WriteStatusAndTrailers()
     {
         // TODO
@@ -145,5 +136,5 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
         => WriteHeaders(responseHeaders).AsTask();
 
     Task IAsyncStreamWriter<TResponse>.WriteAsync(TResponse message)
-        => SendAsync(message, false, CancellationToken.None).AsTask();
+        => SendAsync(message, PayloadFlags.None, CancellationToken.None).AsTask();
 }

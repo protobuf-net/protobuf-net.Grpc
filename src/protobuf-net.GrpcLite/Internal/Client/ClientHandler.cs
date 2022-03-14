@@ -7,7 +7,8 @@ namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
 internal interface IClientHandler : IHandler, IDisposable
 {
-    void Initialize(ushort id, IMethod method, IFrameConnection output, ILogger? logger);
+    new ushort StreamId { get; set; } // adds setter
+    void Initialize(IMethod method, IFrameConnection output, ILogger? logger);
     Task<Metadata> ResponseHeadersAsync { get; }
 
     Status Status { get; }
@@ -17,9 +18,10 @@ internal interface IClientHandler : IHandler, IDisposable
 
 internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientHandler where TRequest : class where TResponse : class
 {
-    public void Initialize(ushort id, IMethod method, IFrameConnection output, ILogger? logger)
+    protected sealed override bool IsClient => true;
+    public void Initialize(IMethod method, IFrameConnection output, ILogger? logger)
     {
-        Initialize(id, output, logger);
+        Initialize(StreamId, output, logger);
         Method = method;
     }
 
@@ -39,7 +41,7 @@ internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TReques
     }
 
     Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message)
-        => SendAsync(message, false, default).AsTask();
+        => SendAsync(message, PayloadFlags.None, default).AsTask();
 
     protected const bool AllowClientRecycling = false; // see comments in Dispose()
 

@@ -1,5 +1,6 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Connections;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
@@ -97,5 +98,28 @@ internal static class Utilities
     {
         segment = EmptySegment;
         return true;
+    }
+
+    public static ValueTask WriteAllAsync(this IFrameConnection connection, ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken = default)
+    {
+        return frames.Length switch
+        {
+            0 => default,
+            1 => connection.WriteAsync(frames.Span[0], cancellationToken),
+            _ => SlowAsync(connection, frames, cancellationToken),
+        };
+        async static ValueTask SlowAsync(IFrameConnection connection, ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken)
+        {
+            var length = frames.Length;
+            for (int i = 0; i < length; i++)
+            {
+                await connection.WriteAsync(frames.Span[i], cancellationToken);
+            }
+        }
+    }
+
+    internal static ValueTask AsValueTask(this Exception ex)
+    {
+        return ValueTask.FromException(ex);
     }
 }
