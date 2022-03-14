@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Grpc.Core;
+using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Server;
@@ -56,21 +57,13 @@ namespace ProtoBuf.Grpc.Lite
                             _connection.Close();
                         }
                         break;
-                    case FrameKind.Unary:
-                    case FrameKind.ClientStreaming:
-                    case FrameKind.ServerStreaming:
-                    case FrameKind.DuplexStreaming:
+                    case FrameKind.NewStream:
                         var method = Encoding.UTF8.GetString(frame.GetPayload().Span);
                         var handler = _server.TryGetHandler(method, out var handlerFactory) ? handlerFactory() : null;
                         if (handler is null)
                         {
                             _logger.LogDebug(method, static (state, _) => $"method not found: {state}");
                             await _connection.WriteAsync(new FrameHeader(FrameKind.MethodNotFound, 0, header.StreamId, 0), cancellationToken);
-                        }
-                        else if (handler.Kind != header.Kind)
-                        {
-                            _logger.LogInformation((Handler: handler, Received: header.Kind), static (state, _) => $"invalid method kind: expected {state.Handler.Kind}, received {state.Received}; {state.Handler.Method}");
-                            await _connection.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, handler.NextSequenceId()), cancellationToken);
                         }
                         else if (!_activeOperations.TryAdd(header.StreamId, handler))
                         {
@@ -84,9 +77,9 @@ namespace ProtoBuf.Grpc.Lite
 
 
                             // intiate the server request
-                            switch (header.Kind)
+                            switch (handler.MethodType)
                             {
-                                case FrameKind.DuplexStreaming:
+                                case MethodType.DuplexStreaming:
                                     handler.BeginBackgroundExecute();
                                     break;
                             }

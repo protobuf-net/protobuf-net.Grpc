@@ -83,6 +83,12 @@ internal static class Utilities
         => logger?.Log<TState>(LogLevel.Error, default, state, exception, formatter);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void LogError(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
+        => logger?.Log<string>(LogLevel.Error, default, caller, exception, static (s, ex) => $"[{s}]: {ex!.Message}");
+
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void LogCritical<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.Log<TState>(LogLevel.Critical, default, state, exception, formatter);
 

@@ -14,7 +14,7 @@ public readonly struct Frame
         var bufferLength = buffer.Length;
         if (bufferLength >= FrameHeader.Size)
         {
-            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(6, 2));
+            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(FrameHeader.PayloadLengthOffset));
             AssertValidLength(declaredLength);
             bytesRead = FrameHeader.Size + declaredLength;
             if (bufferLength >= bytesRead)
@@ -42,7 +42,7 @@ public readonly struct Frame
         if (!trusted)
         {
             if (buffer.Length < FrameHeader.Size) ThrowTooSmall();
-            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(6, 2));
+            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(FrameHeader.PayloadLengthOffset));
             AssertValidLength(declaredLength);
             if (buffer.Length != FrameHeader.Size + declaredLength) ThrowLengthMismatch();
         }

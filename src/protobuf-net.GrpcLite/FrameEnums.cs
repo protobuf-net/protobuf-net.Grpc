@@ -25,13 +25,8 @@ internal enum GeneralFlags
 
 public enum FrameKind : byte
 {
-    // note that as a convenience, these match Grpc.Core.MethodType
-    // for both name and value
-    Unary,
-    ClientStreaming,
-    ServerStreaming,
-    DuplexStreaming,
-
+    Handshake,
+    NewStream,
     Payload,
     Cancel,
     Close,

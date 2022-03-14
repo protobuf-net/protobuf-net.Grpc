@@ -77,7 +77,7 @@ internal sealed class LiteCallInvoker : CallInvoker
 
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
-        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.DuplexStreaming);
+        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get();
         AddStream(handler, method);
         _ = handler.SendInitializeAsync(host, options).AsTask();
         return new AsyncDuplexStreamingCall<TRequest, TResponse>(handler, handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
@@ -85,7 +85,7 @@ internal sealed class LiteCallInvoker : CallInvoker
 
     public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get(FrameKind.ServerStreaming);
+        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get();
         AddStream(handler, method);
         _ = handler.SendSingleAsync(host, options, request);
         return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
@@ -116,10 +116,7 @@ internal sealed class LiteCallInvoker : CallInvoker
                         _connection.Close();
                     }
                     break;
-                case FrameKind.Unary:
-                case FrameKind.ClientStreaming:
-                case FrameKind.ServerStreaming:
-                case FrameKind.DuplexStreaming:
+                case FrameKind.NewStream:
                     logger.LogError(header, static (state, _) => $"server should not be initializing requests! {state}");
                     break;
                 case FrameKind.Payload:

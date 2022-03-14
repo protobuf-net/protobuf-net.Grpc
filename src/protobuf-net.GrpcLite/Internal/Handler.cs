@@ -10,10 +10,10 @@ namespace ProtoBuf.Grpc.Lite.Internal;
 interface IHandler : IPooled
 {
     ushort StreamId { get; }
-    FrameKind Kind { get; }
     ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
     ushort NextSequenceId();
+    MethodType MethodType { get; }
 }
 
 interface IReceiver<T>
@@ -132,7 +132,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         var slab = BufferManager.Rent(length);
         try
         {
-            var header = new FrameHeader(Kind, 0, StreamId, NextSequenceId(), (ushort)length);
+            var header = new FrameHeader(FrameKind.NewStream, 0, StreamId, NextSequenceId(), (ushort)length);
             slab.Advance(Encoding.UTF8.GetBytes(fullName, slab.ActiveBuffer.Span));
             return slab.CreateFrameAndInvalidate(header, updateHeaderLength: false); // this will validate etc
         }
@@ -148,8 +148,15 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     internal async Task SendSingleAsync(string? host, CallOptions options, TSend request)
     {
-        await SendInitializeAsync(host, options);
-        await SendAsync(request, PayloadFlags.FinalItem, options.CancellationToken);
+        try
+        {
+            await SendInitializeAsync(host, options);
+            await SendAsync(request, PayloadFlags.FinalItem, options.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex);
+        }
     }
 
     public async ValueTask SendAsync(TSend value, PayloadFlags flags, CancellationToken cancellationToken)
@@ -161,6 +168,11 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
             serializationContext = PayloadFrameSerializationContext.Get(this, BufferManager, StreamId, flags);
             Serializer(value, serializationContext);
             await serializationContext.WritePayloadAsync(Output, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex);
+            throw;
         }
         finally
         {
@@ -224,5 +236,5 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
     }
 
     protected abstract ValueTask ReceivePayloadAsync(TReceive value, CancellationToken cancellationToken);
-    public abstract FrameKind Kind { get; }
+    MethodType IHandler.MethodType => _method!.Type;
 }

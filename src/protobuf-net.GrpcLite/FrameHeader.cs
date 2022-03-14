@@ -8,6 +8,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
 {
     public const int Size = sizeof(ulong); // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
+    internal const int PayloadLengthOffset = 6;
     public const ushort MaxPayloadSize = ushort.MaxValue - Size; // so that header+payload fit in 64k
 
     internal void UnsafeWrite(ref byte destination)

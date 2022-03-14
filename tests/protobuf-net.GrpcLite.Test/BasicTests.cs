@@ -36,8 +36,6 @@ public class BasicTests
 
     class DummyHandler : HandlerBase<string, string>, IMethod
     {
-        public override FrameKind Kind => FrameKind.Unary;
-
         public DummyHandler(string fullName, ushort streamId)
         {
             _fullName = fullName;
@@ -84,12 +82,12 @@ public class BasicTests
 
         var hex = GetHex(frame.Buffer);
         Assert.Equal(
-    "00-00-2A-00-00-00-13-00-" // unary, id 42, length 19
+    "01-00-2A-00-00-00-13-00-" // unary, id 42, length 19
     + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // "/myservice/mymethod"
 
         frame = new Frame(frame.Buffer);
         var header = frame.GetHeader();
-        Assert.Equal(FrameKind.Unary, header.Kind);
+        Assert.Equal(FrameKind.NewStream, header.Kind);
         Assert.Equal(0, header.KindFlags);
         Assert.Equal(42, header.StreamId);
         Assert.Equal(0, header.SequenceId);
@@ -126,7 +124,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1, length 13
+            + "02-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
@@ -147,7 +145,7 @@ public class BasicTests
         Assert.Equal(
             "01-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1 length 13
+            + "02-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1 length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 

@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
+using System.Diagnostics;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -39,6 +40,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 
     public override void Complete()
     {
+        Debug.WriteLine($"[serialize] complete; {_totalLength} committed (declared: {_declaredPayloadLength})");
         if (_declaredPayloadLength >= 0 && _declaredPayloadLength != _totalLength) ThrowLengthMismatch(_declaredPayloadLength, _totalLength);
         // update our template to add the "we're done" flag
         _template = new FrameHeader(_template, (byte)(_template.KindFlags | (byte)PayloadFlags.EndItem));
@@ -69,11 +71,17 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 
     void IBufferWriter<byte>.Advance(int count)
     {
-        _current!.Advance(count);
         _totalLength += count;
+        Debug.WriteLine($"[serialize] committed {count} for a total of {_totalLength}; {_current!.DebugSummarize(count)}: {_current!.DebugGetHex(count)}");
+        _current!.Advance(count);
     }
 
-    public Memory<byte> GetMemory(int sizeHint) => GetMemoryImpl(Math.Max(sizeHint, 8)); // always give external callers *at least something*
+    public Memory<byte> GetMemory(int sizeHint)
+    {
+        var buffer = GetMemoryImpl(Math.Max(sizeHint, 8)); // always give external callers *at least something*
+        Debug.WriteLine($"[serialize] requested {sizeHint}, provided {_current!.DebugSummarize(buffer)}");
+        return buffer;
+    }
     private Memory<byte> GetMemoryImpl(int minBytes)
     {   // note that GetMemoryImpl allows a zero-length request that means "just make sure we have allocated a buffer"
         var current = _current;
@@ -82,7 +90,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
         if (current is not null)
         {
             // continue using the existing buffer if there's something useful there
-            buffer = current.Memory;
+            buffer = current.ActiveBuffer;
             if (buffer.Length >= Math.Max(minBytes, REASONABLE_MIN_LENGTH)) return buffer;
 
             // otherwise, give up; we'll create a new buffer
@@ -90,12 +98,13 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
         }
         _current = current = _bufferManager!.Rent(minBytes);
 
-        buffer = current.Buffer;
+        buffer = current.ActiveBuffer;
         if (buffer.Length < Math.Max(minBytes, REASONABLE_MIN_LENGTH))
         {
             current.Return();
             throw new InvalidOperationException($"Newnly rented slab is undersized at {buffer.Length} bytes");
         }
+        Debug.WriteLine($"[serialize] rented slab; header is [{_current.CurrentHeaderOffset}, {_current.CurrentHeaderOffset + FrameHeader.Size})");
         return buffer;
     }
 

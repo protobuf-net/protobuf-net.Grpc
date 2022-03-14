@@ -1,5 +1,4 @@
 ﻿using Grpc.Core;
-using Microsoft.Extensions.Logging;
 using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
@@ -15,12 +14,10 @@ internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : Client
 
     TResponse _current = default!;
     private Channel<TResponse>? _channel;
-    private FrameKind _kind;
 
-    internal static ClientServerStreamingHandler<TRequest, TResponse> Get(FrameKind kind)
+    internal static ClientServerStreamingHandler<TRequest, TResponse> Get()
     {
         var obj = AllowClientRecycling ? Pool<ClientServerStreamingHandler<TRequest, TResponse>>.Get() : new ClientServerStreamingHandler<TRequest, TResponse>();
-        obj._kind = kind;
         obj._channel = Channel.CreateUnbounded<TResponse>(s_ChannelOptions);
         return obj;
     }
@@ -35,7 +32,6 @@ internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : Client
         _current = default!;
         Pool<ClientServerStreamingHandler<TRequest, TResponse>>.Put(this);
     }
-    public override FrameKind Kind => _kind;
 
     protected override void Cancel(CancellationToken cancellationToken)
         => CompleteResponseChannel();

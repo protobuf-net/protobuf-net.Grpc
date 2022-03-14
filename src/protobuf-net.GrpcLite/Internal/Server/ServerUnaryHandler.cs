@@ -19,8 +19,6 @@ internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TR
         // not really necessary to reset marshaller/method/handler; they'll be alive globally
         Pool<ServerUnaryHandler<TRequest, TResponse>>.Put(this);
     }
-
-    public override FrameKind Kind => FrameKind.Unary;
     public override ValueTask CompleteAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
 
     private TRequest? _request;

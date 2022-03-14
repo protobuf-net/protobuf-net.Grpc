@@ -74,9 +74,56 @@ internal class FrameBufferManager
 
         private readonly byte[] _buffer;
 
+        internal int CurrentHeaderOffset => _currentHeaderOffset;
         private int _currentHeaderOffset, _refCount = 1, _pinCount;
         private Memory<byte> _activePayloadBuffer;
         public Memory<byte> ActiveBuffer => _activePayloadBuffer;
+
+
+        internal string DebugSummarize(int count) => DebugSummarize(ActiveBuffer.Slice(0, count));
+        internal string DebugSummarize(ReadOnlyMemory<byte> buffer)
+        {
+#if DEBUG
+            try
+            {
+                if (MemoryMarshal.TryGetArray<byte>(buffer, out var segment))
+                {
+                    return $"{segment.Count} bytes, [{segment.Offset}, {segment.Offset + segment.Count})";
+                }
+                else
+                {
+                    return $"{buffer.Length} bytes";
+                }
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+#else
+            return "";
+#endif
+        }
+        internal string DebugGetHex(int count)
+        {
+#if DEBUG
+            try
+            {
+                var buffer = ActiveBuffer.Slice(0, count);
+                if (!MemoryMarshal.TryGetArray<byte>(buffer, out var segment))
+                {
+                    segment = buffer.ToArray();
+                }
+                return BitConverter.ToString(segment.Array!, segment.Offset, segment.Count);
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+#else
+            return "";
+#endif
+        }
+
         public void Advance(int count) => _activePayloadBuffer = _activePayloadBuffer.Slice(start: count);
 
         private GCHandle _pinHandle;
@@ -115,7 +162,6 @@ internal class FrameBufferManager
             }
             static void Throw() => throw new InvalidOperationException("Buffer released too many times!");
         }
-        public byte[] Buffer => _buffer;
 
         internal Slab(FrameBufferManager owner, byte[] buffer)
         {
@@ -143,7 +189,7 @@ internal class FrameBufferManager
             var actualPayloadLength = (ushort)(headerAndPayloadLength - FrameHeader.Size);
             if (updateHeaderLength)
             {
-                BinaryPrimitives.WriteUInt16LittleEndian(new Span<byte>(_buffer, _currentHeaderOffset, 2), actualPayloadLength);
+                BinaryPrimitives.WriteUInt16LittleEndian(new Span<byte>(_buffer, _currentHeaderOffset + FrameHeader.PayloadLengthOffset, 2), actualPayloadLength);
             }
 
             var frame = new Frame(Memory.Slice(_currentHeaderOffset, headerAndPayloadLength), trusted: !updateHeaderLength);
