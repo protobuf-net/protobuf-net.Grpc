@@ -98,6 +98,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
         while (!cancellationToken.IsCancellationRequested)
         {
             int remaining = FrameHeader.Size, offset = 0, bytesRead;
+            _logger.LogDebug(true, (state, _) => $"reading next header...");
             while (remaining > 0 && (bytesRead = await _input.ReadAsync(headerBuffer, offset, remaining, cancellationToken)) > 0)
             {
                 remaining -= bytesRead;

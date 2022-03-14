@@ -34,12 +34,13 @@ namespace ProtoBuf.Grpc.Lite.Internal
             {
                 await Task.Yield();
                 _logger.LogDebug(Id, static (state, _) => $"connection {state} processing streams...");
-                var iter = _connection.GetAsyncEnumerator(cancellationToken);
+                await using var iter = _connection.GetAsyncEnumerator(cancellationToken);
                 while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
                 {
                     var frame = iter.Current;
                     var header = frame.GetHeader();
                     _logger.LogDebug(frame, static (state, _) => $"received frame {state}");
+                    bool releaseFrame = false;
                     switch (header.Kind)
                     {
                         case FrameKind.Close:
@@ -55,6 +56,7 @@ namespace ProtoBuf.Grpc.Lite.Internal
                             {
                                 _connection.Close();
                             }
+                            releaseFrame = true;
                             break;
                         case FrameKind.NewStream:
                             var method = Encoding.UTF8.GetString(frame.GetPayload().Span);
@@ -74,7 +76,6 @@ namespace ProtoBuf.Grpc.Lite.Internal
                                 handler.Initialize(header.StreamId, _connection, _logger);
                                 _logger.LogDebug(method, static (state, _) => $"method accepted: {state}");
 
-
                                 // intiate the server request
                                 switch (handler.MethodType)
                                 {
@@ -83,14 +84,28 @@ namespace ProtoBuf.Grpc.Lite.Internal
                                         break;
                                 }
                             }
-
+                            releaseFrame = true;
                             break;
                         case FrameKind.Payload:
                             if (_activeOperations.TryGetValue(header.StreamId, out handler))
                             {
+                                _logger.LogDebug((handler: handler, frame: frame), static (state, _) => $"pushing {state.frame} to {state.handler.Method} ({state.handler.MethodType})");
                                 await handler.ReceivePayloadAsync(frame, cancellationToken);
                             }
+                            else
+                            {
+                                _logger.LogInformation(frame, static (state, _) => $"received payload for unknown stream {state}");
+                                releaseFrame = true;
+                            }
                             break;
+                        default:
+                            _logger.LogInformation(frame, static (state, _) => $"unexpected frame type {state}");
+                            releaseFrame = true;
+                            break;
+                    }
+                    if (releaseFrame)
+                    {
+                        _logger.LogInformation(frame.Buffer, static (state, _) => $"releasing {state.Length} bytes");
                     }
                 }
             }

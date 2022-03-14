@@ -45,6 +45,7 @@ internal abstract class Gate : IFrameConnection
     {
         var inner = Tail.GetAsyncEnumerator(cancellationToken);
         if (_outputBuffer is null) return inner;
+
         _ = BufferAsync(inner, _outputBuffer.Writer, cancellationToken);
         return ReadAllAsync(_outputBuffer, cancellationToken);
     }

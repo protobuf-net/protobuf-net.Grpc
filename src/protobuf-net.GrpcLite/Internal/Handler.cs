@@ -94,7 +94,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         var header = frame.GetHeader();
         
         var payload = frame.GetPayload();
-        bool isComplete = (header.KindFlags & (byte)PayloadFlags.EndItem) == 0;
+        bool isComplete = (header.KindFlags & (byte)PayloadFlags.EndItem) != 0;
 
         if (isComplete)
         {
