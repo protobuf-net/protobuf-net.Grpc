@@ -17,7 +17,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
 
 
 
-    NewFrame _writingFrame;
+    Frame _writingFrame;
 
     public StreamFrameConnection(Stream input, Stream output)
     {
@@ -90,7 +90,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
             }
         }
     }
-    public async IAsyncEnumerator<NewFrame> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<Frame> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         byte[] headerBuffer = new byte[FrameHeader.Size];
         while (!cancellationToken.IsCancellationRequested)
@@ -107,9 +107,9 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
             var header = FrameHeader.ReadUnsafe(in headerBuffer[0]);
 
             // note we rent a new buffer even for zero-length payloads, so we can return a frame based on that segment
-            NewFrame.AssertValidLength(header.PayloadLength);
+            Frame.AssertValidLength(header.PayloadLength);
             var slab = FrameBufferManager.Shared.Rent(header.PayloadLength);
-            NewFrame frame;
+            Frame frame;
             try
             {
                 if (header.PayloadLength != 0)
@@ -134,7 +134,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
         static void ThrowEOF() => throw new EndOfStreamException();
     }
 
-    public ValueTask WriteAsync(NewFrame frame, CancellationToken cancellationToken)
+    public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
     {
         var pending = _output.WriteAsync(frame.Buffer, cancellationToken);
         if (pending.IsCompleted)
@@ -144,7 +144,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
         }
         return ScheduleRelease(frame, pending);
     }
-    private ValueTask ScheduleRelease(in NewFrame frame, in ValueTask pending)
+    private ValueTask ScheduleRelease(in Frame frame, in ValueTask pending)
     {
         _pendingWrite = pending.GetAwaiter();
         _writingFrame = frame;
@@ -170,7 +170,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
     void IValueTaskSource.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
         => _vts.OnCompleted(continuation, state, token, flags);
 
-    public ValueTask WriteAsync(ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken = default)
+    public ValueTask WriteAsync(ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken = default)
         => this.WriteAllAsync(frames, cancellationToken);
 
     void IFrameConnection.Close(Exception? exception)

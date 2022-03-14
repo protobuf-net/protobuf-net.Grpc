@@ -23,7 +23,9 @@ internal interface IServerHandler : IHandler
     void BeginBackgroundExecute();
 }
 internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler, IServerStreamWriter<TResponse>
+#if NETCOREAPP3_1_OR_GREATER
     , IThreadPoolWorkItem
+#endif
     where TResponse : class where TRequest : class
 {
     protected sealed override bool IsClient => false;
@@ -46,15 +48,17 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
         _responseTrailers = null;
     }
 
+#if NETCOREAPP3_1_OR_GREATER
+    public void BeginBackgroundExecute() => ThreadPool.UnsafeQueueUserWorkItem(this, true);
+    void IThreadPoolWorkItem.Execute() => _ = InvokeAndCompleteAsync();
+#else
     public void BeginBackgroundExecute()
     {
-        ThreadPool.UnsafeQueueUserWorkItem(this, true);
         ThreadPool.UnsafeQueueUserWorkItem(static state => {
             _ = Unsafe.As<ServerHandler<TRequest, TResponse>>(state!).InvokeAndCompleteAsync();
         }, this);
     }
-
-    void IThreadPoolWorkItem.Execute() => _ = InvokeAndCompleteAsync();
+#endif
 
     protected abstract Task InvokeServerMethod(ServerCallContext context);
 

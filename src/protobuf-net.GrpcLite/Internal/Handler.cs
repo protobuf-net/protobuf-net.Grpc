@@ -11,7 +11,7 @@ interface IHandler : IPooled
 {
     ushort StreamId { get; }
     FrameKind Kind { get; }
-    ValueTask ReceivePayloadAsync(NewFrame frame, CancellationToken cancellationToken);
+    ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken);
     ValueTask CompleteAsync(CancellationToken cancellationToken);
     ushort NextSequenceId();
 }
@@ -89,7 +89,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         backlog.Enqueue(final);
         throw new NotImplementedException("build the chain");
     }
-    public ValueTask ReceivePayloadAsync(NewFrame frame, CancellationToken cancellationToken)
+    public ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken)
     {
         var header = frame.GetHeader();
         
@@ -121,7 +121,7 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
         => Output.WriteAsync(GetInitializeFrame(host), options.CancellationToken);
 
-    private NewFrame GetInitializeFrame(string? host)
+    internal Frame GetInitializeFrame(string? host)
     {
         var fullName = Method.FullName;
         if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();

@@ -41,7 +41,11 @@ internal class FrameBufferManager
         Slab? head = Volatile.Read(ref _head);
         do
         {
-            if (head is null) return new Slab(this, ArrayPool<byte>.Shared.Rent(_slabSize));
+            if (head is null)
+            {
+                head = new Slab(this, ArrayPool<byte>.Shared.Rent(_slabSize));
+                break; // prepare etc like normal
+            }
         }
         while (!(ReferenceEquals(head,
             head = Interlocked.CompareExchange(ref _head, head.Tail, head)) && AssertCapacityOrRecycle(head, minimumSize)));
@@ -127,11 +131,12 @@ internal class FrameBufferManager
             }
         }
 
-        public NewFrame CreateFrameAndInvalidate(FrameHeader header, bool updateHeaderLength)
+        public Frame CreateFrameAndInvalidate(FrameHeader header, bool updateHeaderLength)
         {
             // compute the length, and overwrite the header (including the updated length)
             ref byte headerStart = ref _buffer[_currentHeaderOffset];
-            var headerAndPayloadLength = checked((ushort)Unsafe.ByteOffset(ref ActiveBuffer.Span[0], ref headerStart).ToInt64());
+            var delta = Unsafe.ByteOffset(ref headerStart, ref ActiveBuffer.Span[0]).ToInt64();
+            var headerAndPayloadLength = checked((ushort)delta);
             if (headerAndPayloadLength < FrameHeader.Size) ThrowTooSmallForHeader();
 
             header.UnsafeWrite(ref headerStart);
@@ -141,7 +146,7 @@ internal class FrameBufferManager
                 BinaryPrimitives.WriteUInt16LittleEndian(new Span<byte>(_buffer, _currentHeaderOffset, 2), actualPayloadLength);
             }
 
-            var frame = new NewFrame(Memory.Slice(_currentHeaderOffset, headerAndPayloadLength), trusted: !updateHeaderLength);
+            var frame = new Frame(Memory.Slice(_currentHeaderOffset, headerAndPayloadLength), trusted: !updateHeaderLength);
             _currentHeaderOffset += headerAndPayloadLength;
             _activePayloadBuffer = default;
             AddReference(); // for the new buffer

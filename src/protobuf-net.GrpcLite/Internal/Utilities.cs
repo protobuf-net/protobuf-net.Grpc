@@ -100,7 +100,7 @@ internal static class Utilities
         return true;
     }
 
-    public static ValueTask WriteAllAsync(this IFrameConnection connection, ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken = default)
+    public static ValueTask WriteAllAsync(this IFrameConnection connection, ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken = default)
     {
         return frames.Length switch
         {
@@ -108,7 +108,7 @@ internal static class Utilities
             1 => connection.WriteAsync(frames.Span[0], cancellationToken),
             _ => SlowAsync(connection, frames, cancellationToken),
         };
-        async static ValueTask SlowAsync(IFrameConnection connection, ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken)
+        async static ValueTask SlowAsync(IFrameConnection connection, ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken)
         {
             var length = frames.Length;
             for (int i = 0; i < length; i++)
@@ -120,6 +120,10 @@ internal static class Utilities
 
     internal static ValueTask AsValueTask(this Exception ex)
     {
+#if NET5_0_OR_GREATER
         return ValueTask.FromException(ex);
+#else
+        return new ValueTask(Task.FromException(ex));
+#endif
     }
 }

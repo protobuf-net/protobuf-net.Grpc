@@ -6,7 +6,7 @@ namespace ProtoBuf.Grpc.Lite.Internal;
 
 internal sealed class PayloadFrameSerializationContext : SerializationContext, IBufferWriter<byte>, IPooled
 {
-    private readonly List<NewFrame> _frames = new();
+    private readonly List<Frame> _frames = new();
 
     private IHandler? _handler;
     private FrameBufferManager? _bufferManager;
@@ -131,7 +131,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
                 return WriteAll(_frames, output, cancellationToken);
         }
 
-        static async ValueTask WriteAll(List<NewFrame> frames, IFrameConnection output, CancellationToken cancellationToken)
+        static async ValueTask WriteAll(List<Frame> frames, IFrameConnection output, CancellationToken cancellationToken)
         {
             try
             {

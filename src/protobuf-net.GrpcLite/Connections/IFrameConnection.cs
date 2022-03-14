@@ -3,10 +3,10 @@ using System.Buffers;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
-public interface IFrameConnection : IAsyncEnumerable<NewFrame>, IAsyncDisposable
+public interface IFrameConnection : IAsyncEnumerable<Frame>, IAsyncDisposable
 {
-    ValueTask WriteAsync(NewFrame frame, CancellationToken cancellationToken = default);
-    ValueTask WriteAsync(ReadOnlyMemory<NewFrame> frames, CancellationToken cancellationToken = default);
+    ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken = default);
+    ValueTask WriteAsync(ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken = default);
     bool ThreadSafeWrite { get; }
     void Close(Exception? exception = null);
     Task Complete { get; }
@@ -20,7 +20,7 @@ public static class FrameConnectionExtensions
         {
             var oversized = ArrayPool<byte>.Shared.Rent(FrameHeader.Size);
             frame.UnsafeWrite(ref oversized[0]);
-            var fullFrame = new NewFrame(new ReadOnlyMemory<byte>(oversized, 0, FrameHeader.Size)); // note that this will check the payload length is correct (i.e. zero)
+            var fullFrame = new Frame(new ReadOnlyMemory<byte>(oversized, 0, FrameHeader.Size)); // note that this will check the payload length is correct (i.e. zero)
             var pending = connection.WriteAsync(fullFrame, cancellationToken);
             if (pending.IsCompleted)
             {

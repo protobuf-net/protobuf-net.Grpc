@@ -5,6 +5,7 @@ using ProtoBuf.Grpc.Lite.Internal;
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Channels;
@@ -33,44 +34,70 @@ public class BasicTests
         var invoker = channel.CreateCallInvoker();
     }
 
+    class DummyHandler : HandlerBase<string, string>, IMethod
+    {
+        public override FrameKind Kind => FrameKind.Unary;
+
+        public DummyHandler(string fullName, ushort streamId)
+        {
+            _fullName = fullName;
+            Method = this;
+            Initialize(streamId, null!, null);
+        }
+
+        private readonly string _fullName;
+
+        protected override bool IsClient => true;
+
+        protected override Action<string, SerializationContext> Serializer => throw new NotImplementedException();
+        protected override Func<DeserializationContext, string> Deserializer => throw new NotImplementedException();
+
+        MethodType IMethod.Type => MethodType.Unary;
+
+        string IMethod.ServiceName => throw new NotImplementedException();
+
+        string IMethod.Name => throw new NotImplementedException();
+
+        string IMethod.FullName => _fullName;
+
+        public override ValueTask CompleteAsync(CancellationToken cancellationToken) => default;
+
+        public override void Recycle() { }
+
+        protected override ValueTask ReceivePayloadAsync(string value, CancellationToken cancellationToken) => default;
+    }
+
+    private static string GetHex(ReadOnlyMemory<byte> buffer)
+    {
+        if (!MemoryMarshal.TryGetArray(buffer, out var segment))
+        {
+            segment = buffer.ToArray();
+        }
+        return BitConverter.ToString(segment.Array!, segment.Offset, segment.Count);
+    }
 
     [Fact]
-    public async Task CanWriteAndParseFrame()
+    public void CanWriteAndParseFrame()
     {
-        var ms = new MemoryStream();
-        var channel = Channel.CreateUnbounded<Frame>();
-        await channel.Writer.WriteAsync(Frame.GetInitializeFrame(FrameKind.Unary, 42, 0, "/myservice/mymethod", ""));
-        var bytes = Encoding.UTF8.GetBytes("hello, world!");
-        await channel.Writer.WriteAsync(new Frame(FrameKind.Payload, 42, (byte)PayloadFlags.EndItem, bytes, 0, (ushort)bytes.Length, FrameFlags.None, sequenceId: 3));
-        channel.Writer.Complete();
-        await Frame.WriteAllAsync(channel, ms, Logger, default);
+        var handler = new DummyHandler("/myservice/mymethod", 42);
+        var frame = handler.GetInitializeFrame("");
 
-        var hex = GetHex(ms);
+        var hex = GetHex(frame.Buffer);
         Assert.Equal(
-            "01-00-2A-00-00-00-13-00-" // unary, id 42, length 19
-            + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "05-01-2A-00-03-00-0D-00-" // payload, final, id 42, length 13, seq 3
-            + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
+    "00-00-2A-00-00-00-13-00-" // unary, id 42, length 19
+    + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // "/myservice/mymethod"
 
-        ms.Position = 0;
-        using (var frame = await Frame.ReadAsync(ms, CancellationToken.None))
-        {
-            Assert.Equal(FrameKind.Unary, frame.Kind);
-            Assert.Equal(0, frame.KindFlags);
-            Assert.Equal(42, frame.RequestId);
-            Assert.Equal(0, frame.SequenceId);
-            Assert.Equal(19, frame.Length);
-            Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length));
-        }
-        using (var frame = await Frame.ReadAsync(ms, CancellationToken.None))
-        {
-            Assert.Equal(FrameKind.Payload, frame.Kind);
-            Assert.Equal((byte)PayloadFlags.EndItem, frame.KindFlags);
-            Assert.Equal(42, frame.RequestId);
-            Assert.Equal(3, frame.SequenceId);
-            Assert.Equal(13, frame.Length);
-            Assert.Equal("hello, world!", Encoding.UTF8.GetString(frame.Buffer, frame.Offset, frame.Length));
-        }
+        frame = new Frame(frame.Buffer);
+        var header = frame.GetHeader();
+        Assert.Equal(FrameKind.Unary, header.Kind);
+        Assert.Equal(0, header.KindFlags);
+        Assert.Equal(42, header.StreamId);
+        Assert.Equal(0, header.SequenceId);
+        Assert.Equal(19, header.PayloadLength);
+        Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.GetPayload().Span));
+
+        frame.Release();
+
     }
 
     static readonly Marshaller<string> StringMarshaller_Simple = new Marshaller<string>(Encoding.UTF8.GetBytes, Encoding.UTF8.GetString);
