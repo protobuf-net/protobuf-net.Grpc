@@ -3,17 +3,18 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
-internal sealed class ServerDuplexHandler<TRequest, TResponse> : ServerHandler<TRequest, TResponse>, IAsyncStreamReader<TRequest>, IReceiver<TRequest> where TResponse : class where TRequest : class
+internal sealed class ServerDuplexHandler<TRequest, TResponse> : ServerHandler<TRequest, TResponse>, IAsyncStreamReader<TRequest> where TResponse : class where TRequest : class
 {
 
     private DuplexStreamingServerMethod<TRequest, TResponse>? _handler;
-    private Channel<TRequest>? _requests;
+
+    private Channel<TRequest> _requests = null!; // TODO: pretty sure we can replace this with a MRVTS
 
     private static readonly UnboundedChannelOptions s_ChannelOptions = new UnboundedChannelOptions
     {
-        AllowSynchronousContinuations = false,
+        AllowSynchronousContinuations = true,
         SingleReader = true,
-        SingleWriter = false,
+        SingleWriter = true,
     };
     public static ServerDuplexHandler<TRequest, TResponse> Get(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TRequest, TResponse> handler)
     {
@@ -23,31 +24,46 @@ internal sealed class ServerDuplexHandler<TRequest, TResponse> : ServerHandler<T
         obj._requests = Channel.CreateUnbounded<TRequest>(s_ChannelOptions);
         return obj;
     }
-
     public override void Recycle()
     {
-        _requests?.Writer.TryComplete();
-        _requests = null;
+        _requests = null!;
         // not really necessary to reset marshaller/method/handler; they'll be alive globally
         Pool<ServerDuplexHandler<TRequest, TResponse>>.Put(this);
     }
 
-    public override ValueTask CompleteAsync(CancellationToken cancellationToken)
-    {
-        _requests?.Writer.TryComplete();
-        return default;
-    }
-
-    protected override ValueTask ReceivePayloadAsync(TRequest value, CancellationToken cancellationToken)
-        => _requests!.Writer.WriteAsync(value, cancellationToken);
-
     protected override Task InvokeServerMethod(ServerCallContext context)
         => _handler!(this, this, context);
 
-    private TRequest? _current;
     TRequest IAsyncStreamReader<TRequest>.Current => _current!;
-    void IReceiver<TRequest>.Receive(TRequest value) => _current = value;
+
+
+    protected override ValueTask OnPayloadAsync(TRequest value)
+        => _requests!.Writer.WriteAsync(value, StreamCancellation);
+
+    private TRequest? _current;
+    protected override ValueTask OnPayloadEnd()
+    {
+        _requests!.Writer.TryComplete();
+        return default;
+    }
 
     Task<bool> IAsyncStreamReader<TRequest>.MoveNext(CancellationToken cancellationToken)
-        => MoveNextAndCapture(_requests!.Reader, this, cancellationToken);
+    {
+        if (_requests!.Reader.TryRead(out _current))
+        {
+            return Utilities.AsyncTrue;
+        }
+        if (!_requests.Reader.Completion.IsCompletedSuccessfully)
+        {
+            // it is completed; have another try, but we're sure either way now
+            return _requests!.Reader.TryRead(out _current) ? Utilities.AsyncTrue : Utilities.AsyncFalse;
+        }
+        return Awaited(this, cancellationToken);
+
+        static async Task<bool> Awaited(ServerDuplexHandler<TRequest, TResponse> handler, CancellationToken cancellationToken)
+        {
+            return await handler!._requests.Reader.WaitToReadAsync(cancellationToken)
+                && handler!._requests.Reader.TryRead(out handler!._current);
+        }
+    }
 }

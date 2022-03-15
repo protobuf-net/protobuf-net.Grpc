@@ -5,35 +5,33 @@ using ProtoBuf.Grpc.Lite.Internal.Client;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-public sealed class LiteChannel : ChannelBase, IAsyncDisposable, IDisposable
+public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
 {
-    private readonly IFrameConnection _connection;
-    readonly LiteCallInvoker _callInvoker;
-
-    internal LiteChannel(IFrameConnection connection, string target, ILogger? logger = null, CancellationToken cancellationToken = default) : base(target)
+    LiteCallInvoker _callInvoker;
+    internal LiteChannel(IFrameConnection connection, string target, ILogger? logger = null) : base(target)
     {
         connection = connection.WithThreadSafeWrite();
-        _connection = connection; 
-        _callInvoker = new LiteCallInvoker(connection, logger);
-        
-        Complete = _callInvoker.ReadAllAsync(logger, cancellationToken);
+        _callInvoker = new LiteCallInvoker(target, connection, logger);
+        _callInvoker.StartWorker();
     }
-
-    internal Task Complete { get; }
 
     public override CallInvoker CreateCallInvoker() => _callInvoker;
 
-    protected override Task ShutdownAsyncCore() => DisposeAsync().AsTask();
-
     public void Dispose()
     {
-        GC.SuppressFinalize(this);
-        _ = _connection.SafeDisposeAsync().AsTask();
+        _callInvoker.StopWorker();
     }
 
     public ValueTask DisposeAsync()
     {
-        GC.SuppressFinalize(this);
-        return _connection.SafeDisposeAsync();
+        _callInvoker.StopWorker();
+        return default;
     }
+
+    protected override Task ShutdownAsyncCore()
+    {
+        _callInvoker.StopWorker();
+        return base.ShutdownAsyncCore();
+    }
+
 }

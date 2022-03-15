@@ -4,9 +4,9 @@ namespace ProtoBuf.Grpc.Lite.Internal
 {
     internal sealed class FrameSequenceSegment : ReadOnlySequenceSegment<byte>
     {
-        public static ReadOnlySequence<byte> Create(List<Frame> frames)
+        public static ReadOnlySequence<byte> Create(in ReadOnlySpan<Frame> frames)
         {
-            switch (frames.Count)
+            switch (frames.Length)
             {
                 case 0:
                     return default;
@@ -31,6 +31,7 @@ namespace ProtoBuf.Grpc.Lite.Internal
             }
 
             if (first is null) return default;
+            if (ReferenceEquals(first, last)) return new ReadOnlySequence<byte>(first.Memory);
             return new ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
         }
 
@@ -47,6 +48,11 @@ namespace ProtoBuf.Grpc.Lite.Internal
             {
                 RunningIndex = 0;
             }
+        }
+
+        internal static object Create(ReadOnlyMemory<Frame> frameGroup)
+        {
+            throw new NotImplementedException();
         }
     }
 }

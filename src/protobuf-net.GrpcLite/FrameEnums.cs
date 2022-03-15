@@ -25,12 +25,19 @@ internal enum GeneralFlags
 
 public enum FrameKind : byte
 {
+    None = 0,
     Handshake,
     NewStream,
+    Header,
     Payload,
+    Trailer,
+    Status,
     Cancel,
-    Close,
+
+
+    CloseConnection,
     Ping,
     [Obsolete("remove this later; should be a structured response status")]
     MethodNotFound,
+    
 }

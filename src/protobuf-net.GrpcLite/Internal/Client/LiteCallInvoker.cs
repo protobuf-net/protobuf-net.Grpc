@@ -2,14 +2,20 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal sealed class LiteCallInvoker : CallInvoker
+internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
 {
     private readonly ILogger? _logger;
     private readonly IFrameConnection _connection;
-    private readonly ConcurrentDictionary<ushort, IClientHandler> _streams = new();
+    private readonly string _target;
+    private readonly CancellationTokenSource _clientShutdown = new();
+    private readonly ConcurrentDictionary<ushort, IHandler> _streams = new();
+
+    public override string ToString() => _target;
+
     private int _nextId = ushort.MaxValue; // so that our first id is zero
     private void AddStream(IClientHandler handler, IMethod method)
     {
@@ -28,8 +34,11 @@ internal sealed class LiteCallInvoker : CallInvoker
             => throw new InvalidOperationException($"It was not possible to reserve a new stream id; {count} streams are currently in use");
     }
 
-    public LiteCallInvoker(IFrameConnection connection, ILogger? logger)
+    internal void StopWorker() => _clientShutdown.Cancel();
+
+    public LiteCallInvoker(string target, IFrameConnection connection, ILogger? logger)
     {
+        this._target = target;
         this._connection = connection;
         this._logger = logger;
     }
@@ -58,6 +67,12 @@ internal sealed class LiteCallInvoker : CallInvoker
     static readonly Func<object, Status> s_getStatus = static state => ((IClientHandler)state).Status;
     static readonly Func<object, Metadata> s_getTrailers = static state => ((IClientHandler)state).Trailers();
     static readonly Action<object> s_dispose = static state => ((IClientHandler)state).Dispose();
+
+    bool IListener.IsClient => true;
+
+    IFrameConnection IListener.Connection => _connection;
+
+    ConcurrentDictionary<ushort, IHandler> IListener.Streams => _streams;
 
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
@@ -91,70 +106,16 @@ internal sealed class LiteCallInvoker : CallInvoker
         return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
 
-    internal async Task ReadAllAsync(ILogger? logger, CancellationToken cancellationToken)
+    bool IListener.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IHandler handler)
     {
-        await Task.Yield();
-        try
-        {
-            await using var iter = _connection.GetAsyncEnumerator(cancellationToken);
-            logger.LogDebug(true, static (state, _) => $"listening for messages from the server...");
-            while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
-            {
-                var frame = iter.Current;
-                bool releaseFrame = false;
-                var header = frame.GetHeader();
-                logger.LogDebug(header, static (state, _) => $"received frame {state}");
-                switch (header.Kind)
-                {
-                    case FrameKind.Close:
-                    case FrameKind.Ping:
-                        var generalFlags = (GeneralFlags)header.KindFlags;
-                        if ((generalFlags & GeneralFlags.IsResponse) == 0)
-                        {
-                            // if this was a request, we reply in kind, but noting that it is a response
-                            await _connection.WriteAsync(new FrameHeader(header.Kind, (byte)GeneralFlags.IsResponse, header.StreamId, header.SequenceId, 0), cancellationToken);
-                        }
-                        // shutdown if requested
-                        if (header.Kind == FrameKind.Close)
-                        {
-                            _connection.Close();
-                        }
-                        releaseFrame = true;
-                        break;
-                    case FrameKind.NewStream:
-                        logger.LogError(header, static (state, _) => $"server should not be initializing requests! {state}");
-                        releaseFrame = true;
-                        break;
-                    case FrameKind.Payload:
-                        if (_streams.TryGetValue(header.StreamId, out var handler))
-                        {
-                            _logger.LogDebug((handler: handler, frame: frame), static (state, _) => $"pushing {state.frame} to {state.handler.Method} ({state.handler.MethodType})");
-                            await handler.ReceivePayloadAsync(frame, cancellationToken);
-                        }
-                        else
-                        {
-                            _logger.LogInformation(frame, static (state, _) => $"unexpected frame type {state}");
-                            releaseFrame = true;
-                        }
-                        break;
-                    default:
-                        _logger.LogInformation(frame, static (state, _) => $"unexpected frame type {state}");
-                        releaseFrame = true;
-                        break;
-                }
-                if (releaseFrame)
-                {
-                    _logger.LogInformation(frame.Buffer, static (state, _) => $"releasing {state.Length} bytes");
-                    frame.Release();
-                }
-            }
-        }
-        catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
-        { }
-        catch (Exception ex)
-        {
-            logger.LogError(ex);
-            throw;
-        }
+        // not accepting server-initialized streams
+        handler = null;
+        return false;
+    }
+
+    public void Execute()
+    {
+        _logger.LogDebug(_target, (state, _) => $"Starting call-invoker (client): {state}...");
+        _ = this.RunAsync(_logger, _clientShutdown.Token);
     }
 }

@@ -58,6 +58,8 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [field: FieldOffset(0)]
     public FrameKind Kind { get; }
 
+    public bool HasValue => Kind != FrameKind.None;
+
     public FrameHeader(in FrameHeader template, ushort sequenceId)
     {
         this = template;
@@ -104,13 +106,25 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [field: FieldOffset(6)]
     public ushort PayloadLength { get; }
 
-    private string FormattedFlags => Kind switch
+    private string FormattedFlags
     {
-        FrameKind.Payload => ((PayloadFlags)KindFlags).ToString(),
-        FrameKind.Close => ((GeneralFlags)KindFlags).ToString(),
-        FrameKind.Ping => ((GeneralFlags)KindFlags).ToString(),
-        _ => KindFlags.ToString(),
-    };
+        get
+        {
+            switch (Kind)
+            {
+                case FrameKind.Ping:
+                case FrameKind.CloseConnection:
+                    return ((GeneralFlags)KindFlags).ToString();
+                case FrameKind.Payload:
+                case FrameKind.Header:
+                case FrameKind.Trailer:
+                case FrameKind.Status:
+                    return ((PayloadFlags)KindFlags).ToString();
+                default:
+                    return KindFlags.ToString();
+            }
+        }
+    }
 
     /// <inheritdoc>
     public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}],{PayloadLength}; {FormattedFlags}";

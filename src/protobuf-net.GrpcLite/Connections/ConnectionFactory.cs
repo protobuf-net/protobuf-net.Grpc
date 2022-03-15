@@ -1,10 +1,9 @@
-﻿using ProtoBuf.Grpc.Lite.Internal;
-using System.IO.Pipes;
-using System.IO.Compression;
-using System.Net.Security;
-using Grpc.Core;
+﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
-using ProtoBuf.Grpc.Lite.Connections;
+using ProtoBuf.Grpc.Lite.Internal;
+using System.IO.Compression;
+using System.IO.Pipes;
+using System.Net.Security;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
@@ -173,6 +172,23 @@ public static class ConnectionFactory
         this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
         CancellationToken cancellationToken = default)
         => factory.WithFrameBuffer(0, 0).CreateChannelAsync();
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> WithPipelines(
+        this Func<CancellationToken, ValueTask<ConnectionState<System.IO.Pipelines.IDuplexPipe>>> factory) => async cancellationToken =>
+        {
+            var source = await factory(cancellationToken);
+            try
+            {
+                IFrameConnection pipe = new PipeFrameConnection(source.Connection, source.Logger);
+                return source.ChangeType<IFrameConnection>(pipe);
+            }
+            catch(Exception ex)
+            {
+                try { await source.Connection.Input.CompleteAsync(ex); } catch { }
+                try { await source.Connection.Output.CompleteAsync(ex); } catch { }
+                throw;
+            }
+        };
 
     private static async ValueTask<LiteChannel> CreateChannel(ValueTask<ConnectionState<IFrameConnection>> pending)
     {

@@ -33,21 +33,40 @@ internal sealed class ClientUnaryHandler<TRequest, TResponse> : ClientHandler<TR
     protected override void Cancel(CancellationToken cancellationToken)
         => _tcs!.TrySetCanceled(cancellationToken);
 
-    public override ValueTask CompleteAsync(CancellationToken cancellationToken)
-        => throw new NotImplementedException();
-
-    protected override ValueTask ReceivePayloadAsync(TResponse value, CancellationToken cancellationToken)
+    protected override ValueTask OnPayloadAsync(TResponse value)
     {
-        bool success = _tcs!.TrySetResult(value);
-        if (success)
-        {
-            Logger.LogDebug(StreamId, static (state, _) => $"assigned response for request {state}");
-        }
-        else
-        {
-            Logger.LogDebug(StreamId, static (state, _) => $"unable to assign response for request {state}");
-        }
-        UnregisterCancellation();
+        _tcs?.TrySetResult(value);
         return default;
     }
+    protected override ValueTask OnPayloadEnd()
+    {
+        _tcs?.TrySetException(NoPayload()); // if we didn't already get a payload, something is bad
+        return default;
+        static Exception NoPayload()
+        {
+            try
+            {
+                throw new InvalidOperationException("No payload received");
+            }
+            catch (Exception ex)
+            {
+                return ex; // now with a stack-trace
+            }
+        }
+    }
+
+    //protected override ValueTask ReceivePayloadAsync(TResponse value, CancellationToken cancellationToken)
+    //{
+    //    bool success = _tcs!.TrySetResult(value);
+    //    if (success)
+    //    {
+    //        Logger.LogDebug(StreamId, static (state, _) => $"assigned response for request {state}");
+    //    }
+    //    else
+    //    {
+    //        Logger.LogDebug(StreamId, static (state, _) => $"unable to assign response for request {state}");
+    //    }
+    //    UnregisterCancellation();
+    //    return default;
+    //}
 }

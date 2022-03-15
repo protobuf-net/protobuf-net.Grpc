@@ -80,12 +80,33 @@ internal static class Utilities
         => logger?.Log<TState>(LogLevel.Information, default, state, exception, formatter);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void LogInformation(this ILogger? logger, string message)
+        => logger?.Log<string>(LogLevel.Information, default, message, null, static (state, _) => state);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void LogError<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.Log<TState>(LogLevel.Error, default, state, exception, formatter);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void LogError(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
-        => logger?.Log<string>(LogLevel.Error, default, caller, exception, static (s, ex) => $"[{s}]: {ex!.Message}");
+    {
+        if (logger is not null) LogSafe(logger, LogLevel.Error, exception, caller);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void LogCritical(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
+    {
+        if (logger is not null) LogSafe(logger, LogLevel.Critical, exception, caller);
+    }
+
+    static void LogSafe(ILogger logger, LogLevel level, Exception exception, string caller)
+    {
+        try // we're probably already in a catch block; don't make things worse!
+        {
+            logger.Log<string>(level, default, caller, exception, static (s, ex) => $"[{s}]: {ex!.Message}");
+        }
+        catch { }
+    }
 
 
 
@@ -125,6 +146,42 @@ internal static class Utilities
         }
     }
 
+    internal static Task GetLazyCompletion(ref object? taskOrCompletion, bool markComplete)
+    {   // lazily process _completion
+        while (true)
+        {
+            switch (Volatile.Read(ref taskOrCompletion))
+            {
+                case null:
+                    // try to swap in Task.CompletedTask
+                    object newFieldValue;
+                    Task result;
+                    if (markComplete)
+                    {
+                        newFieldValue = result = Task.CompletedTask;
+                    }
+                    else
+                    {
+                        var newTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        newFieldValue = newTcs;
+                        result = newTcs.Task;
+                    }
+                    if (Interlocked.CompareExchange(ref taskOrCompletion, newFieldValue, null) is null)
+                    {
+                        return result;
+                    }
+                    continue; // if we fail the swap: redo from start
+                case Task task:
+                    return task; // this will be Task.CompletedTask
+                case TaskCompletionSource<bool> tcs:
+                    if (markComplete) tcs.TrySetResult(true);
+                    return tcs.Task;
+                default:
+                    throw new InvalidOperationException();
+            }
+        }
+    }
+
     internal static ValueTask AsValueTask(this Exception ex)
     {
 #if NET5_0_OR_GREATER
@@ -133,4 +190,21 @@ internal static class Utilities
         return new ValueTask(Task.FromException(ex));
 #endif
     }
+
+#if NETCOREAPP3_1_OR_GREATER
+    public static void StartWorker(this IWorker worker)
+        => ThreadPool.UnsafeQueueUserWorkItem(worker, preferLocal: false);
+#else
+    public static void StartWorker(this IWorker worker)
+        => ThreadPool.UnsafeQueueUserWorkItem(s_StartWorker, worker);
+    private static readonly WaitCallback s_StartWorker = state => (Unsafe.As<IWorker>(state)).Execute();
+#endif
 }
+#if NETCOREAPP3_1_OR_GREATER
+internal interface IWorker : IThreadPoolWorkItem {}
+#else
+internal interface IWorker
+{
+    void Execute();
+}
+#endif

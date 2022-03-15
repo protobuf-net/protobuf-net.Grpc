@@ -3,7 +3,7 @@ using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : ClientHandler<TRequest, TResponse>, IAsyncStreamReader<TResponse>, IReceiver<TResponse> where TResponse : class where TRequest : class
+internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : ClientHandler<TRequest, TResponse>, IAsyncStreamReader<TResponse> where TResponse : class where TRequest : class
 {
     private static readonly UnboundedChannelOptions s_ChannelOptions = new UnboundedChannelOptions
     {
@@ -36,21 +36,29 @@ internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : Client
     protected override void Cancel(CancellationToken cancellationToken)
         => CompleteResponseChannel();
 
-    protected override ValueTask ReceivePayloadAsync(TResponse value, CancellationToken cancellationToken)
-    {
-        Logger.LogDebug(StreamId, static (state, ex) => $"adding item to sequence {state}");
-        return _channel!.Writer.WriteAsync(value, cancellationToken);
-    }
-    public override ValueTask CompleteAsync(CancellationToken cancellationToken)
+    //protected override ValueTask ReceivePayloadAsync(TResponse value, CancellationToken cancellationToken)
+    //{
+    //    Logger.LogDebug(StreamId, static (state, ex) => $"adding item to sequence {state}");
+    //    return _channel!.Writer.WriteAsync(value, cancellationToken);
+    //}
+    protected override ValueTask OnPayloadEnd()
     {
         CompleteResponseChannel();
-        return default;
+        return base.OnPayloadEnd();
     }
 
     Task<bool> IAsyncStreamReader<TResponse>.MoveNext(CancellationToken cancellationToken)
-        => MoveNextAndCapture(_channel!.Reader, this, cancellationToken);
+    {
+        throw new NotImplementedException();
+        //=> MoveNextAndCapture(_channel!.Reader, this, cancellationToken);
+    }
 
-    void IReceiver<TResponse>.Receive(TResponse value) => _current = value;
+
+    protected override ValueTask OnPayloadAsync(TResponse value)
+    {
+        _current = value;
+        throw new NotImplementedException();
+    }
 
 
     TResponse IAsyncStreamReader<TResponse>.Current => _current!; // if you call it at a time other than after MoveNext(): that's on you

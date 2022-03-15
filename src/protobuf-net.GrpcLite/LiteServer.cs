@@ -19,6 +19,8 @@ namespace ProtoBuf.Grpc.Lite
         private int id = -1;
         internal int NextId() => Interlocked.Increment(ref id);
 
+        internal CancellationToken ServerShutdown => _serverShutdown.Token;
+
         CancellationTokenSource _serverShutdown = new CancellationTokenSource();
         public void Stop() => _serverShutdown.Cancel();
         public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
@@ -33,8 +35,8 @@ namespace ProtoBuf.Grpc.Lite
             {
                 while (!_serverShutdown.IsCancellationRequested)
                 {
-                    Logger.LogInformation(true, static (state, _) => $"[server] listening for new connection...");
-                    var connection = await listener(_serverShutdown.Token);
+                    Logger.LogInformation("[server] listening for new connection...");
+                    var connection = await listener(ServerShutdown);
                     if (connection is null)
                     {
                         await Task.Yield(); // at least let's free up the core, if something odd is happening
@@ -42,29 +44,12 @@ namespace ProtoBuf.Grpc.Lite
                     }
 
                     Logger.LogInformation(connection, static (state, _) => $"[server] established connection {state.Name}");
-                    _ = Task.Run(() => RunServer(connection.Connection, connection.Logger));
+                    var server = new LiteServerConnection(this, connection.Connection.WithThreadSafeWrite(), connection.Logger);
+                    server.StartWorker();
                 }
             }
             catch (OperationCanceledException ex) when (ex.CancellationToken == _serverShutdown.Token)
             { } // that's success
-        }
-
-        private async Task RunServer(IFrameConnection connection, ILogger? logger)
-        {
-            try
-            {
-                connection = connection.WithThreadSafeWrite();
-                await using (connection)
-                {
-                    var server = new LiteServerConnection(this, connection, logger); // this starts processing on another worker
-                    await server.RunAsync(_serverShutdown.Token);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex);
-            }
-
         }
 
         private LiteServiceBinder? _serviceBinder;
@@ -97,17 +82,16 @@ namespace ProtoBuf.Grpc.Lite
 
         public int MethodCount => _handlers.Count;
 
-        readonly ConcurrentDictionary<string, Func<IServerHandler>> _handlers = new ConcurrentDictionary<string, Func<Internal.Server.IServerHandler>>();
+        private readonly ConcurrentDictionary<string, Func<IServerHandler>> _handlers = new ConcurrentDictionary<string, Func<IServerHandler>>();
         internal void AddHandler(string fullName, Func<IServerHandler> handlerFactory)
         {
             if (!_handlers.TryAdd(fullName, handlerFactory)) ThrowDuplicate(fullName);
             static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
         }
-        internal bool TryGetHandler(string fullName,
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-            [MaybeNullWhen(false)]
-#endif
-            out Func<Internal.Server.IServerHandler> handlerFactory)
-            => _handlers.TryGetValue(fullName, out handlerFactory);
+        internal bool TryGetHandler(string fullName, [MaybeNullWhen(false)] out IServerHandler handler)
+        {
+            handler = _handlers.TryGetValue(fullName, out var factory) ? factory?.Invoke() : null;
+            return handler is not null;
+        }
     }
 }

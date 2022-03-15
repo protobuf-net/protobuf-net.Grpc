@@ -2,6 +2,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ProtoBuf.Grpc.Lite;
 
@@ -51,25 +52,63 @@ public readonly struct Frame
             AssertValidLength(declaredLength);
             if (buffer.Length != FrameHeader.Size + declaredLength) ThrowLengthMismatch();
         }
-        Buffer = buffer;
+        _buffer = buffer;
 
         static void ThrowTooSmall() => throw new ArgumentException($"The buffer must include at least {FrameHeader.Size} bytes for the frame header", nameof(buffer));
         static void ThrowLengthMismatch() => throw new ArgumentException("The length of the buffer must match the declared length in the frame header, plus the size of the frame header itself", nameof(buffer));
     }
 
-    public ReadOnlyMemory<byte> Buffer { get; }
-    public FrameHeader GetHeader() => FrameHeader.ReadUnsafe(in Buffer.Span[0]); // length checked in .ctor
-    public ReadOnlyMemory<byte> GetPayload() => Buffer.Slice(start: FrameHeader.Size);
+    private readonly ReadOnlyMemory<byte> _buffer;
+    internal ReadOnlyMemory<byte> RawBuffer => _buffer;
+
+    /// <summary>
+    /// The length of the frame inscluding the header
+    /// </summary>
+    public int TotalLength => _buffer.Length;
+    public bool HasValue
+    {
+        get
+        {
+            // needs to be sensibly sized, and the Kind byte (first) must be non-zero
+            return _buffer.Length >= FrameHeader.Size && _buffer.Span[0] != 0;
+        }
+    }
+
+    public FrameHeader GetHeader()
+        => _buffer.Length >= FrameHeader.Size ? FrameHeader.ReadUnsafe(in _buffer.Span[0]) : default;
+
+    public ReadOnlyMemory<byte> GetPayload()
+        => _buffer.Length >= FrameHeader.Size ? _buffer.Slice(start: FrameHeader.Size) : default;
 
     public void Deconstruct(out FrameHeader header, out ReadOnlyMemory<byte> payload)
     {
-        header = GetHeader();
-        payload = GetPayload();
+        if (_buffer.Length >= FrameHeader.Size)
+        {
+            header = FrameHeader.ReadUnsafe(in _buffer.Span[0]);
+            payload = _buffer.Slice(start: FrameHeader.Size);
+        }
+        else
+        {
+            header = default;
+            payload = default;
+        }
     }
 
     public void Release()
     {
-        if (MemoryMarshal.TryGetMemoryManager<byte, FrameBufferManager.Slab>(Buffer, out var slab))
+        if (MemoryMarshal.TryGetMemoryManager<byte, FrameBufferManager.Slab>(_buffer, out var slab))
             slab.RemoveReference();
+    }
+
+    public void Preserve()
+    {
+        if (MemoryMarshal.TryGetMemoryManager<byte, FrameBufferManager.Slab>(_buffer, out var slab))
+            slab.AddReference();
+    }
+
+    internal string GetPayloadString(Encoding? encoding = null)
+    {
+        var payload = GetPayload();
+        return payload.IsEmpty ? "" : (encoding ?? Encoding.UTF8).GetString(payload.Span);
     }
 }

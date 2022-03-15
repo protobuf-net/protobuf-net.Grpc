@@ -36,7 +36,7 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
             _pendingWrite = default;
             try
             {
-                _logger.LogDebug(frame, (state, _) => $"write complete (async, releasing {state.Buffer.Length} bytes)");
+                _logger.LogDebug(frame, (state, _) => $"write complete (async, releasing {state.TotalLength} bytes)");
                 frame.Release();
                 pending.GetResult();
                 _vts.SetResult(true);
@@ -48,50 +48,15 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
         };
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        await Utilities.SafeDisposeAsync(_input, _output);
-        _ = GetCompletion(true);
+        _ = Utilities.GetLazyCompletion(ref _completion, true);
+        return Utilities.SafeDisposeAsync(_input, _output);
+        
     }
 
-    Task IFrameConnection.Complete => GetCompletion(false);
+    Task IFrameConnection.Complete => Utilities.GetLazyCompletion(ref _completion, false);
 
-
-    private Task GetCompletion(bool markComplete)
-    {   // lazily process _completion
-        while (true)
-        {
-            switch (Volatile.Read(ref _completion))
-            {
-                case null:
-                    // try to swap in Task.CompletedTask
-                    object newFieldValue;
-                    Task result;
-                    if (markComplete)
-                    {
-                        newFieldValue = result = Task.CompletedTask;
-                    }
-                    else
-                    {
-                        var newTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                        newFieldValue = newTcs;
-                        result = newTcs.Task;
-                    }
-                    if (Interlocked.CompareExchange(ref _completion, newFieldValue, null) is null)
-                    {
-                        return result;
-                    }
-                    continue; // if we fail the swap: redo from start
-                case Task task:
-                    return task; // this will be Task.CompletedTask
-                case TaskCompletionSource<bool> tcs:
-                    if (markComplete) tcs.TrySetResult(true);
-                    return tcs.Task;
-                default:
-                    throw new InvalidOperationException();
-            }
-        }
-    }
     public async IAsyncEnumerator<Frame> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         byte[] headerBuffer = new byte[FrameHeader.Size];
@@ -128,24 +93,29 @@ internal sealed class StreamFrameConnection : IFrameConnection, IValueTaskSource
                 }
                 frame = slab.CreateFrameAndInvalidate(header, updateHeaderLength: false);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex);
+                throw;
+            }
             finally
             {
                 slab?.Return();
             }
             _logger.LogDebug(frame, (state, _) => $"yielding {state}...");
             yield return frame;
-
         }
+        _logger.LogDebug(cancellationToken.IsCancellationRequested, static (state, _) => $"stream-frame connection exiting cleanly; cancelled: {state}");
         static void ThrowEOF() => throw new EndOfStreamException();
     }
 
     public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
     {
-        _logger.LogDebug(frame, (state, _) => $"writing {state}, {state.Buffer.Length} bytes...");
-        var pending = _output.WriteAsync(frame.Buffer, cancellationToken);
+        _logger.LogDebug(frame, (state, _) => $"writing {state}, {state.TotalLength} bytes...");
+        var pending = _output.WriteAsync(frame.RawBuffer, cancellationToken);
         if (pending.IsCompleted)
         {
-            _logger.LogDebug(frame, (state, _) => $"write complete (sync, releasing {state.Buffer.Length} bytes)");
+            _logger.LogDebug(frame, (state, _) => $"write complete (sync, releasing {state.TotalLength} bytes)");
             frame.Release();
             return pending;
         }

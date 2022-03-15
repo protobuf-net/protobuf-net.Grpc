@@ -2,27 +2,45 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
 interface IHandler : IPooled
 {
     ushort StreamId { get; }
-    ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken);
-    ValueTask CompleteAsync(CancellationToken cancellationToken);
     ushort NextSequenceId();
     MethodType MethodType { get; }
     string Method { get; }
+    bool TryAcceptFrame(in Frame frame);
 }
 
-interface IReceiver<T>
+internal enum HandlerState
 {
-    void Receive(T value);
-}
+    Uninitialized = 0,
+    ExpectHeaders = 1 | AcceptHeader | AcceptPayload | AcceptTrailer | AcceptStatus,
+    ExpectBody = 2 | AcceptPayload | AcceptTrailer | AcceptStatus,
+    ExpectTrailers = 3 | AcceptTrailer | AcceptStatus,
+    ExpectStatus = 4 | AcceptStatus,
+    Completed = 5,
+    Cancelled = 6,
+    Faulted = 7, // bad things, Mikey
 
-abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where TReceive : class
+    // high bits are flags
+    AcceptHeader = 1 << 27,
+    AcceptPayload = 1 << 28,
+    AcceptTrailer = 1 << 29,
+    AcceptStatus = 1 << 30,
+    IsActive = 1 << 31,
+
+    // for the step, we don't need to remove *all* the flags, because most of the flags are built into the
+    // values directly; we only need to remove the flags that *aren't* handled that way, for example
+    // the "is there an active worker" flag
+    StepMask = ~IsActive,
+}
+internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where TSend : class where TReceive : class
 {
     string IHandler.Method => Method!.FullName;
     protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
@@ -34,6 +52,340 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
     private IMethod _method;
     IFrameConnection _output;
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+
+    // IMPORTANT: state and backlog changes should be synchronized
+    private HandlerState _state = HandlerState.Uninitialized;
+    private Queue<Frame>? _backlogFrames;
+    Frame _backlogFrame;
+
+    private Task _currentWorker = Task.CompletedTask;
+
+    protected CancellationToken StreamCancellation => default;
+
+
+
+    // don't need volatile read; if we care about correctness, we'll be reading inside a lock; if
+    // we don't care about correctness, then *we don't care about correctness*
+    public bool IsActive => (_state & HandlerState.IsActive) != 0;
+    public HandlerState Step => _state & HandlerState.StepMask;
+
+    private object SyncLock => this;
+
+    bool IHandler.TryAcceptFrame(in Frame frame)
+    {
+        var header = frame.GetHeader();
+        lock (SyncLock)
+        {
+            var need = header.Kind switch
+            {
+                FrameKind.Header => HandlerState.AcceptHeader,
+                FrameKind.Payload => HandlerState.AcceptPayload,
+                FrameKind.Trailer => HandlerState.AcceptTrailer,
+                FrameKind.Status => HandlerState.AcceptStatus,
+                _ => default,
+            };
+            if ((_state & need) == 0) return false; // not expecting that
+
+            if (_backlogFrames is not null)
+            {
+                _backlogFrames.Enqueue(frame);
+            }
+            else if (_backlogFrame.HasValue)
+            {
+                // we now have two frames; start a queue
+                _backlogFrames = new Queue<Frame>();
+                _backlogFrames.Enqueue(_backlogFrame);
+                _backlogFrames.Enqueue(frame);
+                _backlogFrame = default;
+            }
+            else
+            {
+                _backlogFrame = frame;
+            }
+            // we only accept header/payload/trailer/status, and all of those use PayloadFlags,
+            // so we can check if we're done
+            if ((header.KindFlags & (byte)PayloadFlags.EndItem) != 0 && !IsActive)
+            {
+                // we have something useful, and there's no current worker: start a worker!
+                Activate();
+            }
+            return true;
+        }
+    }
+
+    public void Activate()
+    {
+        lock (SyncLock)
+        {
+            // only if not already active
+            if ((_state & HandlerState.IsActive) == 0)
+            {
+                _state |= HandlerState.IsActive;
+                this.StartWorker();
+            }
+        }
+    }
+
+    // this is the main pump; when useful data has become available, the framework activates
+    // this method as a worker (as needed), which isolates each stream from the main IO loop
+    public void Execute()
+    {
+        bool start;
+        lock (SyncLock)
+        {
+            start = !_currentWorker.IsCompleted;
+        }
+
+        try
+        {
+            if (start)
+            {
+                _currentWorker = ExecuteCoreAsync();
+            }
+            else
+            {
+                _logger.LogInformation("not starting worker; existing worker is still active");
+            }
+        }
+        catch (Exception ex)
+        {   // unable to start synchronously?
+            ReportFault(ex);
+        }
+    }
+
+    private void ReleaseBacklogLocked()
+    {
+        _backlogFrame.Release();
+        if (_backlogFrames is not null)
+        {
+            while (_backlogFrames.TryDequeue(out var frame))
+            {
+                frame.Release();
+            }
+        }
+    }
+
+    private void ReportFault(Exception ex)
+    {
+        try
+        {
+            _logger.LogCritical(ex);
+            lock (SyncLock)
+            {
+                // normally when setting state we'd need to preserve the active flag,
+                // but we're exiting, so...
+                _state = HandlerState.Faulted;
+                ReleaseBacklogLocked();
+            }
+        }
+        catch (Exception innerEx)
+        {   // ok, even our fault handler is faulting; try one last log
+            _logger.LogCritical(innerEx);
+        }
+    }
+    private async Task ExecuteCoreAsync()
+    {
+        ReadOnlyMemory<Frame> frameGroup = default;
+        FrameKind kind = FrameKind.None;
+        try
+        {
+            // if we're here, we're on a worker thread that represents this stream, and we expect there to be something useful to do
+            while (true)
+            {
+                lock (SyncLock)
+                {
+                    switch (Step)
+                    {
+                        case HandlerState.ExpectHeaders:
+                        case HandlerState.ExpectBody:
+                        case HandlerState.ExpectTrailers:
+                        case HandlerState.ExpectStatus:
+                            frameGroup = ReadNextFrameGroupLocked(out kind); // but we'll process it *outside* of the lock
+                            break; // these are the things we *expect*, i.e. normal
+                        default:
+                            // something unexpected
+                            ReleaseBacklogLocked();
+                            return;
+
+                    }
+                }
+
+                if (frameGroup.IsEmpty) return; // no frames to process
+
+                switch (kind)
+                {
+                    case FrameKind.Header:
+                        await OnTrailerAsync(frameGroup);
+                        break;
+                    case FrameKind.Payload:
+                        await OnPayloadAsync(ref frameGroup, out var isFinal);
+                        if (isFinal) await OnPayloadEnd();
+                        break;
+                    case FrameKind.Trailer:
+                        await OnTrailerAsync(frameGroup);
+                        break;
+                    case FrameKind.Status:
+                        await OnStatusAsync(frameGroup);
+                        break;
+                }
+                Release(ref frameGroup);
+            }
+        }
+        catch (Exception ex)
+        {
+            ReportFault(ex);
+        }
+        finally
+        {
+            lock (SyncLock)
+            {
+                _state &= HandlerState.IsActive;
+            }
+            Release(ref frameGroup);
+        }
+    }
+
+    protected virtual ValueTask OnHeaderAsync(ReadOnlyMemory<Frame> frameGroup) => default;
+    private ValueTask OnPayloadAsync(ref ReadOnlyMemory<Frame> frameGroup, out bool isFinal)
+    {
+        Debug.Assert(!frameGroup.IsEmpty, "frame group should not be empty");
+        var span = frameGroup.Span;
+        var lastHeader = span[span.Length - 1].GetHeader();
+        Debug.Assert(lastHeader.Kind == FrameKind.Payload, $"expected payload, got {lastHeader.Kind}");
+
+        // check the state flags
+        var flags = (PayloadFlags)lastHeader.KindFlags;
+        isFinal = (flags & PayloadFlags.FinalItem) != 0;
+        if ((flags & PayloadFlags.NoItem) != 0) return default; // don't run the deserializer if they're telling is "no item" (caller will release the buffers)
+
+        // run the deserializer
+        var payload = FrameSequenceSegment.Create(span);
+        _logger.LogDebug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
+        var ctx = Pool<SingleBufferDeserializationContext>.Get();
+        ctx.Initialize(payload);
+        var value = Deserializer(ctx);
+        ctx.Recycle();
+
+        // we can release the original buffers now, before we push the value onwards
+        Release(ref frameGroup); 
+        return OnPayloadAsync(value);
+    }
+    protected virtual ValueTask OnPayloadEnd() => default;
+    protected abstract ValueTask OnPayloadAsync(TReceive value);
+    protected virtual ValueTask OnTrailerAsync(ReadOnlyMemory<Frame> frameGroup) => default;
+    protected virtual ValueTask OnStatusAsync(ReadOnlyMemory<Frame> frameGroup) => default;
+
+    private void Release(ref ReadOnlyMemory<Frame> frames)
+    {
+        if (frames.IsEmpty) return;
+        try
+        {
+            // release the individual frames
+            foreach (var frame in frames.Span)
+            {
+                frame.Release();
+            }
+            // and return the array we used for the bundle
+            if (MemoryMarshal.TryGetArray(frames, out var segment))
+            {
+                ArrayPool<Frame>.Shared.Return(segment.Array);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex);
+        }
+        finally
+        {
+            frames = default; // so we don't release anything twice
+        }
+    }
+
+    private ReadOnlyMemory<Frame> ReadNextFrameGroupLocked(out FrameKind kind)
+    {
+        int count;
+        kind = FrameKind.None;
+        static bool IsTerminated(in Frame frame, out FrameKind kind)
+        {
+            var header = frame.GetHeader();
+            kind = header.Kind;
+            switch (kind)
+            {
+                case FrameKind.Status:
+                case FrameKind.Header:
+                case FrameKind.Payload:
+                case FrameKind.Trailer:
+                    return (header.KindFlags & (byte)(PayloadFlags.EndItem | PayloadFlags.NoItem)) != 0;
+                default:
+                    return ThrowInvalidKind(kind);
+            }
+
+        }
+        static bool ThrowInvalidKind(FrameKind kind) => throw new InvalidOperationException($"An unexpected {kind} frame was encountered in the backlog");
+        static void ThrowMismatchedGroup(FrameKind group, FrameKind item) => throw new InvalidOperationException($"An unexpected {item} frame was encountered in the backlog while reading a {group} group");
+
+        if (_backlogFrames is not null)
+        {
+            if (_backlogFrames.TryPeek(out var frame) && IsTerminated(frame, out kind))
+            {   // optimize for single-frame scenarions
+                count = 1;
+            }
+            else if (_backlogFrames.Count == 0)
+            {
+                count = 0;
+            }
+            else // multiple items, presumably; we need to find how many are in this group, and validate that they make a consistent group
+            {
+                var iter = _backlogFrames.GetEnumerator(); // doesn't dequeue - this is a peek cursor, effectively
+                if (iter.MoveNext())
+                {
+                    if (IsTerminated(frame, out kind))
+                    {
+                        count = 1;
+                    }
+                    else
+                    {
+                        count = -1; // use sign to track EOF; if we end up with a -ve number, we didn't find an end
+                        while (iter.MoveNext())
+                        {
+                            bool terminated = IsTerminated(iter.Current, out var nextKind);
+                            if (nextKind != kind) ThrowMismatchedGroup(kind, nextKind); // make sure all items in the group share a kind
+                            if (terminated)
+                            {
+                                count = -count;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    count = 0;
+                }
+                // note queue iterator doesn't need Dispose() called
+            }
+        }
+        else
+        {
+            count = _backlogFrame.HasValue && IsTerminated(_backlogFrame, out kind) ? 1 : 0;
+        }
+        if (count <= 0) return default;
+
+        Frame[] oversized = ArrayPool<Frame>.Shared.Rent(count);
+        if (_backlogFrames is not null)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                oversized[i] = _backlogFrames.Dequeue();
+            }
+        }
+        else
+        {
+            oversized[0] = _backlogFrame;
+            _backlogFrame = default;
+        }
+        return new ReadOnlyMemory<Frame>(oversized, 0, count);
+    }
 
     public ushort StreamId
     {
@@ -59,72 +411,27 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
 
     public virtual void Initialize(ushort streamId, IFrameConnection output, ILogger? logger)
     {
+        if (_state != HandlerState.Uninitialized) Throw(_state);
         _output = output;
         _logger = logger;
         _streamId = streamId;
         _sequenceId = ushort.MaxValue; // so first is zero
+        _state = HandlerState.ExpectHeaders;
+        _currentWorker = Task.CompletedTask;
+
+        static void Throw(HandlerState state) => throw new InvalidOperationException($"Attempted to initialize a handler that was: {state}");
     }
 
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
 
-    public abstract ValueTask CompleteAsync(CancellationToken cancellationToken);
-
-    public abstract void Recycle();
-
-    private readonly List<Frame> _frames = new();
-
-    public ValueTask ReceivePayloadAsync(Frame frame, CancellationToken cancellationToken)
+    public virtual void Recycle()
     {
-        var header = frame.GetHeader();
-        
-        bool isComplete = (header.KindFlags & (byte)PayloadFlags.EndItem) != 0;
-        if (header.PayloadLength == 0)
-        {
-            frame.Release(); // no longer needed
-        }
-        else
-        {
-            _frames.Add(frame);
-        }
-        if (isComplete)
-        {
-            return ReceiveCompletePayloadAsync(FrameSequenceSegment.Create(_frames), cancellationToken);
-        }
-        else
-        {
-            return default;
-        }
+        _state = HandlerState.Uninitialized;
+        _currentWorker = Task.CompletedTask;
+        _output = null!;
+        _logger = null;
     }
-    private ValueTask ReceiveCompletePayloadAsync(ReadOnlySequence<byte> payload, CancellationToken cancellationToken)
-    {
-        TReceive value;
-        try
-        {
-            _logger.LogDebug(payload.Length, static (state, _) => $"deserializing payload, {state} bytes...");
-            var ctx = Pool<SingleBufferDeserializationContext>.Get();
-            ctx.Initialize(payload);
-            value = Deserializer(ctx);
-            ctx.Recycle();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex);
-            throw;
-        }
-        finally
-        {
-            _logger.LogDebug((buffers: _frames.Count, bytes: _frames.Sum(x => x.Buffer.Length)), static (state, _) => $"releasing {state.bytes} bytes from {state.buffers} payload buffers");
-            foreach (var frame in _frames)
-            {
-                frame.Release();
-            }    
-            _frames.Clear();
-        }
-        _logger.LogDebug(value, static (state, _) => $"pushing value to consumer: {state}");
-        return ReceivePayloadAsync(value, cancellationToken);
-    }
-
 
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
         => Output.WriteAsync(GetInitializeFrame(host), options.CancellationToken);
@@ -188,61 +495,59 @@ abstract class HandlerBase<TSend, TReceive> : IHandler where TSend : class where
         }
     }
 
-    public static Task<bool> MoveNextAndCapture(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
-    {
-        // try to get something the cheap way
-        if (source.TryRead(out var value))
-        {
-            destination.Receive(value);
-            return Utilities.AsyncTrue;
-        }
-        return SlowMoveNext(source, destination, cancellationToken);
+    //public static Task<bool> MoveNextAndCapture(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
+    //{
+    //    // try to get something the cheap way
+    //    if (source.TryRead(out var value))
+    //    {
+    //        destination.Receive(value);
+    //        return Utilities.AsyncTrue;
+    //    }
+    //    return SlowMoveNext(source, destination, cancellationToken);
 
-        static Task<bool> SlowMoveNext(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
-        {
-            TReceive value;
-            do
-            {
-                var waitToReadAsync = source.WaitToReadAsync(cancellationToken);
-                if (!waitToReadAsync.IsCompletedSuccessfully)
-                {   // nothing readily available, and WaitToReadAsync returned incomplete; we'll
-                    // need to switch to async here
-                    return AwaitToRead(source, destination, waitToReadAsync, cancellationToken);
-                }
+    //    static Task<bool> SlowMoveNext(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
+    //    {
+    //        TReceive value;
+    //        do
+    //        {
+    //            var waitToReadAsync = source.WaitToReadAsync(cancellationToken);
+    //            if (!waitToReadAsync.IsCompletedSuccessfully)
+    //            {   // nothing readily available, and WaitToReadAsync returned incomplete; we'll
+    //                // need to switch to async here
+    //                return AwaitToRead(source, destination, waitToReadAsync, cancellationToken);
+    //            }
 
-                var canHaveMore = waitToReadAsync.Result;
-                if (!canHaveMore)
-                {
-                    // nothing readily available, and WaitToReadAsync return false synchronously;
-                    // we're all done!
-                    return Utilities.AsyncFalse;
-                }
-                // otherwise, there *should* be work, but we might be having a race right; try again,
-                // until we succeed
+    //            var canHaveMore = waitToReadAsync.Result;
+    //            if (!canHaveMore)
+    //            {
+    //                // nothing readily available, and WaitToReadAsync return false synchronously;
+    //                // we're all done!
+    //                return Utilities.AsyncFalse;
+    //            }
+    //            // otherwise, there *should* be work, but we might be having a race right; try again,
+    //            // until we succeed
 
-                // try again
-            }
-            while (!source.TryRead(out value!));
-            destination.Receive(value);
-            // we got success on the not-first attempt; I'll take the W
-            return Utilities.AsyncTrue;
-        }
+    //            // try again
+    //        }
+    //        while (!source.TryRead(out value!));
+    //        destination.Receive(value);
+    //        // we got success on the not-first attempt; I'll take the W
+    //        return Utilities.AsyncTrue;
+    //    }
 
-        static async Task<bool> AwaitToRead(ChannelReader<TReceive> source, IReceiver<TReceive> destination, ValueTask<bool> waitToReadAsync, CancellationToken cancellationToken)
-        {
-            while (await waitToReadAsync)
-            {
-                if (source.TryRead(out var value))
-                {
-                    destination.Receive(value);
-                    return true;
-                }
-                waitToReadAsync = source.WaitToReadAsync(cancellationToken);
-            }
-            return false;
-        }
-    }
-
-    protected abstract ValueTask ReceivePayloadAsync(TReceive value, CancellationToken cancellationToken);
+    //    static async Task<bool> AwaitToRead(ChannelReader<TReceive> source, IReceiver<TReceive> destination, ValueTask<bool> waitToReadAsync, CancellationToken cancellationToken)
+    //    {
+    //        while (await waitToReadAsync)
+    //        {
+    //            if (source.TryRead(out var value))
+    //            {
+    //                destination.Receive(value);
+    //                return true;
+    //            }
+    //            waitToReadAsync = source.WaitToReadAsync(cancellationToken);
+    //        }
+    //        return false;
+    //    }
+    //}
     MethodType IHandler.MethodType => _method!.Type;
 }

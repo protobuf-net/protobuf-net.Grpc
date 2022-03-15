@@ -1,9 +1,12 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
+using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -58,11 +61,9 @@ public class BasicTests
 
         string IMethod.FullName => _fullName;
 
-        public override ValueTask CompleteAsync(CancellationToken cancellationToken) => default;
-
         public override void Recycle() { }
 
-        protected override ValueTask ReceivePayloadAsync(string value, CancellationToken cancellationToken) => default;
+        protected override ValueTask OnPayloadAsync(string value) => default;
     }
 
     private static string GetHex(ReadOnlyMemory<byte> buffer)
@@ -80,12 +81,12 @@ public class BasicTests
         var handler = new DummyHandler("/myservice/mymethod", 42);
         var frame = handler.GetInitializeFrame("");
 
-        var hex = GetHex(frame.Buffer);
+        var hex = GetHex(frame.RawBuffer);
         Assert.Equal(
-    "01-00-2A-00-00-00-13-00-" // unary, id 42, length 19
+    "02-00-2A-00-00-00-13-00-" // unary, id 42, length 19
     + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // "/myservice/mymethod"
 
-        frame = new Frame(frame.Buffer);
+        frame = new Frame(frame.RawBuffer);
         var header = frame.GetHeader();
         Assert.Equal(FrameKind.NewStream, header.Kind);
         Assert.Equal(0, header.KindFlags);
@@ -106,12 +107,33 @@ public class BasicTests
         return BitConverter.ToString(buffer.Array!, buffer.Offset, buffer.Count);
     }
 
+    private IFrameConnection CreateClientPipe(out IDuplexPipe server)
+    {
+        var clientToServer = new Pipe();
+        var serverToClient = new Pipe();
+
+        var client = new DuplexPipe(serverToClient.Reader, clientToServer.Writer);
+        server = new DuplexPipe(clientToServer.Reader, serverToClient.Writer);
+        return new PipeFrameConnection(client, Logger);
+    }
+    sealed class DuplexPipe : IDuplexPipe
+    {
+        public DuplexPipe(PipeReader input, PipeWriter output)
+        {
+            Input = input;
+            Output = output;
+        }
+        public PipeReader Input { get; }
+
+        public PipeWriter Output { get; }
+    }
+
     [Fact]
     public async Task CanWriteSimpleAsyncMessage()
     {
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        var ms = new MemoryStream();
-        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null, ms), Me());
+        var pipe = CreateClientPipe(out var server);
+        using var cts = Timeout();
+        await using var channel = new LiteChannel(pipe, Me(), Logger);
         var invoker = channel.CreateCallInvoker();
         using var call = invoker.AsyncUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!");
@@ -119,33 +141,48 @@ public class BasicTests
         // we don't expect a reply
         var oce = await Assert.ThrowsAsync<TaskCanceledException>(() => call.ResponseAsync);
         Assert.Equal(cts.Token, oce.CancellationToken);
-
-        var hex = GetHex(ms);
+        await Task.Delay(100);
+        pipe.Close();
+        await pipe.Complete;
+        var hex = await GetHexAsync(server);
         Assert.Equal(
-            "01-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
+            "02-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "02-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1, length 13
+            + "04-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1, length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
+
+    private async ValueTask<string> GetHexAsync(IDuplexPipe pipe)
+    {
+        using var ms = new MemoryStream();
+        await pipe.Input.CopyToAsync(ms);
+        return GetHex(ms);
+    }
+
+    private CancellationTokenSource Timeout(int seconds = 2)
+        => Debugger.IsAttached ? new CancellationTokenSource() : new CancellationTokenSource(seconds);
 
     [Fact]
     public async Task CanWriteSimpleSyncMessage()
     {
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        var ms = new MemoryStream();
-        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null, ms), Me());
+        var pipe = CreateClientPipe(out var server);
+        using var cts = Timeout();
+        await using var channel = new LiteChannel(pipe, Me(), Logger);
         var invoker = channel.CreateCallInvoker();
 
         // we don't expect a reply
         var oce = Assert.Throws<TaskCanceledException>(() => invoker.BlockingUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!"));
         Assert.Equal(cts.Token, oce.CancellationToken);
+        await Task.Delay(100);
+        pipe.Close();
+        await pipe.Complete;
 
-        var hex = GetHex(ms);
+        var hex = await GetHexAsync(server);
         Assert.Equal(
-            "01-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
+            "02-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "02-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1 length 13
+            + "04-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1 length 13
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
     }
 
