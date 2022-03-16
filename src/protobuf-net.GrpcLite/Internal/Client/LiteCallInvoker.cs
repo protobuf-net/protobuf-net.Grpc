@@ -17,20 +17,22 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
     public override string ToString() => _target;
 
     private int _nextId = ushort.MaxValue; // so that our first id is zero
-    private void AddStream(IClientHandler handler, IMethod method)
+
+    private ClientStream<TRequest, TResponse> AddClientStream<TRequest, TResponse>(Method<TRequest, TResponse> method)
+        where TRequest : class where TResponse : class
     {
+        var stream = new ClientStream<TRequest, TResponse>(method, _connection, _logger);
         for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
         {
             var id = Utilities.IncrementToUInt32(ref _nextId);
-            handler.Id = id;
-            if (_streams.TryAdd(id, handler))
+            stream.Id = id;
+            if (_streams.TryAdd(id, stream))
             {
-                handler.Initialize(method, _connection, _logger);
-                return;
+                return stream;
             }
         }
-        ThrowUnableToReserve(_streams.Count);
-        static void ThrowUnableToReserve(int count)
+        return ThrowUnableToReserve(_streams.Count);
+        static ClientStream<TRequest, TResponse> ThrowUnableToReserve(int count)
             => throw new InvalidOperationException($"It was not possible to reserve a new stream id; {count} streams are currently in use");
     }
 
@@ -50,24 +52,16 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
         where TRequest : class
         where TResponse : class
     {
-        var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        AddStream(handler, method);
-        try
-        {
-            await handler.SendSingleAsync(host, options, request);
-            return await handler.ResponseAsync;
-        }
-        finally
-        {   // since we've never exposed this to the external world, we can safely recycle it
-            try { handler.Recycle(); }
-            catch { }
-        }
+        var stream = AddClientStream(method);
+        await stream.SendSingleAsync(host, options, request);
+        var result = await stream.AssertNextAsync(options.CancellationToken);
+        return await stream.AssertSingleAsync(options.CancellationToken);
     }
 
-    static readonly Func<object, Task<Metadata>> s_responseHeadersAsync = static state => ((IClientHandler)state).ResponseHeadersAsync;
-    static readonly Func<object, Status> s_getStatus = static state => ((IClientHandler)state).Status;
-    static readonly Func<object, Metadata> s_getTrailers = static state => ((IClientHandler)state).Trailers();
-    static readonly Action<object> s_dispose = static state => ((IClientHandler)state).Dispose();
+    static readonly Func<object, Task<Metadata>> s_responseHeadersAsync = static state => ((IClientStream)state).ResponseHeadersAsync;
+    static readonly Func<object, Status> s_getStatus = static state => ((IClientStream)state).Status;
+    static readonly Func<object, Metadata> s_getTrailers = static state => ((IClientStream)state).Trailers();
+    static readonly Action<object> s_dispose = static state => ((IClientStream)state).Dispose();
 
     bool IListener.IsClient => true;
 
@@ -77,34 +71,32 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
 
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        AddStream(handler, method);
-        _ = handler.SendSingleAsync(host, options, request);
-        return new AsyncUnaryCall<TResponse>(handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+        var stream = AddClientStream(method);
+        _ = stream.SendSingleAsync(host, options, request);
+        return new AsyncUnaryCall<TResponse>(stream.AssertSingleAsync(options.CancellationToken).AsTask(),
+            s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
     public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
-        var handler = ClientUnaryHandler<TRequest, TResponse>.Get(options.CancellationToken);
-        AddStream(handler, method);
-        _ = handler.SendInitializeAsync(host, options).AsTask();
-        return new AsyncClientStreamingCall<TRequest, TResponse>(handler, handler.ResponseAsync, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+        var stream = AddClientStream(method);
+        _ = stream.SendInitializeAsync(host, options).AsTask();
+        return new AsyncClientStreamingCall<TRequest, TResponse>(stream, stream.AssertSingleAsync(options.CancellationToken).AsTask(),
+            s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
-        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get();
-        AddStream(handler, method);
-        _ = handler.SendInitializeAsync(host, options).AsTask();
-        return new AsyncDuplexStreamingCall<TRequest, TResponse>(handler, handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+        var stream = AddClientStream(method);
+        _ = stream.SendInitializeAsync(host, options).AsTask();
+        return new AsyncDuplexStreamingCall<TRequest, TResponse>(stream, stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
     public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
-        var handler = ClientServerStreamingHandler<TRequest, TResponse>.Get();
-        AddStream(handler, method);
-        _ = handler.SendSingleAsync(host, options, request);
-        return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
+        var stream = AddClientStream(method);
+        _ = stream.SendSingleAsync(host, options, request);
+        return new AsyncServerStreamingCall<TResponse>(stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
     bool IListener.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)

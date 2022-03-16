@@ -38,32 +38,32 @@ public class BasicTests
         var invoker = channel.CreateCallInvoker();
     }
 
-    class DummyHandler : HandlerBase<string, string>, IMethod
+    class DummyHandler : LiteStream<string, string>
     {
-        public DummyHandler(string fullName, ushort streamId)
+        class SimpleMethod : IMethod
         {
-            _fullName = fullName;
-            Method = this;
-            Initialize(streamId, null!, null);
-        }
+            public SimpleMethod(string fullName) => FullName = fullName;
+            MethodType IMethod.Type => MethodType.Unary;
 
-        private readonly string _fullName;
+            string IMethod.ServiceName => throw new NotImplementedException();
+
+            string IMethod.Name => throw new NotImplementedException();
+
+            public string FullName { get; }
+        }
+        public DummyHandler(string fullName, ushort id)
+            : base(new SimpleMethod(fullName), null!)
+        {
+            Id = id;
+        }
 
         protected override bool IsClient => true;
 
         protected override Action<string, SerializationContext> Serializer => throw new NotImplementedException();
         protected override Func<DeserializationContext, string> Deserializer => throw new NotImplementedException();
 
-        MethodType IMethod.Type => MethodType.Unary;
 
-        string IMethod.ServiceName => throw new NotImplementedException();
-
-        string IMethod.Name => throw new NotImplementedException();
-
-        string IMethod.FullName => _fullName;
-
-        public override void Recycle() { }
-
+        protected override ValueTask ExecuteAsync() => throw new NotImplementedException();
         protected override ValueTask OnPayloadAsync(string value) => default;
     }
 

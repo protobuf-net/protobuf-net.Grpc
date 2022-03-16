@@ -8,19 +8,18 @@ internal class LiteServiceBinder : ServiceBinderBase
 
     public LiteServiceBinder(LiteServer server) => _server = server;
 
+    private void Add<TRequest, TResponse>(Method<TRequest, TResponse> method, object executor)
+        where TRequest : class where TResponse : class
+        => _server.AddHandler(method.FullName, () => new ServerStream<TRequest, TResponse>(method, executor));
     public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
-        => _server.AddHandler(method.FullName, () => ServerUnaryHandler<TRequest, TResponse>.Get(method, handler));
+        => Add(method, handler);
 
     public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ClientStreamingServerMethod<TRequest, TResponse> handler)
-    {
-        // nothing yet
-    }
+        => Add(method, handler);
 
     public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TRequest, TResponse> handler)
-        => _server.AddHandler(method.FullName, () => ServerDuplexHandler<TRequest, TResponse>.Get(method, handler));
+        => Add(method, handler);
 
     public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ServerStreamingServerMethod<TRequest, TResponse> handler)
-    {
-        // nothing yet
-    }
+        => Add(method, handler);
 }

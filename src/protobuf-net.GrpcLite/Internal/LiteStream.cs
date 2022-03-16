@@ -8,7 +8,7 @@ using System.Text;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-interface IStream : IPooled
+interface IStream
 {
     ushort Id { get; }
     ushort NextSequenceId();
@@ -17,7 +17,7 @@ interface IStream : IPooled
     bool TryAcceptFrame(in Frame frame);
 }
 
-internal enum HandlerState
+internal enum StreamState
 {
     Uninitialized = 0,
     ExpectHeaders = 1 | AcceptHeader | AcceptPayload | AcceptTrailer | AcceptStatus,
@@ -33,41 +33,54 @@ internal enum HandlerState
     AcceptPayload = 1 << 28,
     AcceptTrailer = 1 << 29,
     AcceptStatus = 1 << 30,
-    // IsActive = 1 << 31,
-
-    // for the step, we don't need to remove *all* the flags, because most of the flags are built into the
-    // values directly; we only need to remove the flags that *aren't* handled that way, for example
-    // the "is there an active worker" flag
-    StepMask = ~0, //IsActive,
 }
-internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : class where TReceive : class
+
+internal enum WorkerState
 {
+    NotStarted,
+    Activating,
+    Active,
+    WaitingForPayload,
+    RanToCompletion,
+    Faulted,
+}
+internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive> where TSend : class where TReceive : class
+{
+
+    TReceive IAsyncStreamReader<TReceive>.Current => throw new NotImplementedException();
+    Task<bool> IAsyncStreamReader<TReceive>.MoveNext(CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+    protected LiteStream(IMethod method, IFrameConnection output)
+    {
+        Method = method;
+        _output = output;
+        _streamId = ushort.MaxValue; // will be updated after construction
+        _sequenceId = ushort.MaxValue; // so first is zero
+        StreamState = StreamState.ExpectHeaders;
+    }
     string IStream.Method => Method!.FullName;
     protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
 
     private ushort _streamId;
-    private ILogger? _logger;
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    // these are all set via initialize
-    private IMethod _method;
+    public ILogger? Logger { get; set; }
+    protected void SetOutput(IFrameConnection output)
+        => _output = output;
     IFrameConnection _output;
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
     // IMPORTANT: state and backlog changes should be synchronized
-    private HandlerState _state = HandlerState.Uninitialized;
     private Queue<Frame>? _backlogFrames;
     Frame _backlogFrame;
 
-    private Task _currentWorker = Task.CompletedTask;
+    // don't need volatile read on the StreamState; if we care about correctness, we'll be reading inside a lock; if
+    // we don't care about correctness, then *we don't care about correctness*
+    public StreamState StreamState { get; private set; }
+
+    private int _workerState;
+    public WorkerState WorkerState => (WorkerState)Volatile.Read(ref _workerState);
 
     protected CancellationToken StreamCancellation => default;
-
-
-
-    // don't need volatile read; if we care about correctness, we'll be reading inside a lock; if
-    // we don't care about correctness, then *we don't care about correctness*
-    public bool IsActive => !_currentWorker.IsCompleted;
-    public HandlerState Step => _state & HandlerState.StepMask;
 
     private object SyncLock => this;
 
@@ -78,13 +91,13 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
         {
             var need = header.Kind switch
             {
-                FrameKind.Header => HandlerState.AcceptHeader,
-                FrameKind.Payload => HandlerState.AcceptPayload,
-                FrameKind.Trailer => HandlerState.AcceptTrailer,
-                FrameKind.Status => HandlerState.AcceptStatus,
+                FrameKind.Header => StreamState.AcceptHeader,
+                FrameKind.Payload => StreamState.AcceptPayload,
+                FrameKind.Trailer => StreamState.AcceptTrailer,
+                FrameKind.Status => StreamState.AcceptStatus,
                 _ => default,
             };
-            if ((_state & need) == 0) return false; // not expecting that
+            if ((StreamState & need) == 0) return false; // not expecting that
 
             if (_backlogFrames is not null)
             {
@@ -104,25 +117,49 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
             }
             // we only accept header/payload/trailer/status, and all of those use PayloadFlags,
             // so we can check if we're done
-            if ((header.KindFlags & (byte)PayloadFlags.EndItem) != 0 && !IsActive)
+            if ((header.KindFlags & (byte)PayloadFlags.EndItem) != 0)
             {
-                // we have something useful, and there's no current worker: start a worker!
-                Activate();
+                StartWorkerOnceOnly();
             }
             return true;
         }
     }
 
-
-    private Func<Task>? _executeWorker;
-    public void Activate()
+    internal async ValueTask<TReceive> AssertSingleAsync(CancellationToken cancellationToken)
     {
+        if (!(await ReadNextAsync(cancellationToken)).TryGetValue(out var request))
+            throw new InvalidOperationException("No payload received");
+        if ((await ReadNextAsync(cancellationToken)).HasValue)
+            throw new InvalidOperationException("Unexpected payload received");
+        return request;
+    }
+    internal async ValueTask<TReceive> AssertNextAsync(CancellationToken cancellationToken)
+    {
+        if (!(await ReadNextAsync(cancellationToken)).TryGetValue(out var request))
+            throw new InvalidOperationException("No payload received");
+        return request;
+    }
+    internal async ValueTask AssertNoMoreAsync(CancellationToken cancellationToken)
+    {
+        if ((await ReadNextAsync(cancellationToken)).HasValue)
+            throw new InvalidOperationException("Unexpected payload received");
+    }
+
+    protected ValueTask<Maybe<TReceive>> ReadNextAsync(CancellationToken cancellationToken)
+    {
+        Logger.ThrowNotImplemented();
+        return default;
+    }
+
+    private void StartWorkerOnceOnly()
+    {
+        if (IsClient) return; // nope; just nope
         lock (SyncLock)
         {
-            // only if not already active
-            if (_currentWorker.IsCompleted)
+            if (WorkerState == WorkerState.NotStarted && ChangeState(WorkerState.NotStarted, WorkerState.Activating))
             {
-                _currentWorker = Task.Run(_executeWorker ??= () => ExecuteCoreAsync());
+                // we have something useful, and there's no current worker yet: start a worker!
+                this.StartWorker();
             }
         }
     }
@@ -143,26 +180,59 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
     {
         try
         {
-            _logger.Critical(ex);
+            Logger.Critical(ex);
             lock (SyncLock)
             {
                 // normally when setting state we'd need to preserve the active flag,
                 // but we're exiting, so...
-                _state = HandlerState.Faulted;
+                StreamState = StreamState.Faulted;
                 ReleaseBacklogLocked();
             }
         }
         catch (Exception innerEx)
         {   // ok, even our fault handler is faulting; try one last log
-            _logger.Critical(innerEx);
+            Logger.Critical(innerEx);
         }
     }
+    public void Execute()
+    {
+        if (!ChangeState(WorkerState.Activating, WorkerState.Active)) return;
+        _ = ExecuteCoreAsync();
+    }
+
+    private bool ChangeState(WorkerState expectedOldState, WorkerState newState)
+    {
+        var actualOld = (WorkerState)Interlocked.CompareExchange(ref _workerState, (int)newState, (int)expectedOldState);
+        if (actualOld != expectedOldState)
+        {
+            Logger.Critical((expectedOldState, newState, actualOld), (state, _) => $"unexpected worker state '{state.actualOld}' when attempting to move from '{state.expectedOldState}' to '{state.newState}'");
+            return false;
+        }
+        return true;
+    }
+
+    protected abstract ValueTask ExecuteAsync();
     private async Task ExecuteCoreAsync()
     {
+        try
+        {
+            await ExecuteAsync();
+            ChangeState(WorkerState.Active, WorkerState.RanToCompletion);
+        }
+        catch (Exception ex)
+        {
+            Volatile.Write(ref _workerState, (int)WorkerState.Faulted);
+            Logger.Critical(ex);
+        }
+    }
+    private async Task ExecuteCoreAsync2()
+    {
+        
         // this is the main pump; when useful data has become available, the framework activates
         // this method as a worker (as needed), which isolates each stream from the main IO loop
         Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "stream " + Method.Name);
         Logger.Debug("Starting stream executor");
+
 
         ReadOnlyMemory<Frame> frameGroup = default;
         FrameKind kind = FrameKind.None;
@@ -173,12 +243,12 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
             {
                 lock (SyncLock)
                 {
-                    switch (Step)
+                    switch (StreamState)
                     {
-                        case HandlerState.ExpectHeaders:
-                        case HandlerState.ExpectBody:
-                        case HandlerState.ExpectTrailers:
-                        case HandlerState.ExpectStatus:
+                        case StreamState.ExpectHeaders:
+                        case StreamState.ExpectBody:
+                        case StreamState.ExpectTrailers:
+                        case StreamState.ExpectStatus:
                             frameGroup = ReadNextFrameGroupLocked(out kind); // but we'll process it *outside* of the lock
                             break; // these are the things we *expect*, i.e. normal
                         default:
@@ -236,11 +306,11 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
 
         // run the deserializer
         var payload = FrameSequenceSegment.Create(span);
-        _logger.Debug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
+        Logger.Debug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
         var ctx = Pool<SingleBufferDeserializationContext>.Get();
         ctx.Initialize(payload);
         var value = Deserializer(ctx);
-        _logger.Debug(value, static (state, _) => $"deserialized: {state}");
+        Logger.Debug(value, static (state, _) => $"deserialized: {state}");
         ctx.Recycle();
 
         // we can release the original buffers now, before we push the value onwards
@@ -270,7 +340,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
         }
         catch (Exception ex)
         {
-            _logger.Critical(ex);
+            Logger.Critical(ex);
         }
         finally
         {
@@ -378,37 +448,11 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
         var next = Utilities.IncrementToUInt32(ref _sequenceId) & 0x7FFF;
         return (ushort)(IsClient ? next : next | 0x8000);
     }
-    protected ILogger? Logger => _logger;
-    protected IMethod Method
-    {
-        get => _method;
-        set => _method = value;
-    }
+    protected IMethod Method { get; }
+
     protected IFrameConnection Output => _output;
-
-    public virtual void Initialize(ushort streamId, IFrameConnection output, ILogger? logger)
-    {
-        if (_state != HandlerState.Uninitialized) Throw(_state);
-        _output = output;
-        _logger = logger;
-        _streamId = streamId;
-        _sequenceId = ushort.MaxValue; // so first is zero
-        _state = HandlerState.ExpectHeaders;
-        _currentWorker = Task.CompletedTask;
-
-        static void Throw(HandlerState state) => throw new InvalidOperationException($"Attempted to initialize a handler that was: {state}");
-    }
-
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
-
-    public virtual void Recycle()
-    {
-        _state = HandlerState.Uninitialized;
-        _currentWorker = Task.CompletedTask;
-        _output = null!;
-        _logger = null;
-    }
 
     public ValueTask SendInitializeAsync(string? host, CallOptions options)
         => Output.WriteAsync(GetInitializeFrame(host), options.CancellationToken);
@@ -447,7 +491,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
         }
         catch (Exception ex)
         {
-            _logger.Error(ex);
+            Logger.Error(ex);
         }
     }
 
@@ -457,15 +501,15 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            _logger.Debug(value, (state, ex) => $"serializing {state}...");
+            Logger.Debug(value, (state, ex) => $"serializing {state}...");
             serializationContext = PayloadFrameSerializationContext.Get(this, BufferManager, Id, flags);
             Serializer(value, serializationContext);
-            _logger.Debug(serializationContext, (state, ex) => $"serialized; {serializationContext}");
+            Logger.Debug(serializationContext, (state, ex) => $"serialized; {serializationContext}");
             await serializationContext.WritePayloadAsync(Output, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex);
+            Logger.Error(ex);
             throw;
         }
         finally
@@ -474,5 +518,5 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : cla
         }
     }
 
-    MethodType IStream.MethodType => _method!.Type;
+    MethodType IStream.MethodType => Method!.Type;
 }

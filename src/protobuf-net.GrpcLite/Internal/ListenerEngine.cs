@@ -64,7 +64,6 @@ internal static class ListenerEngine
                             {
                                 logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
                                 await listener.Connection.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
-                                newStream.Recycle();
                             }
                         }
                         else

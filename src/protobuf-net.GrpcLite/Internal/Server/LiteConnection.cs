@@ -45,7 +45,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
         {
             if (_server.TryGetHandler(initialize.GetPayloadString(), out var serverHandler))
             {
-                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger);
+                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger, _server.ServerShutdown);
                 handler = serverHandler;
                 return handler is not null;
             }

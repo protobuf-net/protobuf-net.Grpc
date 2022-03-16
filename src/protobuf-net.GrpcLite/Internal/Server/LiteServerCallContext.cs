@@ -10,6 +10,7 @@ internal sealed class LiteServerCallContext : ServerCallContext, IPooled
 
     public static LiteServerCallContext Get(IServerHandler handler)
     {
+
         var obj = AllowRecycling ? Pool<LiteServerCallContext>.Get() : new LiteServerCallContext();
         obj._handler = handler;
         return obj;
