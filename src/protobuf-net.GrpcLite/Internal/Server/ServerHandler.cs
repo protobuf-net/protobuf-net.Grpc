@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
-internal interface IServerHandler : IHandler
+internal interface IServerHandler : IStream
 {
     void Initialize(ushort id, IFrameConnection output, ILogger? logger);
     Status Status { get; set; }
@@ -53,17 +53,17 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
         try
         {
             var method = Method;
-            Logger.LogDebug(method, static (state, _) => $"invoking {state.FullName}...");
+            Logger.Debug(method, static (state, _) => $"invoking {state.FullName}...");
             try
             {
                 var ctx = CreateServerCallContext();
                 await InvokeServerMethod(ctx);
                 ctx.Recycle();
-                Logger.LogDebug(method, static (state, _) => $"completed {state.FullName}...");
+                Logger.Debug(method, static (state, _) => $"completed {state.FullName}...");
             }
             catch (RpcException rpc)
             {
-                Logger.LogInformation(method!, static (state, ex) => $"rpc exception {state.FullName}: {ex!.Message}", rpc);
+                Logger.Information(method!, static (state, ex) => $"rpc exception {state.FullName}: {ex!.Message}", rpc);
                 var status = rpc.Status;
                 if (status.StatusCode == StatusCode.OK)
                 {
@@ -74,7 +74,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
             }
             catch (Exception ex)
             {
-                Logger.LogError(method!, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
+                Logger.Error(method!, static (state, ex) => $"faulted {state.FullName}: {ex!.Message}", ex);
                 Status = new Status(StatusCode.Unknown, "The server encountered an error while performing the operation", ex);
             }
 
@@ -84,7 +84,7 @@ internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TRespon
         {
             try
             {
-                Logger.LogCritical(Method!, static (state, ex) => $"invocation failure {state.FullName}: {ex!.Message}", ex);
+                Logger.Critical(Method!, static (state, ex) => $"invocation failure {state.FullName}: {ex!.Message}", ex);
             }
             catch { }
         }

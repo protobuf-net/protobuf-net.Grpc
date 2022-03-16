@@ -10,6 +10,12 @@ public interface IFrameConnection : IAsyncEnumerable<Frame>, IAsyncDisposable
     bool ThreadSafeWrite { get; }
     void Close(Exception? exception = null);
     Task Complete { get; }
+    ValueTask FlushAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IRawFrameConnection : IFrameConnection
+{
+    ValueTask WriteAsync(ReadOnlyMemory<byte> frames, CancellationToken cancellationToken = default);
 }
 
 public static class FrameConnectionExtensions

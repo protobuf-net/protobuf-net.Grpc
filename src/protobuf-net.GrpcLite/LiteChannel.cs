@@ -1,9 +1,10 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Client;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite;
 
 public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
 {

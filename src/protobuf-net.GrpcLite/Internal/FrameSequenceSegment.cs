@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using ProtoBuf.Grpc.Lite.Connections;
+using System.Buffers;
 
 namespace ProtoBuf.Grpc.Lite.Internal
 {

@@ -23,6 +23,17 @@ namespace ProtoBuf.Grpc.Lite
 
         CancellationTokenSource _serverShutdown = new CancellationTokenSource();
         public void Stop() => _serverShutdown.Cancel();
+
+        public LiteChannel CreateLocalClient(string? name = null)
+        {
+            if (string.IsNullOrWhiteSpace(name)) name = "(local)";
+            NullConnection.CreateLinkedPair(out var x, out var y);
+            var server = new LiteConnection(this, x, Logger);
+            var client = new LiteChannel(y, name, Logger);
+            server.StartWorker();
+            return client;
+        }
+
         public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
             => Task.Run(() => ListenAsyncCore(listener));
 
@@ -31,11 +42,12 @@ namespace ProtoBuf.Grpc.Lite
 
         private async Task ListenAsyncCore(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
         {
+            Logging.SetSource(Logging.ServerPrefix + "listener");
             try
             {
                 while (!_serverShutdown.IsCancellationRequested)
                 {
-                    Logger.LogInformation("[server] listening for new connection...");
+                    Logger.Information("listening for new connection...");
                     var connection = await listener(ServerShutdown);
                     if (connection is null)
                     {
@@ -43,8 +55,8 @@ namespace ProtoBuf.Grpc.Lite
                         continue;
                     }
 
-                    Logger.LogInformation(connection, static (state, _) => $"[server] established connection {state.Name}");
-                    var server = new LiteServerConnection(this, connection.Connection.WithThreadSafeWrite(), connection.Logger);
+                    Logger.Information(connection, static (state, _) => $"established connection {state.Name}");
+                    var server = new LiteConnection(this, connection.Value.WithThreadSafeWrite(), connection.Logger);
                     server.StartWorker();
                 }
             }

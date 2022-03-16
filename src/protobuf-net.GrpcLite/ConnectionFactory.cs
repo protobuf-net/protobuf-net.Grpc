@@ -1,11 +1,12 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using System.IO.Compression;
 using System.IO.Pipes;
 using System.Net.Security;
 
-namespace ProtoBuf.Grpc.Lite.Connections;
+namespace ProtoBuf.Grpc.Lite;
 
 public static class ConnectionFactory
 {
@@ -34,9 +35,9 @@ public static class ConnectionFactory
         var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.WriteThrough | PipeOptions.Asynchronous);
         try
         {
-            logger.LogDebug(pipeName, static (state, _) => $"waiting for connection... {state}");
+            logger.Debug(pipeName, static (state, _) => $"waiting for connection... {state}");
             await pipe.WaitForConnectionAsync(cancellationToken);
-            logger.LogDebug(pipeName, static (state, _) => $"client connected to {state}");
+            logger.Debug(pipeName, static (state, _) => $"client connected to {state}");
             return new ConnectionState<Stream>(pipe, pipeName)
             {
                 Logger = logger,
@@ -44,7 +45,7 @@ public static class ConnectionFactory
         }
         catch (Exception ex)
         {
-            logger.LogError(ex);
+            logger.Error(ex);
             await pipe.SafeDisposeAsync();
             throw;
         }
@@ -64,21 +65,21 @@ public static class ConnectionFactory
         => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
-            return source.ChangeType(selector(source.Connection));
+            return source.ChangeType(selector(source.Value));
         };
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> WithGZip(
-        this Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> factory,
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithGZip(
+        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
         CompressionLevel compreessionLevel = CompressionLevel.Optimal)
         => async cancellationToken =>
     {
         var source = await factory(cancellationToken);
-        var pair = source.Connection;
+        var pair = source.Value;
         try
         {
-            source.Connection = new StreamPair(
-                input: new GZipStream(pair.Input, CompressionMode.Decompress),
-                output: new GZipStream(pair.Output, compreessionLevel));
+            source.Value = DuplexStream.Create(
+                read: new GZipStream(source.Value, CompressionMode.Decompress),
+                write: new GZipStream(source.Value, compreessionLevel));
             return source;
         }
         catch
@@ -87,15 +88,6 @@ public static class ConnectionFactory
             throw;
         }
     };
-
-    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> SplitDuplex(
-        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory)
-        => With(factory, static duplex => new StreamPair(duplex));
-
-    public static Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> WithGZip(
-        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
-        CompressionLevel compreessionLevel = CompressionLevel.Optimal)
-        => factory.SplitDuplex().WithGZip();
 
     public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithTls(
         this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
@@ -107,29 +99,25 @@ public static class ConnectionFactory
             var source = await factory(cancellationToken);
             try
             {
-                source.Connection = new SslStream(source.Connection, false,
+                source.Value = new SslStream(source.Value, false,
                     userCertificateValidationCallback, userCertificateSelectionCallback, encryptionPolicy);
                 return source;
             }
             catch
             {
-                await source.Connection.SafeDisposeAsync();
+                await source.Value.SafeDisposeAsync();
                 throw;
             }
         };
 
     public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> WithFrameBuffer(
         this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
-        int inputFrames, int outputFrames) => factory.SplitDuplex().WithFrameBuffer(inputFrames, outputFrames);
-
-    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> WithFrameBuffer(
-        this Func<CancellationToken, ValueTask<ConnectionState<StreamPair>>> factory,
         int inputFrames, int outputFrames) => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
             try
             {
-                IFrameConnection nonGated = new StreamFrameConnection(source.Connection.Input, source.Connection.Output, source.Logger),
+                IFrameConnection nonGated = new StreamFrameConnection(source.Value, source.Logger),
                     gated = inputFrames > 0
                     ? new BufferedGate(nonGated, inputFrames, outputFrames)
                     : new SynchronizedGate(nonGated, outputFrames);
@@ -137,7 +125,7 @@ public static class ConnectionFactory
             }
             catch
             {
-                await source.Connection.SafeDisposeAsync();
+                await source.Value.SafeDisposeAsync();
                 throw;
             }
         };
@@ -179,13 +167,13 @@ public static class ConnectionFactory
             var source = await factory(cancellationToken);
             try
             {
-                IFrameConnection pipe = new PipeFrameConnection(source.Connection, source.Logger);
+                IFrameConnection pipe = new PipeFrameConnection(source.Value, source.Logger);
                 return source.ChangeType<IFrameConnection>(pipe);
             }
             catch(Exception ex)
             {
-                try { await source.Connection.Input.CompleteAsync(ex); } catch { }
-                try { await source.Connection.Output.CompleteAsync(ex); } catch { }
+                try { await source.Value.Input.CompleteAsync(ex); } catch { }
+                try { await source.Value.Output.CompleteAsync(ex); } catch { }
                 throw;
             }
         };
@@ -195,11 +183,11 @@ public static class ConnectionFactory
         var source = await pending;
         try
         {
-            return new LiteChannel(source.Connection, source.Name, source.Logger);
+            return new LiteChannel(source.Value, source.Name, source.Logger);
         }
         catch
         {
-            await source.Connection.SafeDisposeAsync();
+            await source.Value.SafeDisposeAsync();
             throw;
         }
 
@@ -220,34 +208,18 @@ static class Demo
     }
 }
 
-
-public readonly struct StreamPair
-{
-    internal ValueTask SafeDisposeAsync() => Utilities.SafeDisposeAsync(Input, Output);
-    public StreamPair(Stream input, Stream output)
-    {
-        Input = input;
-        Output = output;
-    }
-    public StreamPair(Stream duplex)
-    {
-        Input = Output = duplex;
-    }
-    public Stream Input { get; }
-    public Stream Output { get; }
-}
 public sealed class ConnectionState<T>
 {
     public ConnectionState(T connection, string name)
     {
-        Connection = connection;
+        Value = connection;
         Name = name;
     }
 
     public string Name { get; set; }
 
-    public T Connection { get; set; }
-    /// <summary>The size of the input buffer, in frames</summary>
+    public T Value { get; set; }
+
     public ILogger? Logger { get; set; }
 
     internal ConnectionState<TTarget> ChangeType<TTarget>(TTarget connection)

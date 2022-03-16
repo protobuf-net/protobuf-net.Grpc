@@ -5,6 +5,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -12,10 +13,7 @@ internal static class Utilities
 {
     public static readonly byte[] EmptyBuffer = Array.Empty<byte>(); // static readonly field to make the JIT's life easy
 
-    [Conditional("DEBUG")]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogDebug<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
-        => logger?.Log<TState>(LogLevel.Debug, default, state, exception, formatter);
+    
 
     public static void SafeDispose(this IDisposable? disposable)
     {
@@ -75,44 +73,6 @@ internal static class Utilities
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogInformation<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
-        => logger?.Log<TState>(LogLevel.Information, default, state, exception, formatter);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogInformation(this ILogger? logger, string message)
-        => logger?.Log<string>(LogLevel.Information, default, message, null, static (state, _) => state);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogError<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
-        => logger?.Log<TState>(LogLevel.Error, default, state, exception, formatter);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogError(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
-    {
-        if (logger is not null) LogSafe(logger, LogLevel.Error, exception, caller);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogCritical(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
-    {
-        if (logger is not null) LogSafe(logger, LogLevel.Critical, exception, caller);
-    }
-
-    static void LogSafe(ILogger logger, LogLevel level, Exception exception, string caller)
-    {
-        try // we're probably already in a catch block; don't make things worse!
-        {
-            logger.Log<string>(level, default, caller, exception, static (s, ex) => $"[{s}]: {ex!.Message}");
-        }
-        catch { }
-    }
-
-
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void LogCritical<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
-        => logger?.Log<TState>(LogLevel.Critical, default, state, exception, formatter);
 
     public static readonly Task<bool> AsyncTrue = Task.FromResult(true), AsyncFalse = Task.FromResult(false);
 
@@ -182,6 +142,15 @@ internal static class Utilities
         }
     }
 
+    public static Stream CheckDuplex(this Stream duplex)
+    {
+        if (duplex is null) throw new ArgumentNullException(nameof(duplex));
+        if (!duplex.CanRead) throw new ArgumentException("Cannot read from stream", nameof(duplex));
+        if (!duplex.CanWrite) throw new ArgumentException("Cannot write to stream", nameof(duplex));
+        if (duplex.CanSeek) throw new ArgumentException("Stream is seekable, so cannot be duplex", nameof(duplex));
+        return duplex;
+    }
+
     internal static ValueTask AsValueTask(this Exception ex)
     {
 #if NET5_0_OR_GREATER
@@ -199,6 +168,61 @@ internal static class Utilities
         => ThreadPool.UnsafeQueueUserWorkItem(s_StartWorker, worker);
     private static readonly WaitCallback s_StartWorker = state => (Unsafe.As<IWorker>(state)).Execute();
 #endif
+
+    public static IAsyncEnumerator<T> GetAsyncEnumerator<T>(this ChannelReader<T> input, ChannelWriter<T>? closeOutput = null, CancellationToken cancellationToken = default)
+    {
+        return closeOutput is not null ? FullyChecked(input, closeOutput, cancellationToken)
+            : Simple(input, cancellationToken);
+
+        static async IAsyncEnumerator<T> Simple(ChannelReader<T> input, CancellationToken cancellationToken)
+        {
+            do
+            {
+                while (input.TryRead(out var item))
+                    yield return item;
+            }
+            while (await input.WaitToReadAsync(cancellationToken));
+        }
+
+        static async IAsyncEnumerator<T> FullyChecked(ChannelReader<T> input, ChannelWriter<T>? closeOutput, CancellationToken cancellationToken)
+        {
+            // we need to do some code gymnastics to ensure that we close the connection (with an exception
+            // as necessary) in all cases
+            while (true)
+            {
+                bool haveItem;
+                T? item;
+                do
+                {
+                    try
+                    {
+                        haveItem = input.TryRead(out item);
+                    }
+                    catch (Exception ex)
+                    {
+                        closeOutput?.TryComplete(ex);
+                        throw;
+                    }
+                    if (haveItem) yield return item!;
+                }
+                while (haveItem);
+
+                try
+                {
+                    if (!await input.WaitToReadAsync(cancellationToken))
+                    {
+                        closeOutput?.TryComplete();
+                        yield break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    closeOutput?.TryComplete(ex);
+                    throw;
+                }
+            }
+        }
+    }
 }
 #if NETCOREAPP3_1_OR_GREATER
 internal interface IWorker : IThreadPoolWorkItem {}

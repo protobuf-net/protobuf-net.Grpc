@@ -1,4 +1,4 @@
-﻿namespace ProtoBuf.Grpc.Lite;
+﻿namespace ProtoBuf.Grpc.Lite.Connections;
 
 [Flags]
 internal enum FrameFlags : byte

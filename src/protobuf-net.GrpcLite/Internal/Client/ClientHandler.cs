@@ -5,9 +5,9 @@ using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal interface IClientHandler : IHandler, IDisposable
+internal interface IClientHandler : IStream, IDisposable
 {
-    new ushort StreamId { get; set; } // adds setter
+    new ushort Id { get; set; } // adds setter
     void Initialize(IMethod method, IFrameConnection output, ILogger? logger);
     Task<Metadata> ResponseHeadersAsync { get; }
 
@@ -21,7 +21,7 @@ internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TReques
     protected sealed override bool IsClient => true;
     public void Initialize(IMethod method, IFrameConnection output, ILogger? logger)
     {
-        Initialize(StreamId, output, logger);
+        Initialize(Id, output, logger);
         Method = method;
     }
 

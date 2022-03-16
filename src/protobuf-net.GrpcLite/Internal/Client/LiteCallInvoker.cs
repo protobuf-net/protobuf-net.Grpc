@@ -12,7 +12,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
     private readonly IFrameConnection _connection;
     private readonly string _target;
     private readonly CancellationTokenSource _clientShutdown = new();
-    private readonly ConcurrentDictionary<ushort, IHandler> _streams = new();
+    private readonly ConcurrentDictionary<ushort, IStream> _streams = new();
 
     public override string ToString() => _target;
 
@@ -22,7 +22,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
         for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
         {
             var id = Utilities.IncrementToUInt32(ref _nextId);
-            handler.StreamId = id;
+            handler.Id = id;
             if (_streams.TryAdd(id, handler))
             {
                 handler.Initialize(method, _connection, _logger);
@@ -72,7 +72,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
 
     IFrameConnection IListener.Connection => _connection;
 
-    ConcurrentDictionary<ushort, IHandler> IListener.Streams => _streams;
+    ConcurrentDictionary<ushort, IStream> IListener.Streams => _streams;
 
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
@@ -106,7 +106,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
         return new AsyncServerStreamingCall<TResponse>(handler, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, handler);
     }
 
-    bool IListener.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IHandler handler)
+    bool IListener.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
     {
         // not accepting server-initialized streams
         handler = null;
@@ -115,7 +115,8 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
 
     public void Execute()
     {
-        _logger.LogDebug(_target, (state, _) => $"Starting call-invoker (client): {state}...");
+        Logging.SetSource(Logging.ClientPrefix + "invoker");
+        _logger.Debug(_target, (state, _) => $"Starting call-invoker (client): {state}...");
         _ = this.RunAsync(_logger, _clientShutdown.Token);
     }
 }

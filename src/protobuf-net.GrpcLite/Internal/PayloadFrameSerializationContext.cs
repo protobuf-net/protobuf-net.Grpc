@@ -1,7 +1,6 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
-using System.Diagnostics;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -9,11 +8,15 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 {
     private readonly List<Frame> _frames = new();
 
-    private IHandler? _handler;
+    private IStream? _handler;
     private FrameBufferManager? _bufferManager;
     private FrameHeader _template;
     private int _declaredPayloadLength, _totalLength;
-    internal static PayloadFrameSerializationContext Get(IHandler handler, FrameBufferManager bufferManager, ushort streamId, PayloadFlags flags)
+
+    public override string ToString()
+        => $"{_totalLength} bytes, {_frames.Count} frames (total bytes: {_totalLength + _frames.Count * FrameHeader.Size})";
+
+    internal static PayloadFrameSerializationContext Get(IStream handler, FrameBufferManager bufferManager, ushort streamId, PayloadFlags flags)
     {
         var obj = Pool<PayloadFrameSerializationContext>.Get();
         obj._handler = handler;
@@ -40,7 +43,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 
     public override void Complete()
     {
-        Debug.WriteLine($"[serialize] complete; {_totalLength} committed (declared: {_declaredPayloadLength})");
+        Logging.DebugWriteLine($"[serialize] complete; {_totalLength} committed (declared: {_declaredPayloadLength})");
         if (_declaredPayloadLength >= 0 && _declaredPayloadLength != _totalLength) ThrowLengthMismatch(_declaredPayloadLength, _totalLength);
         // update our template to add the "we're done" flag
         _template = new FrameHeader(_template, (byte)(_template.KindFlags | (byte)PayloadFlags.EndItem));
@@ -74,7 +77,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
         if (count != 0) // some serializers call Advance(0) without ever calling GetMemory()/GetSpan(); ask me how I know
         {
             _totalLength += count;
-            Debug.WriteLine($"[serialize] committed {count} for a total of {_totalLength}; {_current!.DebugSummarize(count)}: {_current!.DebugGetHex(count)}");
+            Logging.DebugWriteLine($"[serialize] committed {count} for a total of {_totalLength}; {_current!.DebugSummarize(count)}: {_current!.DebugGetHex(count)}");
             _current!.Advance(count);
         }
     }
@@ -82,7 +85,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
     public Memory<byte> GetMemory(int sizeHint)
     {
         var buffer = GetMemoryImpl(Math.Max(sizeHint, 8)); // always give external callers *at least something*
-        Debug.WriteLine($"[serialize] requested {sizeHint}, provided {_current!.DebugSummarize(buffer)}");
+        Logging.DebugWriteLine($"[serialize] requested {sizeHint}, provided {_current!.DebugSummarize(buffer)}");
         return buffer;
     }
     private Memory<byte> GetMemoryImpl(int minBytes)
@@ -107,7 +110,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
             current.Return();
             throw new InvalidOperationException($"Newnly rented slab is undersized at {buffer.Length} bytes");
         }
-        Debug.WriteLine($"[serialize] rented slab; header is [{_current.CurrentHeaderOffset}, {_current.CurrentHeaderOffset + FrameHeader.Size})");
+        Logging.DebugWriteLine($"[serialize] rented slab; header is [{_current.CurrentHeaderOffset}, {_current.CurrentHeaderOffset + FrameHeader.Size})");
         return buffer;
     }
 

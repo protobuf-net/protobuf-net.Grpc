@@ -1,10 +1,11 @@
 ﻿using Grpc.Core;
+using ProtoBuf.Grpc.Lite.Connections;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
 internal sealed class ServerUnaryHandler<TRequest, TResponse> : ServerHandler<TRequest, TResponse> where TResponse : class where TRequest : class
 {
-    private UnaryServerMethod<TRequest, TResponse> _handler;
+    private UnaryServerMethod<TRequest, TResponse> _handler = null!;
 
     public static ServerUnaryHandler<TRequest, TResponse> Get(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
     {

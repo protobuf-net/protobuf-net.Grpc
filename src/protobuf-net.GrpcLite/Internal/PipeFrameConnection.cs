@@ -5,7 +5,7 @@ using System.Buffers;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal sealed class PipeFrameConnection : IFrameConnection
+internal sealed class PipeFrameConnection : IRawFrameConnection
 {
     private readonly IDuplexPipe _pipe;
     private readonly ILogger? _logger;
@@ -37,11 +37,11 @@ internal sealed class PipeFrameConnection : IFrameConnection
     {
         try
         {
-            _logger.LogDebug(this, static (state, _) => $"pipe reader starting");
+            _logger.Debug(this, static (state, _) => $"pipe reader starting");
             int requestNextTime = FrameHeader.Size;
             while (!cancellationToken.IsCancellationRequested)
             {
-                _logger.LogDebug(requestNextTime, static (state, _) => $"pipe reader requesting {state} bytes...");
+                _logger.Debug(requestNextTime, static (state, _) => $"pipe reader requesting {state} bytes...");
                 var result = await _pipe.Input.ReadAtLeastAsync(requestNextTime, cancellationToken);
 
                 var buffer = result.Buffer;
@@ -51,7 +51,7 @@ internal sealed class PipeFrameConnection : IFrameConnection
                     if (buffer.IsEmpty) yield break; // natural EOF
                     ThrowEOF();
                 }
-                _logger.LogDebug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing...");
+                _logger.Debug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing...");
                 bool readFrame = true;
                 do
                 {
@@ -62,13 +62,13 @@ internal sealed class PipeFrameConnection : IFrameConnection
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex);
+                        _logger.Error(ex);
                         Close(ex);
                         throw;
                     }
                     if (readFrame)
                     {
-                        _logger.LogDebug(frame, (state, _) => $"yielding {state}...");
+                        _logger.Debug(frame, (state, _) => $"yielding {state}...");
                         yield return frame;
                     }
                 } while (readFrame);
@@ -78,7 +78,7 @@ internal sealed class PipeFrameConnection : IFrameConnection
         }
         finally
         {
-            _logger.LogDebug(this, static (state, _) => $"pipe reader exiting");
+            _logger.Debug(this, static (state, _) => $"pipe reader exiting");
             Close();
         }
 
@@ -122,7 +122,7 @@ internal sealed class PipeFrameConnection : IFrameConnection
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex);
+            _logger.Error(ex);
             throw;
         }
         finally
@@ -155,29 +155,60 @@ internal sealed class PipeFrameConnection : IFrameConnection
         return false;
     }
 
-    public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
+    private const int AUTO_FLUSH_EVERY_BYTES = 8 * 1024;
+    private ValueTask WriteCoreAsync(Frame frame, CancellationToken cancellationToken)
     {
-        var pending = _pipe.Output.WriteAsync(frame.RawBuffer, cancellationToken);
+        var length = frame.TotalLength;
+        _logger.Debug(length, static (state, _) => $"pipe writer writing {state} ({state} bytes, releasing)...");
+        _pipe.Output.Write(frame.RawBuffer.Span);
+        frame.Release();
+
+        _outstandingBytes += length;
+        
+        return _outstandingBytes < AUTO_FLUSH_EVERY_BYTES ? default : FlushAsync(cancellationToken);
+    }
+
+    public ValueTask WriteAsync(ReadOnlyMemory<byte> frames, CancellationToken cancellationToken)
+    {
+        var length = frames.Length;
+        if (length == 0) return default;
+        
+        _logger.Debug(length, static (state, _) => $"pipe writer writing {state} ({state} bytes)...");
+        _pipe.Output.Write(frames.Span);
+
+        _outstandingBytes += length;
+        return _outstandingBytes < AUTO_FLUSH_EVERY_BYTES ? default : FlushAsync(cancellationToken);
+    }
+
+    public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
+        => WriteCoreAsync(frame, cancellationToken);
+
+    private int _outstandingBytes;
+
+    public ValueTask FlushAsync(CancellationToken cancellationToken)
+    {
+        _logger.Debug(_outstandingBytes, static (state, _) => $"pipe writer flushing {state} bytes...");
+        _outstandingBytes = 0;
+        var pending = _pipe.Output.FlushAsync(cancellationToken);
         if (pending.IsCompletedSuccessfully)
         {
-            _logger.LogDebug(frame, static (state, _) => $"pipe writer wrote {state} ({state.TotalLength} bytes) synchronously");
             CheckFlush(pending.Result, cancellationToken);
             return default;
         }
-        _logger.LogDebug(frame, static (state, _) => $"pipe writer writing {state} ({state.TotalLength} bytes) asynchronously...");
-        return Awaited(pending, cancellationToken);
 
-        async static ValueTask Awaited(ValueTask<FlushResult> pending, CancellationToken cancellationToken)
+        return Awaited(pending, _logger, cancellationToken);
+
+        async static ValueTask Awaited(ValueTask<FlushResult> pending, ILogger? logger, CancellationToken cancellationToken)
             => CheckFlush(await pending, cancellationToken);
+        static void CheckFlush(FlushResult result, CancellationToken cancellationToken)
+        {
+            if (result.IsCanceled) ThrowCancelled(cancellationToken);
+            if (result.IsCompleted) throw new InvalidOperationException("Pipe: the consumer is completed");
+        }
     }
 
     static void ThrowCancelled(CancellationToken cancellationToken)
         => throw new OperationCanceledException("Pipe: flush was cancelled", cancellationToken);
-    static void CheckFlush(FlushResult result, CancellationToken cancellationToken)
-    {
-        if (result.IsCanceled) ThrowCancelled(cancellationToken);
-        if (result.IsCompleted) throw new InvalidOperationException("Pipe: the consumer is completed");
-    }
 
     ValueTask IFrameConnection.WriteAsync(ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken)
     {
@@ -185,30 +216,14 @@ internal sealed class PipeFrameConnection : IFrameConnection
         {
             0 => default,
             1 => WriteAsync(frames.Span[0], cancellationToken),
-            _ => SlowAsync(_pipe.Output, frames, cancellationToken, _logger),
+            _ => SlowAsync(this, frames, cancellationToken),
         };
-        async static ValueTask SlowAsync(PipeWriter writer, ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken, ILogger? logger)
+        async static ValueTask SlowAsync(PipeFrameConnection obj, ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken)
         {
             var length = frames.Length;
-            const int FLUSH_EVERY = 8 * 1024;
-            int nonFlushed = 0;
             for (int i = 0; i < length; i++)
             {
-                var buffer = frames.Span[i].RawBuffer;
-                logger.LogDebug(frames.Span[i], static (state, _) => $"pipe writer writing {state} ({state.TotalLength} bytes)...");
-                writer.Write(buffer.Span);
-                nonFlushed += buffer.Length;
-                if (nonFlushed >= FLUSH_EVERY)
-                {
-                    logger.LogDebug(nonFlushed, static (state, _) => $"pipe writer flushing {state} bytes...");
-                    CheckFlush(await writer.FlushAsync(cancellationToken), cancellationToken);
-                    nonFlushed = 0;
-                }
-            }
-            if (nonFlushed != 0)
-            {
-                logger.LogDebug(nonFlushed, static (state, _) => $"pipe writer flushing {state} bytes...");
-                CheckFlush(await writer.FlushAsync(cancellationToken), cancellationToken);
+                await obj.WriteCoreAsync(frames.Span[i], cancellationToken);
             }
         }
     }

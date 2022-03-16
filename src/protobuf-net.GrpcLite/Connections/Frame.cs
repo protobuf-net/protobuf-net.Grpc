@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace ProtoBuf.Grpc.Lite;
+namespace ProtoBuf.Grpc.Lite.Connections;
 
 public readonly struct Frame
 {

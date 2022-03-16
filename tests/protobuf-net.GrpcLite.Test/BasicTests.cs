@@ -11,12 +11,13 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace protobuf_net.GrpcLite.Test;
+
+[SetLoggingSource]
 public class BasicTests
 {
     private readonly ITestOutputHelper _output;
@@ -33,7 +34,7 @@ public class BasicTests
     [Fact]
     public async ValueTask CanCreateInvoker()
     {
-        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null, Stream.Null), Me());
+        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null), Me());
         var invoker = channel.CreateCallInvoker();
     }
 

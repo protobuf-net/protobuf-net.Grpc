@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace ProtoBuf.Grpc.Lite;
+namespace ProtoBuf.Grpc.Lite.Connections;
 [StructLayout(LayoutKind.Explicit, Size = Size)]
 public readonly struct FrameHeader : IEquatable<FrameHeader>
 {

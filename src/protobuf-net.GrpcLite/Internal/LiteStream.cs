@@ -8,9 +8,9 @@ using System.Text;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-interface IHandler : IPooled
+interface IStream : IPooled
 {
-    ushort StreamId { get; }
+    ushort Id { get; }
     ushort NextSequenceId();
     MethodType MethodType { get; }
     string Method { get; }
@@ -40,9 +40,9 @@ internal enum HandlerState
     // the "is there an active worker" flag
     StepMask = ~IsActive,
 }
-internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where TSend : class where TReceive : class
+internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TSend : class where TReceive : class
 {
-    string IHandler.Method => Method!.FullName;
+    string IStream.Method => Method!.FullName;
     protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
 
     private ushort _streamId;
@@ -71,7 +71,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
 
     private object SyncLock => this;
 
-    bool IHandler.TryAcceptFrame(in Frame frame)
+    bool IStream.TryAcceptFrame(in Frame frame)
     {
         var header = frame.GetHeader();
         lock (SyncLock)
@@ -130,6 +130,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
     // this method as a worker (as needed), which isolates each stream from the main IO loop
     public void Execute()
     {
+        Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "stream " + Method.Name);
         bool start;
         lock (SyncLock)
         {
@@ -144,7 +145,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
             }
             else
             {
-                _logger.LogInformation("not starting worker; existing worker is still active");
+                _logger.Information("not starting worker; existing worker is still active");
             }
         }
         catch (Exception ex)
@@ -169,7 +170,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
     {
         try
         {
-            _logger.LogCritical(ex);
+            _logger.Critical(ex);
             lock (SyncLock)
             {
                 // normally when setting state we'd need to preserve the active flag,
@@ -180,7 +181,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         }
         catch (Exception innerEx)
         {   // ok, even our fault handler is faulting; try one last log
-            _logger.LogCritical(innerEx);
+            _logger.Critical(innerEx);
         }
     }
     private async Task ExecuteCoreAsync()
@@ -260,10 +261,11 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
 
         // run the deserializer
         var payload = FrameSequenceSegment.Create(span);
-        _logger.LogDebug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
+        _logger.Debug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
         var ctx = Pool<SingleBufferDeserializationContext>.Get();
         ctx.Initialize(payload);
         var value = Deserializer(ctx);
+        _logger.Debug(value, static (state, _) => $"deserialized: {state}");
         ctx.Recycle();
 
         // we can release the original buffers now, before we push the value onwards
@@ -293,7 +295,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         }
         catch (Exception ex)
         {
-            _logger.LogCritical(ex);
+            _logger.Critical(ex);
         }
         finally
         {
@@ -387,7 +389,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         return new ReadOnlyMemory<Frame>(oversized, 0, count);
     }
 
-    public ushort StreamId
+    public ushort Id
     {
         get => _streamId;
         set => _streamId = value;
@@ -447,7 +449,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         var slab = BufferManager.Rent(length);
         try
         {
-            var header = new FrameHeader(FrameKind.NewStream, 0, StreamId, NextSequenceId(), (ushort)length);
+            var header = new FrameHeader(FrameKind.NewStream, 0, Id, NextSequenceId(), (ushort)length);
             slab.Advance(Encoding.UTF8.GetBytes(fullName, slab.ActiveBuffer.Span));
             return slab.CreateFrameAndInvalidate(header, updateHeaderLength: false); // this will validate etc
         }
@@ -470,7 +472,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex);
+            _logger.Error(ex);
         }
     }
 
@@ -480,13 +482,15 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            serializationContext = PayloadFrameSerializationContext.Get(this, BufferManager, StreamId, flags);
+            _logger.Debug(value, (state, ex) => $"serializing {state}...");
+            serializationContext = PayloadFrameSerializationContext.Get(this, BufferManager, Id, flags);
             Serializer(value, serializationContext);
+            _logger.Debug(serializationContext, (state, ex) => $"serialized; {serializationContext}");
             await serializationContext.WritePayloadAsync(Output, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex);
+            _logger.Error(ex);
             throw;
         }
         finally
@@ -495,59 +499,5 @@ internal abstract class HandlerBase<TSend, TReceive> : IHandler, IWorker where T
         }
     }
 
-    //public static Task<bool> MoveNextAndCapture(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
-    //{
-    //    // try to get something the cheap way
-    //    if (source.TryRead(out var value))
-    //    {
-    //        destination.Receive(value);
-    //        return Utilities.AsyncTrue;
-    //    }
-    //    return SlowMoveNext(source, destination, cancellationToken);
-
-    //    static Task<bool> SlowMoveNext(ChannelReader<TReceive> source, IReceiver<TReceive> destination, CancellationToken cancellationToken)
-    //    {
-    //        TReceive value;
-    //        do
-    //        {
-    //            var waitToReadAsync = source.WaitToReadAsync(cancellationToken);
-    //            if (!waitToReadAsync.IsCompletedSuccessfully)
-    //            {   // nothing readily available, and WaitToReadAsync returned incomplete; we'll
-    //                // need to switch to async here
-    //                return AwaitToRead(source, destination, waitToReadAsync, cancellationToken);
-    //            }
-
-    //            var canHaveMore = waitToReadAsync.Result;
-    //            if (!canHaveMore)
-    //            {
-    //                // nothing readily available, and WaitToReadAsync return false synchronously;
-    //                // we're all done!
-    //                return Utilities.AsyncFalse;
-    //            }
-    //            // otherwise, there *should* be work, but we might be having a race right; try again,
-    //            // until we succeed
-
-    //            // try again
-    //        }
-    //        while (!source.TryRead(out value!));
-    //        destination.Receive(value);
-    //        // we got success on the not-first attempt; I'll take the W
-    //        return Utilities.AsyncTrue;
-    //    }
-
-    //    static async Task<bool> AwaitToRead(ChannelReader<TReceive> source, IReceiver<TReceive> destination, ValueTask<bool> waitToReadAsync, CancellationToken cancellationToken)
-    //    {
-    //        while (await waitToReadAsync)
-    //        {
-    //            if (source.TryRead(out var value))
-    //            {
-    //                destination.Receive(value);
-    //                return true;
-    //            }
-    //            waitToReadAsync = source.WaitToReadAsync(cancellationToken);
-    //        }
-    //        return false;
-    //    }
-    //}
-    MethodType IHandler.MethodType => _method!.Type;
+    MethodType IStream.MethodType => _method!.Type;
 }
