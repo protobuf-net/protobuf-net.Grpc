@@ -43,6 +43,7 @@ namespace ProtoBuf.Grpc.Lite
         private async Task ListenAsyncCore(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
         {
             Logging.SetSource(Logging.ServerPrefix + "listener");
+            Logger.Debug("starting listener (accepts incoming connections)");
             try
             {
                 while (!_serverShutdown.IsCancellationRequested)

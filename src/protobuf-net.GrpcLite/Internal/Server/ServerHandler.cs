@@ -21,9 +21,6 @@ internal interface IServerHandler : IStream
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
 }
 internal abstract class ServerHandler<TRequest, TResponse> : HandlerBase<TResponse, TRequest>, IServerHandler, IServerStreamWriter<TResponse>
-#if NETCOREAPP3_1_OR_GREATER
-    , IThreadPoolWorkItem
-#endif
     where TResponse : class where TRequest : class
 {
     protected sealed override bool IsClient => false;

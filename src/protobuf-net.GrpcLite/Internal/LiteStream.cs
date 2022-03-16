@@ -33,14 +33,14 @@ internal enum HandlerState
     AcceptPayload = 1 << 28,
     AcceptTrailer = 1 << 29,
     AcceptStatus = 1 << 30,
-    IsActive = 1 << 31,
+    // IsActive = 1 << 31,
 
     // for the step, we don't need to remove *all* the flags, because most of the flags are built into the
     // values directly; we only need to remove the flags that *aren't* handled that way, for example
     // the "is there an active worker" flag
-    StepMask = ~IsActive,
+    StepMask = ~0, //IsActive,
 }
-internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TSend : class where TReceive : class
+internal abstract class HandlerBase<TSend, TReceive> : IStream where TSend : class where TReceive : class
 {
     string IStream.Method => Method!.FullName;
     protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
@@ -66,7 +66,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TS
 
     // don't need volatile read; if we care about correctness, we'll be reading inside a lock; if
     // we don't care about correctness, then *we don't care about correctness*
-    public bool IsActive => (_state & HandlerState.IsActive) != 0;
+    public bool IsActive => !_currentWorker.IsCompleted;
     public HandlerState Step => _state & HandlerState.StepMask;
 
     private object SyncLock => this;
@@ -113,44 +113,17 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TS
         }
     }
 
+
+    private Func<Task>? _executeWorker;
     public void Activate()
     {
         lock (SyncLock)
         {
             // only if not already active
-            if ((_state & HandlerState.IsActive) == 0)
+            if (_currentWorker.IsCompleted)
             {
-                _state |= HandlerState.IsActive;
-                this.StartWorker();
+                _currentWorker = Task.Run(_executeWorker ??= () => ExecuteCoreAsync());
             }
-        }
-    }
-
-    // this is the main pump; when useful data has become available, the framework activates
-    // this method as a worker (as needed), which isolates each stream from the main IO loop
-    public void Execute()
-    {
-        Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "stream " + Method.Name);
-        bool start;
-        lock (SyncLock)
-        {
-            start = !_currentWorker.IsCompleted;
-        }
-
-        try
-        {
-            if (start)
-            {
-                _currentWorker = ExecuteCoreAsync();
-            }
-            else
-            {
-                _logger.Information("not starting worker; existing worker is still active");
-            }
-        }
-        catch (Exception ex)
-        {   // unable to start synchronously?
-            ReportFault(ex);
         }
     }
 
@@ -186,6 +159,11 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TS
     }
     private async Task ExecuteCoreAsync()
     {
+        // this is the main pump; when useful data has become available, the framework activates
+        // this method as a worker (as needed), which isolates each stream from the main IO loop
+        Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "stream " + Method.Name);
+        Logger.Debug("Starting stream executor");
+
         ReadOnlyMemory<Frame> frameGroup = default;
         FrameKind kind = FrameKind.None;
         try
@@ -238,11 +216,8 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TS
         }
         finally
         {
-            lock (SyncLock)
-            {
-                _state &= HandlerState.IsActive;
-            }
             Release(ref frameGroup);
+            Logger.Debug("Suspending stream executor");
         }
     }
 

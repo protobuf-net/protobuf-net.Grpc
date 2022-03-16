@@ -1,9 +1,4 @@
-﻿using Grpc.Core;
-using Microsoft.Extensions.Logging;
-using ProtoBuf.Grpc.Lite.Connections;
-using System.Buffers;
-using System.Diagnostics;
-using System.IO.Pipes;
+﻿using ProtoBuf.Grpc.Lite.Connections;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -168,6 +163,8 @@ internal static class Utilities
         => ThreadPool.UnsafeQueueUserWorkItem(s_StartWorker, worker);
     private static readonly WaitCallback s_StartWorker = state => (Unsafe.As<IWorker>(state)).Execute();
 #endif
+
+    public static Task IncompleteTask { get; } = AsyncTaskMethodBuilder.Create().Task;
 
     public static IAsyncEnumerator<T> GetAsyncEnumerator<T>(this ChannelReader<T> input, ChannelWriter<T>? closeOutput = null, CancellationToken cancellationToken = default)
     {

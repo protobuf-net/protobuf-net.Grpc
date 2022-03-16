@@ -7,6 +7,7 @@ internal sealed class ClientUnaryHandler<TRequest, TResponse> : ClientHandler<TR
 
     public override void Recycle()
     {
+        UnregisterCancellation();
         var tmp = _tcs;
         _tcs = null;
         tmp?.TrySetCanceled();
@@ -27,11 +28,11 @@ internal sealed class ClientUnaryHandler<TRequest, TResponse> : ClientHandler<TR
     internal void Fault(string message, Exception exception)
     {
         Status = new(StatusCode.Internal, message, exception);
-        _tcs!.TrySetException(exception);
+        _tcs?.TrySetException(exception);
     }
 
     protected override void Cancel(CancellationToken cancellationToken)
-        => _tcs!.TrySetCanceled(cancellationToken);
+        => _tcs?.TrySetCanceled(cancellationToken);
 
     protected override ValueTask OnPayloadAsync(TResponse value)
     {

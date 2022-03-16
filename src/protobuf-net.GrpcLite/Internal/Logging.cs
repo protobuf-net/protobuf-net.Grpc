@@ -58,6 +58,11 @@ internal static class Logging
     public static void Debug<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.LogWithPrefix(LogLevel.Debug, state, exception, formatter);
 
+    [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Debug(this ILogger? logger, string message)
+        => logger?.LogWithPrefix(LogLevel.Debug, message);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Information<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.LogWithPrefix<TState>(LogLevel.Information, state, exception, formatter);

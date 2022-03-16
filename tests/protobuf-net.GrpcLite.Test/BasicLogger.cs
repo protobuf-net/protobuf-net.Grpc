@@ -21,8 +21,31 @@ sealed class BasicLogger : ILogger, IDisposable
     bool ILogger.IsEnabled(LogLevel logLevel) => _output is not null;
 
     void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        => _output?.WriteLine(string.IsNullOrWhiteSpace(_prefix) ? formatter(state, exception) : "[" + _prefix + "] " + formatter(state, exception));
+        => _output?.WriteLine(Format<TState>(logLevel, eventId, state, exception, formatter, _prefix));
     void IDisposable.Dispose() { }
+
+    public static string Format<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter, string prefix)
+        => Padded(logLevel) + (string.IsNullOrWhiteSpace(prefix) ? formatter(state, exception) : "[" + prefix + "] " + formatter(state, exception));
+
+    private static string Padded(LogLevel level)
+    {
+        switch (level)
+        {   // for alignment purposes
+            case LogLevel.Trace:
+                return "trace : ";
+            case LogLevel.Debug:
+                return "debug : ";
+            case LogLevel.Information:
+                return "info  : ";
+            case LogLevel.Warning:
+                return "warn  : ";
+            case LogLevel.Error:
+                return "ERROR : ";
+            case LogLevel.Critical:
+                return "CRIT  : ";
+            default: return level.ToString() + " : ";
+        }
+    }
 }
 
 internal static class TestExtensions

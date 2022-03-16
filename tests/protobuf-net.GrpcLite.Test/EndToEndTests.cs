@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
+using ProtoBuf.Grpc.Lite.Internal;
 using System;
 using System.Diagnostics;
 using System.Threading;
@@ -15,11 +16,12 @@ public class EndToEndTests : IClassFixture<TestServerHost>
 {
     private readonly TestServerHost Server;
     private string Name => Server.Name;
-    private ILogger Logger(string name) => _output.CreateLogger(name);
+    private ILogger Logger { get; }
     public EndToEndTests(TestServerHost server, ITestOutputHelper output)
     {
         Server = server;
         _output = output;
+        Logger = _output.CreateLogger("");
     }
 
     private readonly ITestOutputHelper _output;
@@ -34,11 +36,10 @@ public class EndToEndTests : IClassFixture<TestServerHost>
         return cts;
     }
 
-    private LogCapture? ServerLog(string prefix = "server")
-        => Server.WithLog(_output, prefix);
+    private LogCapture? ServerLog() => Server.WithLog(_output);
 
     ValueTask<LiteChannel> ConnectAsync(CancellationToken cancellationToken)
-        => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(cancellationToken);
+        => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(cancellationToken);
 
     [Fact]
     public async Task CanCallUnarySync()
@@ -48,7 +49,9 @@ public class EndToEndTests : IClassFixture<TestServerHost>
         await using var client = await ConnectAsync(timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
 
+        Logger.Information($"issuing {nameof(proxy.Unary)}...");
         var response = proxy.Unary(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
+        Logger.Information($"got response: {response}");
 
         Assert.NotNull(response);
         Assert.Equal(42, response.Value);
@@ -60,12 +63,15 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
+        await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(timeout.Token);
 
         var proxy = new FooService.FooServiceClient(client);
 
+        Logger.Information($"issuing {nameof(proxy.UnaryAsync)}...");
         using var call = proxy.UnaryAsync(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
+        Logger.Information("awaiting response...");
         var response = await call.ResponseAsync;
+        Logger.Information($"got response: {response}");
 
         Assert.NotNull(response);
         Assert.Equal(42, response.Value);
@@ -78,21 +84,24 @@ public class EndToEndTests : IClassFixture<TestServerHost>
         using var log = ServerLog();
         using var timeout = After();
         Debug.WriteLine($"[client] connecting {Name}...");
-        await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger("client")).CreateChannelAsync(timeout.Token);
+        await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
         
         using var call = proxy.Duplex();
         for (int i = 0; i < 10; i++)
         {
+            Logger.Information($"writing {i}...");
             await call.RequestStream.WriteAsync(new FooRequest { Value = i });
             // await pipe.RequestStream.CompleteAsync();
         }
-
+        Logger.Information($"all writes complete");
         for (int i = 0; i < 10; i++)
         {
+            Logger.Information($"reading {i}...");
             Assert.True(await call.ResponseStream.MoveNext(timeout.Token));
             Assert.Equal(i, call.ResponseStream.Current.Value);
         }
+        Logger.Information($"all reads complete");
 
         timeout.Cancel();
     }
@@ -102,17 +111,15 @@ public sealed class LogCapture : IDisposable
 {
     private readonly TestServerHost host;
     private readonly ITestOutputHelper output;
-    private readonly string prefix;
 
-    public LogCapture(TestServerHost host, ITestOutputHelper output, string prefix)
+    public LogCapture(TestServerHost host, ITestOutputHelper output)
     {
         this.host = host;
         this.output = output;
-        this.prefix = prefix;
         host.Log += OnLog;
     }
 
-    private void OnLog(string message) => output.WriteLine("[" + prefix + "] " + message);
+    private void OnLog(string message) => output?.WriteLine(message);
 
     public void Dispose() => host.Log -= OnLog;
 }
@@ -120,8 +127,8 @@ public sealed class LogCapture : IDisposable
 public class TestServerHost : IDisposable, ILogger
 {
     public event Action<string>? Log;
-    public LogCapture? WithLog(ITestOutputHelper output, string prefix)
-        => output is null ? default : new LogCapture(this, output, prefix);
+    public LogCapture? WithLog(ITestOutputHelper output)
+        => output is null ? default : new LogCapture(this, output);
 
     private readonly LiteServer _server;
     public string Name { get; }
@@ -132,7 +139,7 @@ public class TestServerHost : IDisposable, ILogger
         Name = Guid.NewGuid().ToString();
         _server = new LiteServer(logger: this);
         var svc = new MyService();
-        svc.Log += message => Log?.Invoke(message);
+        svc.Log += message => this.Information(message);
         _server.ManualBind<MyService>(svc);
 
         Debug.WriteLine($"starting listener {Name}...");
@@ -142,7 +149,7 @@ public class TestServerHost : IDisposable, ILogger
     public void Dispose() => _server.Stop();
 
     void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        => Log?.Invoke(formatter(state, exception));
+        => Log?.Invoke(BasicLogger.Format(logLevel, eventId, state, exception, formatter, ""));
 
     bool ILogger.IsEnabled(LogLevel logLevel) => Log is not null;
 
@@ -152,7 +159,7 @@ public class TestServerHost : IDisposable, ILogger
 class MyService : FooService.FooServiceBase
 {
     public event Action<string>? Log;
-
+    
     private void OnLog(string message) => Log?.Invoke(message);
     public override async Task<FooResponse> Unary(FooRequest request, ServerCallContext context)
     {

@@ -59,7 +59,8 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
         }
         finally
         {   // since we've never exposed this to the external world, we can safely recycle it
-            handler.Recycle();
+            try { handler.Recycle(); }
+            catch { }
         }
     }
 
