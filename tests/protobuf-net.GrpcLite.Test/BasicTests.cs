@@ -52,7 +52,7 @@ public class BasicTests
             public string FullName { get; }
         }
         public DummyHandler(string fullName, ushort id)
-            : base(new SimpleMethod(fullName), null!)
+            : base(new SimpleMethod(fullName), null!, null)
         {
             Id = id;
         }
@@ -61,10 +61,6 @@ public class BasicTests
 
         protected override Action<string, SerializationContext> Serializer => throw new NotImplementedException();
         protected override Func<DeserializationContext, string> Deserializer => throw new NotImplementedException();
-
-
-        protected override ValueTask ExecuteAsync() => throw new NotImplementedException();
-        protected override ValueTask OnPayloadAsync(string value) => default;
     }
 
     private static string GetHex(ReadOnlyMemory<byte> buffer)

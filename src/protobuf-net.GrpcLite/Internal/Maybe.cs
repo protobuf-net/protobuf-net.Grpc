@@ -2,9 +2,9 @@
 
 internal readonly struct Maybe<T>
 {
-    internal Maybe(bool hasValue, T value)
+    internal Maybe(T value)
     {
-        HasValue = hasValue;
+        HasValue = true;
         Value = value;
     }
     public bool HasValue { get; }

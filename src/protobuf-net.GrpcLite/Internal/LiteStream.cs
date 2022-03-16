@@ -5,9 +5,14 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
+interface IStreamOwner
+{
+    void Remove(ushort id);
+}
 interface IStream
 {
     ushort Id { get; }
@@ -38,28 +43,52 @@ internal enum StreamState
 internal enum WorkerState
 {
     NotStarted,
-    Activating,
+    ActivatingFirstTime,
     Active,
-    WaitingForPayload,
+    Suspended,
     RanToCompletion,
     Faulted,
 }
-internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive> where TSend : class where TReceive : class
+internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive>, IValueTaskSource where TSend : class where TReceive : class
 {
 
-    TReceive IAsyncStreamReader<TReceive>.Current => throw new NotImplementedException();
+    private Maybe<TReceive> _nextItemNeedsSync;
+
+    private Maybe<TReceive> GetNextItem()
+    {
+        lock (SyncLock)
+        {
+            return _nextItemNeedsSync;
+        }
+    }
+    TReceive IAsyncStreamReader<TReceive>.Current => GetNextItem().Value!;
     Task<bool> IAsyncStreamReader<TReceive>.MoveNext(CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        var pending = MoveNextPayloadAsync(cancellationToken);
+        if (pending.IsCompletedSuccessfully)
+        {
+            return GetNextItem().HasValue ? Utilities.AsyncTrue : Utilities.AsyncFalse;
+        }
+        return Awaited(this, pending);
+        async Task<bool> Awaited(LiteStream<TSend, TReceive> stream, ValueTask pending)
+        {
+            await pending;
+            return GetNextItem().HasValue;
+        }
     }
-    protected LiteStream(IMethod method, IFrameConnection output)
+
+    protected LiteStream(IMethod method, IFrameConnection output, IStreamOwner? owner)
     {
         Method = method;
         _output = output;
         _streamId = ushort.MaxValue; // will be updated after construction
         _sequenceId = ushort.MaxValue; // so first is zero
         StreamState = StreamState.ExpectHeaders;
+        _owner = owner;
     }
+    IStreamOwner? _owner;
+    protected void SetOwner(IStreamOwner? owner) => _owner = owner;
+
     string IStream.Method => Method!.FullName;
     protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
 
@@ -77,8 +106,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     // we don't care about correctness, then *we don't care about correctness*
     public StreamState StreamState { get; private set; }
 
-    private int _workerState;
-    public WorkerState WorkerState => (WorkerState)Volatile.Read(ref _workerState);
+    private WorkerState _workerStateNeedsSync;
 
     protected CancellationToken StreamCancellation => default;
 
@@ -119,7 +147,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             // so we can check if we're done
             if ((header.KindFlags & (byte)PayloadFlags.EndItem) != 0)
             {
-                StartWorkerOnceOnly();
+                StartWorkerAsNeeded();
             }
             return true;
         }
@@ -127,39 +155,150 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     internal async ValueTask<TReceive> AssertSingleAsync(CancellationToken cancellationToken)
     {
-        if (!(await ReadNextAsync(cancellationToken)).TryGetValue(out var request))
+        await MoveNextPayloadAsync(cancellationToken);
+        if (!GetNextItem().TryGetValue(out var request))
             throw new InvalidOperationException("No payload received");
-        if ((await ReadNextAsync(cancellationToken)).HasValue)
+        if (GetNextItem().HasValue)
             throw new InvalidOperationException("Unexpected payload received");
         return request;
     }
     internal async ValueTask<TReceive> AssertNextAsync(CancellationToken cancellationToken)
     {
-        if (!(await ReadNextAsync(cancellationToken)).TryGetValue(out var request))
+        await MoveNextPayloadAsync(cancellationToken);
+        if (!GetNextItem().TryGetValue(out var request))
             throw new InvalidOperationException("No payload received");
         return request;
     }
     internal async ValueTask AssertNoMoreAsync(CancellationToken cancellationToken)
     {
-        if ((await ReadNextAsync(cancellationToken)).HasValue)
+        await MoveNextPayloadAsync(cancellationToken);
+        if (GetNextItem().HasValue)
             throw new InvalidOperationException("Unexpected payload received");
     }
 
-    protected ValueTask<Maybe<TReceive>> ReadNextAsync(CancellationToken cancellationToken)
+    protected async ValueTask MoveNextPayloadAsync(CancellationToken cancellationToken)
     {
-        Logger.ThrowNotImplemented();
-        return default;
-    }
-
-    private void StartWorkerOnceOnly()
-    {
-        if (IsClient) return; // nope; just nope
         lock (SyncLock)
         {
-            if (WorkerState == WorkerState.NotStarted && ChangeState(WorkerState.NotStarted, WorkerState.Activating))
+            _nextItemNeedsSync = default!;
+        }
+        while (true)
+        {
+            ReadOnlyMemory<Frame> nextGroup = default;
+            FrameKind kind;
+            try
             {
-                // we have something useful, and there's no current worker yet: start a worker!
-                this.StartWorker();
+                StreamState streamState;
+                Logger.Debug("reading next frame group...");
+                lock (SyncLock)
+                {   // need to syncrhonize access to backlog
+                    nextGroup = ReadNextFrameGroupLocked(out kind);
+                    streamState = StreamState;
+                }
+                Logger.Debug((nextGroup, kind, streamState), static (state, ex) => $"got {state.nextGroup.Length} bytes, {state.kind}, {state.streamState}");
+                switch (kind)
+                {
+                    case FrameKind.None:
+
+                        switch (streamState)
+                        {
+                            case StreamState.ExpectHeaders:
+                            case StreamState.ExpectBody:
+                                ValueTask pending;
+                                Logger.Debug("suspending worker, waiting for payload...");
+                                lock (SyncLock)
+                                {
+                                    ChangeState(WorkerState.Active, WorkerState.Suspended);
+                                    pending = new ValueTask(this, _suspendedContinuationPoint.Version);
+                                }
+                                await pending; // IMPORTANT; this is how the stream goes to sleep and waits to be activated by a new invocation
+                                Logger.Debug("worker resumed");
+                                continue; // and try again when we resume
+                            default:
+                                return; // there will never be anything else
+                        }
+                    case FrameKind.Header:
+                    case FrameKind.Trailer:
+                        // drop them on the floor for now
+                        break;
+                    case FrameKind.Payload:
+                        var maybe = TryDeserializePayload(ref nextGroup);
+                        if (maybe.HasValue)
+                        {
+                            lock (SyncLock)
+                            {
+                                _nextItemNeedsSync = maybe;
+                            }
+                            return; // a value has been provided; yay for us!
+                        }
+                        break; // try again
+                    default:
+                        Logger.Information(kind, (state, _) => $"unexpected {state} frame-group received");
+                        break;
+                }
+            }
+            finally
+            {
+                Release(ref nextGroup);
+            }
+        }
+    }
+
+    private Maybe<TReceive> TryDeserializePayload(ref ReadOnlyMemory<Frame> frameGroup)
+    {
+        Debug.Assert(!frameGroup.IsEmpty, "frame group should not be empty");
+        var span = frameGroup.Span;
+        var lastHeader = span[span.Length - 1].GetHeader();
+        Debug.Assert(lastHeader.Kind == FrameKind.Payload, $"expected payload, got {lastHeader.Kind}");
+
+        // check the state flags
+        var flags = (PayloadFlags)lastHeader.KindFlags;
+        var isFinal = (flags & PayloadFlags.FinalItem) != 0;
+        if (isFinal)
+        {
+            lock (SyncLock) // record that we're not expecting anything more
+            {
+                var state = StreamState;
+                switch (state)
+                {
+                    case StreamState.ExpectHeaders:
+                    case StreamState.ExpectBody:
+                        StreamState = StreamState.ExpectTrailers;
+                        break;
+                }
+            }
+        }
+        if ((flags & PayloadFlags.NoItem) != 0) return default; // don't run the deserializer if they're telling is "no item" (caller will release the buffers)
+
+        // run the deserializer
+        var payload = FrameSequenceSegment.Create(span);
+        Logger.Debug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
+        var ctx = Pool<SingleBufferDeserializationContext>.Get();
+        ctx.Initialize(payload);
+        var value = Deserializer(ctx);
+        Logger.Debug(value, static (state, _) => $"deserialized: {state}");
+        ctx.Recycle();
+
+        // we can release the original buffers now, before we push the value onwards
+        Release(ref frameGroup);
+        return new Maybe<TReceive>(value);
+    }
+
+
+    private void StartWorkerAsNeeded()
+    {
+        lock (SyncLock)
+        {
+            var state = _workerStateNeedsSync;
+            switch (state)
+            {
+                case WorkerState.NotStarted:
+                    _workerStateNeedsSync = WorkerState.ActivatingFirstTime;
+                    this.StartWorker();
+                    break;
+                case WorkerState.Suspended:
+                    this.StartWorker();
+                    break;
             }
         }
     }
@@ -193,17 +332,65 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         {   // ok, even our fault handler is faulting; try one last log
             Logger.Critical(innerEx);
         }
+
+        try
+        {
+            _suspendedContinuationPoint.SetException(ex);
+        }
+        catch (Exception innerEx)
+        {
+            Logger.Critical(innerEx);
+        }
     }
     public void Execute()
     {
-        if (!ChangeState(WorkerState.Activating, WorkerState.Active)) return;
-        _ = ExecuteCoreAsync();
+        Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "executor");
+        try
+        {
+            WorkerState state;
+            lock (SyncLock)
+            {
+                state = _workerStateNeedsSync;
+                switch (state)
+                {
+                    case WorkerState.ActivatingFirstTime:
+                    case WorkerState.Suspended:
+                        _workerStateNeedsSync = WorkerState.Active;
+                        break;
+                }
+            }
+            // now do the real code outside of the lock
+            switch (state)
+            {
+                case WorkerState.ActivatingFirstTime:
+                    _ = ExecuteCoreAsync();
+                    break;
+                case WorkerState.Suspended:
+                    _suspendedContinuationPoint.SetResult(false); // the value is irrelevant
+                    break;
+                default:
+                    throw new InvalidOperationException($"unexpected worker state '{state}' when attempting to activate worker");
+            }
+        }
+        catch (Exception ex)
+        {
+            ReportFault(ex); // this never throws
+        }
     }
 
     private bool ChangeState(WorkerState expectedOldState, WorkerState newState)
     {
-        var actualOld = (WorkerState)Interlocked.CompareExchange(ref _workerState, (int)newState, (int)expectedOldState);
-        if (actualOld != expectedOldState)
+        Logger.Debug((expectedOldState, newState), (state, _) => $"changing worker state from {expectedOldState} to {newState}");
+        WorkerState actualOld;
+        lock (SyncLock)
+        {   // this *might* be fine with interlocked, but frankly; I don't want to have to think about the subtle behaviours
+            actualOld = _workerStateNeedsSync;
+            if (actualOld == expectedOldState)
+            {
+                _workerStateNeedsSync = newState;
+            }
+        }
+        if (actualOld != expectedOldState) // log outside the lock
         {
             Logger.Critical((expectedOldState, newState, actualOld), (state, _) => $"unexpected worker state '{state.actualOld}' when attempting to move from '{state.expectedOldState}' to '{state.newState}'");
             return false;
@@ -211,7 +398,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         return true;
     }
 
-    protected abstract ValueTask ExecuteAsync();
+    protected virtual ValueTask ExecuteAsync() => default;
     private async Task ExecuteCoreAsync()
     {
         try
@@ -221,106 +408,14 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
         catch (Exception ex)
         {
-            Volatile.Write(ref _workerState, (int)WorkerState.Faulted);
-            Logger.Critical(ex);
-        }
-    }
-    private async Task ExecuteCoreAsync2()
-    {
-        
-        // this is the main pump; when useful data has become available, the framework activates
-        // this method as a worker (as needed), which isolates each stream from the main IO loop
-        Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "stream " + Method.Name);
-        Logger.Debug("Starting stream executor");
-
-
-        ReadOnlyMemory<Frame> frameGroup = default;
-        FrameKind kind = FrameKind.None;
-        try
-        {
-            // if we're here, we're on a worker thread that represents this stream, and we expect there to be something useful to do
-            while (true)
-            {
-                lock (SyncLock)
-                {
-                    switch (StreamState)
-                    {
-                        case StreamState.ExpectHeaders:
-                        case StreamState.ExpectBody:
-                        case StreamState.ExpectTrailers:
-                        case StreamState.ExpectStatus:
-                            frameGroup = ReadNextFrameGroupLocked(out kind); // but we'll process it *outside* of the lock
-                            break; // these are the things we *expect*, i.e. normal
-                        default:
-                            // something unexpected
-                            ReleaseBacklogLocked();
-                            return;
-
-                    }
-                }
-
-                if (frameGroup.IsEmpty) return; // no frames to process
-
-                switch (kind)
-                {
-                    case FrameKind.Header:
-                        await OnTrailerAsync(frameGroup);
-                        break;
-                    case FrameKind.Payload:
-                        await OnPayloadAsync(ref frameGroup, out var isFinal);
-                        if (isFinal) await OnPayloadEnd();
-                        break;
-                    case FrameKind.Trailer:
-                        await OnTrailerAsync(frameGroup);
-                        break;
-                    case FrameKind.Status:
-                        await OnStatusAsync(frameGroup);
-                        break;
-                }
-                Release(ref frameGroup);
-            }
-        }
-        catch (Exception ex)
-        {
             ReportFault(ex);
         }
         finally
         {
-            Release(ref frameGroup);
-            Logger.Debug("Suspending stream executor");
+            Logger.Debug(Id, static (state, _) => $"removing stream {state}");
+            _owner?.Remove(Id);
         }
     }
-
-    protected virtual ValueTask OnHeaderAsync(ReadOnlyMemory<Frame> frameGroup) => default;
-    private ValueTask OnPayloadAsync(ref ReadOnlyMemory<Frame> frameGroup, out bool isFinal)
-    {
-        Debug.Assert(!frameGroup.IsEmpty, "frame group should not be empty");
-        var span = frameGroup.Span;
-        var lastHeader = span[span.Length - 1].GetHeader();
-        Debug.Assert(lastHeader.Kind == FrameKind.Payload, $"expected payload, got {lastHeader.Kind}");
-
-        // check the state flags
-        var flags = (PayloadFlags)lastHeader.KindFlags;
-        isFinal = (flags & PayloadFlags.FinalItem) != 0;
-        if ((flags & PayloadFlags.NoItem) != 0) return default; // don't run the deserializer if they're telling is "no item" (caller will release the buffers)
-
-        // run the deserializer
-        var payload = FrameSequenceSegment.Create(span);
-        Logger.Debug(payload, static (state, _) => $"deserializing payload, {state.Length} bytes, {(state.IsSingleSegment ? "single segment" : "multiple segments")}...");
-        var ctx = Pool<SingleBufferDeserializationContext>.Get();
-        ctx.Initialize(payload);
-        var value = Deserializer(ctx);
-        Logger.Debug(value, static (state, _) => $"deserialized: {state}");
-        ctx.Recycle();
-
-        // we can release the original buffers now, before we push the value onwards
-        Release(ref frameGroup); 
-        return OnPayloadAsync(value);
-    }
-    protected virtual ValueTask OnPayloadEnd() => default;
-    protected abstract ValueTask OnPayloadAsync(TReceive value);
-    protected virtual ValueTask OnTrailerAsync(ReadOnlyMemory<Frame> frameGroup) => default;
-    protected virtual ValueTask OnStatusAsync(ReadOnlyMemory<Frame> frameGroup) => default;
 
     private void Release(ref ReadOnlyMemory<Frame> frames)
     {
@@ -517,6 +612,33 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             serializationContext?.Recycle();
         }
     }
+
+    ManualResetValueTaskSourceCore<bool> _suspendedContinuationPoint;
+    void IValueTaskSource.GetResult(short token)
+    {
+        lock (SyncLock)
+        {
+            try
+            {
+                _suspendedContinuationPoint.GetResult(token);
+            }
+            finally
+            {
+                if (token == _suspendedContinuationPoint.Version) _suspendedContinuationPoint.Reset();
+            }
+        }
+    }
+
+    ValueTaskSourceStatus IValueTaskSource.GetStatus(short token)
+    {
+        lock (SyncLock)
+        {
+            return _suspendedContinuationPoint.GetStatus(token);
+        }
+    }
+
+    void IValueTaskSource.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
+        => _suspendedContinuationPoint.OnCompleted(continuation, state, token, flags);
 
     MethodType IStream.MethodType => Method!.Type;
 }

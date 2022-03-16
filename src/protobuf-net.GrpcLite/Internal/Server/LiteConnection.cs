@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server
 {
-    internal sealed class LiteConnection : IWorker, IListener
+    internal sealed class LiteConnection : IWorker, IListener, IStreamOwner
     {
         private readonly LiteServer _server;
         private readonly IFrameConnection _connection;
@@ -14,6 +14,8 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
         private readonly ConcurrentDictionary<ushort, IStream> _streams = new ConcurrentDictionary<ushort, IStream>();
 
         public int Id { get; }
+
+        void IStreamOwner.Remove(ushort id) => _streams.Remove(id, out _);
 
         // will be null if not started
         public Task? Complete { get; private set; }
@@ -45,7 +47,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
         {
             if (_server.TryGetHandler(initialize.GetPayloadString(), out var serverHandler))
             {
-                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger, _server.ServerShutdown);
+                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger, this, _server.ServerShutdown);
                 handler = serverHandler;
                 return handler is not null;
             }

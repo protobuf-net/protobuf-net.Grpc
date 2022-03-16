@@ -45,7 +45,7 @@ internal static class Logging
     public static void DebugWriteLine(string message)
     {
 #if DEBUG
-        System.Diagnostics.Debug.WriteLine(message, Source);
+        System.Diagnostics.Debug.WriteLine("[" + Source + "] " + message, typeof(LiteServer).Namespace);
 #endif
     }
 
@@ -56,12 +56,18 @@ internal static class Logging
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
-        => logger?.LogWithPrefix(LogLevel.Debug, state, exception, formatter);
+    {
+        logger?.LogWithPrefix(LogLevel.Debug, state, exception, formatter);
+        DebugWriteLine(formatter(state, exception));
+    }
 
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug(this ILogger? logger, string message)
-        => logger?.LogWithPrefix(LogLevel.Debug, message);
+    {
+        logger?.LogWithPrefix(LogLevel.Debug, message);
+        DebugWriteLine(message);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Information<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)

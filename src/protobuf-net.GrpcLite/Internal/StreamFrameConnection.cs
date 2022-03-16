@@ -61,13 +61,22 @@ internal sealed class StreamFrameConnection : IRawFrameConnection, IValueTaskSou
         {
             int remaining = FrameHeader.Size, offset = 0, bytesRead;
             _logger.Debug(true, (state, _) => $"reading next header...");
-            while (remaining > 0 && (bytesRead = await _duplex.ReadAsync(headerBuffer, offset, remaining, cancellationToken)) > 0)
+            try
             {
-                remaining -= bytesRead;
-                offset += bytesRead;
+                while (remaining > 0 && (bytesRead = await _duplex.ReadAsync(headerBuffer, offset, remaining, cancellationToken)) > 0)
+                {
+                    remaining -= bytesRead;
+                    offset += bytesRead;
+                }
+
+                if (remaining == FrameHeader.Size) yield break; // clean EOF
+                if (remaining != 0) ThrowEOF();
             }
-            if (remaining == FrameHeader.Size) yield break; // clean EOF
-            if (remaining != 0) ThrowEOF();
+            catch (Exception ex)
+            {
+                _logger.Error(ex);
+                throw;
+            }
 
             var header = FrameHeader.ReadUnsafe(in headerBuffer[0]);
             _logger.Debug(header, (state, _) => $"reading {state}...");

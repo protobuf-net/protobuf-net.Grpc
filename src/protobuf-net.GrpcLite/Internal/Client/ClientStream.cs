@@ -17,13 +17,8 @@ internal interface IClientStream : IStream, IDisposable
 internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientStream where TRequest : class where TResponse : class
 {
     void IDisposable.Dispose() { }
-    protected override ValueTask OnPayloadAsync(TResponse value)
-    {
-        Logger.ThrowNotImplemented();
-        return default;
-    }
-    public ClientStream(IMethod method, IFrameConnection output, ILogger? logger)
-        : base(method, output)
+    public ClientStream(IMethod method, IFrameConnection output, ILogger? logger, IStreamOwner? owner)
+        : base(method, output, owner)
     {
         Logger = logger;
 
@@ -44,9 +39,6 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
         //CompleteResponseChannel();
         return Task.CompletedTask;
     }
-
-    protected override ValueTask ExecuteAsync()
-        => throw new NotSupportedException("client execution is not supported");
 
     Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message)
         => SendAsync(message, PayloadFlags.None, default).AsTask();

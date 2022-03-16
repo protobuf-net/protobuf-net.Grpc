@@ -18,21 +18,15 @@ internal interface IServerHandler : IStream
     WriteOptions WriteOptions { get; set; }
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
-    void Initialize(ushort id, IFrameConnection output, ILogger? logger, CancellationToken externalShutdown);
+    void Initialize(ushort id, IFrameConnection output, ILogger? logger, IStreamOwner? owner, CancellationToken externalShutdown);
 }
 internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, TRequest>, IServerHandler,
         IServerStreamWriter<TResponse>
 
     where TResponse : class where TRequest : class
 {
-    protected override ValueTask OnPayloadAsync(TRequest value)
-    {
-        Logger.ThrowNotImplemented();
-        return default;
-    }
-
     public ServerStream(IMethod method, object executor)
-        : base(method, null!)
+        : base(method, null!, null)
     {
         _executor = executor;
         Status = Status.DefaultSuccess;
@@ -41,12 +35,13 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         RequestHeaders = Metadata.Empty;
         WriteOptions = WriteOptions.Default;
     }
-    public void Initialize(ushort id, IFrameConnection output, ILogger? logger, CancellationToken externalShutdown)
+    public void Initialize(ushort id, IFrameConnection output, ILogger? logger, IStreamOwner? owner, CancellationToken externalShutdown)
     {
         Id = id;
         Logger = logger;
         CancellationToken = externalShutdown; // TODO: register for timeout/external cancellation
         SetOutput(output);
+        SetOwner(owner);
     }
 
     protected sealed override bool IsClient => false;
@@ -70,8 +65,10 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
                     Logger.Debug("reading single request...");
                     var request = await AssertNextAsync(ctx.CancellationToken);
                     Logger.Debug((request, method: unary), static (state, _) => $"read: {state.request}; executing {state.method.Method.Name}...");
-                    await unary(request, ctx);
+                    var result = await unary(request, ctx);
                     await AssertNoMoreAsync(ctx.CancellationToken);
+                    Logger.Debug(result, static (state, _) => $"sending result {state}...");
+                    await SendAsync(result, PayloadFlags.FinalItem, ctx.CancellationToken);
                     break;
                 case ServerStreamingServerMethod<TRequest, TResponse> serverStreaming:
                     Logger.Debug("reading single request...");
@@ -82,7 +79,9 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
                     break;
                 case ClientStreamingServerMethod<TRequest, TResponse> clientStreaming:
                     Logger.Debug(clientStreaming, static (state, _) => $"executing {state.Method.Name}...");
-                    await clientStreaming(this, ctx);
+                    result = await clientStreaming(this, ctx);
+                    Logger.Debug(result, static (state, _) => $"sending result {state}...");
+                    await SendAsync(result, PayloadFlags.FinalItem, ctx.CancellationToken);
                     break;
                 case DuplexStreamingServerMethod<TRequest, TResponse> duplexStreaming:
                     Logger.Debug(duplexStreaming, static (state, _) => $"executing {state.Method.Name}...");

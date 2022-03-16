@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
+internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker, IStreamOwner
 {
     private readonly ILogger? _logger;
     private readonly IFrameConnection _connection;
@@ -18,10 +18,12 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker
 
     private int _nextId = ushort.MaxValue; // so that our first id is zero
 
+    void IStreamOwner.Remove(ushort id) => _streams.Remove(id, out _);
+
     private ClientStream<TRequest, TResponse> AddClientStream<TRequest, TResponse>(Method<TRequest, TResponse> method)
         where TRequest : class where TResponse : class
     {
-        var stream = new ClientStream<TRequest, TResponse>(method, _connection, _logger);
+        var stream = new ClientStream<TRequest, TResponse>(method, _connection, _logger, this);
         for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
         {
             var id = Utilities.IncrementToUInt32(ref _nextId);

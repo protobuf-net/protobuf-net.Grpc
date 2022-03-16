@@ -132,7 +132,7 @@ internal static class Utilities
                     if (markComplete) tcs.TrySetResult(true);
                     return tcs.Task;
                 default:
-                    throw new InvalidOperationException();
+                    throw new InvalidOperationException("unexpected completion object");
             }
         }
     }
