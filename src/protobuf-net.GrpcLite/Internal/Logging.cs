@@ -18,7 +18,7 @@ internal static class Logging
     }
 #if DEBUG
     private static AsyncLocal<string> s_source = new();
-    public static string Source => s_source.Value;
+    public static string? Source => s_source.Value;
 
     public const string ClientPrefix = "C:", ServerPrefix = "S:";
 #else
@@ -49,6 +49,10 @@ internal static class Logging
 #endif
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void LogWithPrefix(this ILogger logger, LogLevel level, string message)
+        => logger.LogWithPrefix<string>(level, message, null, static (state, _) => state);
+
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
@@ -58,9 +62,16 @@ internal static class Logging
     public static void Information<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.LogWithPrefix<TState>(LogLevel.Information, state, exception, formatter);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining), Obsolete("needs implementation", error: false)]
+    public static void ThrowNotImplemented(this ILogger? logger, [CallerMemberName] string caller = "")
+    {
+        logger.Critical(caller, static (state, _) => $"{state} is not implemented");
+        throw new NotImplementedException();
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Information(this ILogger? logger, string message)
-        => logger?.LogWithPrefix<string>(LogLevel.Information, message, null, static (state, _) => state);
+        => logger?.LogWithPrefix(LogLevel.Information, message);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Error<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
@@ -68,11 +79,15 @@ internal static class Logging
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Error(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
-        => logger?.LogWithPrefix<string>(LogLevel.Error, caller, exception, static (s, ex) => $"[{s}]: {ex!.Message}");
+        => logger?.LogWithPrefix<string>(LogLevel.Error, caller, exception, static (state, ex) => $"[{state}]: {ex!.Message}");
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
-        => logger?.LogWithPrefix<string>(LogLevel.Critical, caller, exception, static (s, ex) => $"[{s}]: {ex!.Message}");
+        => logger?.LogWithPrefix<string>(LogLevel.Critical, caller, exception, static (state, ex) => $"[{state}]: {ex!.Message}");
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Critical(this ILogger? logger, string message)
+            => logger?.LogWithPrefix(LogLevel.Information, message);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)

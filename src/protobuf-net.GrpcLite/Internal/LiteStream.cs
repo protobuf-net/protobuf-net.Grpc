@@ -290,7 +290,7 @@ internal abstract class HandlerBase<TSend, TReceive> : IStream, IWorker where TS
             // and return the array we used for the bundle
             if (MemoryMarshal.TryGetArray(frames, out var segment))
             {
-                ArrayPool<Frame>.Shared.Return(segment.Array);
+                ArrayPool<Frame>.Shared.Return(segment.Array!);
             }
         }
         catch (Exception ex)

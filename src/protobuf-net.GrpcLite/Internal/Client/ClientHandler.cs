@@ -61,7 +61,14 @@ internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TReques
 
     protected virtual void OnDispose() { }
 
-    public Task<Metadata> ResponseHeadersAsync => throw new NotImplementedException();
+    public Task<Metadata> ResponseHeadersAsync
+    {
+        get
+        {
+            Logger.ThrowNotImplemented();
+            return Task.FromResult(Metadata.Empty);
+        }
+    }
 
     public Status Status { get; protected set; }
 
@@ -80,7 +87,11 @@ internal abstract class ClientHandler<TRequest, TResponse> : HandlerBase<TReques
         }
     }
 
-    public Metadata Trailers() => throw new NotImplementedException();
+    public Metadata Trailers()
+    {
+        Logger.ThrowNotImplemented();
+        return Metadata.Empty;
+    }
 
     public virtual void Reset()
     {

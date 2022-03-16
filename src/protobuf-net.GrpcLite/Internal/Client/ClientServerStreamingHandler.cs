@@ -49,15 +49,15 @@ internal sealed class ClientServerStreamingHandler<TRequest, TResponse> : Client
 
     Task<bool> IAsyncStreamReader<TResponse>.MoveNext(CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
-        //=> MoveNextAndCapture(_channel!.Reader, this, cancellationToken);
+        Logger.ThrowNotImplemented();
+        return Utilities.AsyncFalse;
     }
 
 
     protected override ValueTask OnPayloadAsync(TResponse value)
     {
-        _current = value;
-        throw new NotImplementedException();
+        Logger.ThrowNotImplemented();
+        return default;
     }
 
 

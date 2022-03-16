@@ -50,10 +50,5 @@ namespace ProtoBuf.Grpc.Lite.Internal
                 RunningIndex = 0;
             }
         }
-
-        internal static object Create(ReadOnlyMemory<Frame> frameGroup)
-        {
-            throw new NotImplementedException();
-        }
     }
 }
