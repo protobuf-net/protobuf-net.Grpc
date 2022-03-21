@@ -32,7 +32,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     CancellationTokenSource After(TimeSpan timeout)
     {
         var cts = new CancellationTokenSource();
-        cts.CancelAfter(timeout);
+        if (!Debugger.IsAttached) cts.CancelAfter(timeout);
         return cts;
     }
 
@@ -143,7 +143,7 @@ public class TestServerHost : IDisposable, ILogger
         _server.ManualBind<MyService>(svc);
 
         Debug.WriteLine($"starting listener {Name}...");
-        _server.ListenAsync(ConnectionFactory.ListenNamedPipe(Name));
+        _server.ListenAsync(ConnectionFactory.ListenNamedPipe(Name, logger: this));
     }
 
     public void Dispose() => _server.Stop();

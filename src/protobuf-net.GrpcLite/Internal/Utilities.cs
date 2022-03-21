@@ -220,6 +220,15 @@ internal static class Utilities
             }
         }
     }
+
+    internal static CancellationTokenRegistration RegisterCancellation(this IStream stream, CancellationToken cancellationToken)
+    {
+        if (stream is null || !cancellationToken.CanBeCanceled) return default;
+        cancellationToken.ThrowIfCancellationRequested();
+        return cancellationToken.Register(s_CancelStream, stream, false);
+    }
+    private static readonly Action<object?> s_CancelStream = static state => Unsafe.As<IStream>(state!).Cancel();
+
 }
 #if NETCOREAPP3_1_OR_GREATER
 internal interface IWorker : IThreadPoolWorkItem {}

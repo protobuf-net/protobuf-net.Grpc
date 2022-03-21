@@ -1,8 +1,10 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks.Sources;
@@ -12,6 +14,7 @@ namespace ProtoBuf.Grpc.Lite.Internal;
 interface IStreamOwner
 {
     void Remove(ushort id);
+    CancellationToken Shutdown { get; }
 }
 interface IStream
 {
@@ -20,24 +23,24 @@ interface IStream
     MethodType MethodType { get; }
     string Method { get; }
     bool TryAcceptFrame(in Frame frame);
+    CancellationToken CancellationToken { get; }
+    void Cancel();
 }
 
 internal enum StreamState
 {
     Uninitialized = 0,
-    ExpectHeaders = 1 | AcceptHeader | AcceptPayload | AcceptTrailer | AcceptStatus,
-    ExpectBody = 2 | AcceptPayload | AcceptTrailer | AcceptStatus,
-    ExpectTrailers = 3 | AcceptTrailer | AcceptStatus,
-    ExpectStatus = 4 | AcceptStatus,
+    ExpectHeaders = 1 | AcceptHeader | AcceptPayload | AcceptTrailer,
+    ExpectBody = 2 | AcceptPayload | AcceptTrailer,
+    ExpectTrailers = 3 | AcceptTrailer,
     Completed = 5,
     Cancelled = 6,
     Faulted = 7, // bad things, Mikey
 
     // high bits are flags
-    AcceptHeader = 1 << 27,
-    AcceptPayload = 1 << 28,
-    AcceptTrailer = 1 << 29,
-    AcceptStatus = 1 << 30,
+    AcceptHeader = 1 << 28,
+    AcceptPayload = 1 << 29,
+    AcceptTrailer = 1 << 30,
 }
 
 internal enum WorkerState
@@ -49,7 +52,7 @@ internal enum WorkerState
     RanToCompletion,
     Faulted,
 }
-internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive>, IValueTaskSource where TSend : class where TReceive : class
+internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive>, IValueTaskSource, IDisposable where TSend : class where TReceive : class
 {
 
     private Maybe<TReceive> _nextItemNeedsSync;
@@ -64,16 +67,21 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     TReceive IAsyncStreamReader<TReceive>.Current => GetNextItem().Value!;
     Task<bool> IAsyncStreamReader<TReceive>.MoveNext(CancellationToken cancellationToken)
     {
-        var pending = MoveNextPayloadAsync(cancellationToken);
+        CancellationTokenRegistration ctr = this.RegisterCancellation(cancellationToken);
+        var pending = MoveNextPayloadAsync();
         if (pending.IsCompletedSuccessfully)
         {
+            ctr.Dispose();
             return GetNextItem().HasValue ? Utilities.AsyncTrue : Utilities.AsyncFalse;
         }
-        return Awaited(this, pending);
-        async Task<bool> Awaited(LiteStream<TSend, TReceive> stream, ValueTask pending)
+        return Awaited(this, pending, ctr);
+        async Task<bool> Awaited(LiteStream<TSend, TReceive> stream, ValueTask pending, CancellationTokenRegistration ctr)
         {
-            await pending;
-            return GetNextItem().HasValue;
+            using (ctr)
+            {
+                await pending;
+                return GetNextItem().HasValue;
+            }
         }
     }
 
@@ -85,12 +93,13 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         _sequenceId = ushort.MaxValue; // so first is zero
         StreamState = StreamState.ExpectHeaders;
         _owner = owner;
+        _workerStateNeedsSync = IsClient ? WorkerState.Active : WorkerState.NotStarted; // for clients, the caller is the initial executor
     }
     IStreamOwner? _owner;
     protected void SetOwner(IStreamOwner? owner) => _owner = owner;
 
     string IStream.Method => Method!.FullName;
-    protected FrameBufferManager BufferManager => FrameBufferManager.Shared;
+    protected RefCountedMemoryPool<byte> MemoryPool => RefCountedMemoryPool<byte>.Shared;
 
     private ushort _streamId;
     public ILogger? Logger { get; set; }
@@ -108,7 +117,118 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     private WorkerState _workerStateNeedsSync;
 
-    protected CancellationToken StreamCancellation => default;
+    private CancellationTokenSource? _cancellation;
+    public CancellationToken CancellationToken { get; private set; }
+
+    private CancellationToken _streamSpecificCancellation;
+
+    protected CancellationTokenRegistration _onCancelRegistration;
+
+    public virtual void Dispose() => _onCancelRegistration.Dispose();
+
+    [Flags]
+    private enum CancellationScenerio : byte
+    {
+        None = 0,
+        OwnerShutdown = 1 << 0,
+        StreamSpecific = 1 << 1,
+        Deadline = 1 << 2,
+    }
+    internal void RegisterForCancellation(CancellationToken streamSpecificCancellation, DateTime? deadline)
+    {
+        CancellationScenerio scenario = CancellationScenerio.None;
+        var ownerShutdown = _owner?.Shutdown ?? CancellationToken.None;
+        if (ownerShutdown.CanBeCanceled)
+        {
+            ownerShutdown.ThrowIfCancellationRequested();
+            scenario |= CancellationScenerio.OwnerShutdown;
+        }
+        if (streamSpecificCancellation.CanBeCanceled)
+        {
+            _streamSpecificCancellation = streamSpecificCancellation;
+            streamSpecificCancellation.ThrowIfCancellationRequested();
+            scenario |= CancellationScenerio.StreamSpecific;
+        }
+        TimeSpan timeout = default;
+        if (deadline.HasValue)
+        {
+            var val = deadline.GetValueOrDefault();
+            if (val != DateTime.MaxValue)
+            {
+                timeout = val - DateTime.UtcNow;
+                if (timeout <= TimeSpan.Zero) throw new TimeoutException("Deadline exceeded before call");
+                scenario |= CancellationScenerio.Deadline;
+            }
+        }
+        Logger.Debug(scenario, static (state, _) => $"Cancellation mode: {state}");
+        // 8 possibilities
+        switch (scenario)
+        {
+            case CancellationScenerio.None:
+                break; // nothing to do
+            case CancellationScenerio.OwnerShutdown:
+                CancellationToken = ownerShutdown;
+                break;
+            case CancellationScenerio.StreamSpecific:
+                CancellationToken = streamSpecificCancellation;
+                break;
+            case CancellationScenerio.Deadline:
+                _cancellation = new CancellationTokenSource();
+                break; // deadline and StreamCancellation dealt with below
+            case CancellationScenerio.OwnerShutdown | CancellationScenerio.StreamSpecific:
+            case CancellationScenerio.OwnerShutdown | CancellationScenerio.StreamSpecific | CancellationScenerio.Deadline:
+                _cancellation = CancellationTokenSource.CreateLinkedTokenSource(ownerShutdown, streamSpecificCancellation);
+                break; // deadline and StreamCancellation dealt with below
+            case CancellationScenerio.OwnerShutdown | CancellationScenerio.Deadline:
+                _cancellation = CancellationTokenSource.CreateLinkedTokenSource(ownerShutdown);
+                break; // deadline and StreamCancellation dealt with below
+            case CancellationScenerio.StreamSpecific | CancellationScenerio.Deadline:
+                _cancellation = CancellationTokenSource.CreateLinkedTokenSource(streamSpecificCancellation);
+                break; // deadline and StreamCancellation dealt with below
+
+            default:
+                throw new InvalidOperationException($"Unexpected cancellation scenario: {scenario}");
+        }
+        if (_cancellation is not null)
+        {
+            CancellationToken = _cancellation.Token;
+            if ((scenario & CancellationScenerio.Deadline) != 0)
+            {
+                try
+                {
+                    _cancellation.CancelAfter(timeout);
+                }
+                catch (Exception ex)
+                {
+                    ReportFault(ex);
+                    throw;
+                }
+            }
+        }
+        _onCancelRegistration = this.RegisterCancellation(CancellationToken);
+    }
+
+    void IStream.Cancel()
+    {
+        try
+        {
+            try
+            {
+                // try to give the most meaningful cancellation
+                _streamSpecificCancellation.ThrowIfCancellationRequested();
+                _owner?.Shutdown.ThrowIfCancellationRequested();
+                throw new TimeoutException(); // that leaves a deadline, then
+            }
+            catch (Exception ex)
+            {
+                ReportFault(ex);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex);
+        }
+    }
 
     private object SyncLock => this;
 
@@ -122,7 +242,6 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                 FrameKind.Header => StreamState.AcceptHeader,
                 FrameKind.Payload => StreamState.AcceptPayload,
                 FrameKind.Trailer => StreamState.AcceptTrailer,
-                FrameKind.Status => StreamState.AcceptStatus,
                 _ => default,
             };
             if ((StreamState & need) == 0) return false; // not expecting that
@@ -143,9 +262,8 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             {
                 _backlogFrame = frame;
             }
-            // we only accept header/payload/trailer/status, and all of those use PayloadFlags,
-            // so we can check if we're done
-            if ((header.KindFlags & (byte)PayloadFlags.EndItem) != 0)
+            Logger.Debug((frame, frames: _backlogFrames), static (state, _) => $"added backlog frame: {state.frame}; total frames: {state.frames?.Count ?? 1}");
+            if (header.IsFinal)
             {
                 StartWorkerAsNeeded();
             }
@@ -153,30 +271,33 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    internal async ValueTask<TReceive> AssertSingleAsync(CancellationToken cancellationToken)
+    internal async ValueTask<TReceive> AssertSingleAsync()
     {
-        await MoveNextPayloadAsync(cancellationToken);
+        await MoveNextPayloadAsync();
         if (!GetNextItem().TryGetValue(out var request))
-            throw new InvalidOperationException("No payload received");
+            throw new InvalidOperationException("No payload received by " + ClientServerLabel);
+        await MoveNextPayloadAsync();
         if (GetNextItem().HasValue)
-            throw new InvalidOperationException("Unexpected payload received");
+            throw new InvalidOperationException("Unexpected payload received by " + ClientServerLabel);
         return request;
     }
-    internal async ValueTask<TReceive> AssertNextAsync(CancellationToken cancellationToken)
+    internal async ValueTask<TReceive> AssertNextAsync()
     {
-        await MoveNextPayloadAsync(cancellationToken);
+        await MoveNextPayloadAsync();
         if (!GetNextItem().TryGetValue(out var request))
-            throw new InvalidOperationException("No payload received");
+            throw new InvalidOperationException("No payload received by " + ClientServerLabel);
         return request;
     }
-    internal async ValueTask AssertNoMoreAsync(CancellationToken cancellationToken)
+    internal async ValueTask AssertNoMoreAsync()
     {
-        await MoveNextPayloadAsync(cancellationToken);
+        await MoveNextPayloadAsync();
         if (GetNextItem().HasValue)
-            throw new InvalidOperationException("Unexpected payload received");
+            throw new InvalidOperationException("Unexpected payload received by " + ClientServerLabel);
     }
 
-    protected async ValueTask MoveNextPayloadAsync(CancellationToken cancellationToken)
+    private string ClientServerLabel => IsClient ? "client" : "server";
+
+    protected async ValueTask MoveNextPayloadAsync()
     {
         lock (SyncLock)
         {
@@ -195,7 +316,16 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                     nextGroup = ReadNextFrameGroupLocked(out kind);
                     streamState = StreamState;
                 }
-                Logger.Debug((nextGroup, kind, streamState), static (state, ex) => $"got {state.nextGroup.Length} bytes, {state.kind}, {state.streamState}");
+                static long CountBytes(ReadOnlyMemory<Frame> frames)
+                {
+                    long total = 0;
+                    foreach (var frame in frames.Span)
+                    {
+                        total += frame.GetPayload().Length;
+                    }
+                    return total;
+                }
+                Logger.Debug((nextGroup, kind, streamState), static (state, ex) => $"got {CountBytes(state.nextGroup)} payload bytes in {state.nextGroup.Length} buffers; {state.kind}, {state.streamState}");
                 switch (kind)
                 {
                     case FrameKind.None:
@@ -204,34 +334,35 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                         {
                             case StreamState.ExpectHeaders:
                             case StreamState.ExpectBody:
-                                ValueTask pending;
-                                Logger.Debug("suspending worker, waiting for payload...");
-                                lock (SyncLock)
-                                {
-                                    ChangeState(WorkerState.Active, WorkerState.Suspended);
-                                    pending = new ValueTask(this, _suspendedContinuationPoint.Version);
-                                }
-                                await pending; // IMPORTANT; this is how the stream goes to sleep and waits to be activated by a new invocation
+                                await SuspendWorkerAndAwaitReactivationAsync();
                                 Logger.Debug("worker resumed");
                                 continue; // and try again when we resume
                             default:
+                                lock (SyncLock)
+                                {
+                                    _nextItemNeedsSync = Maybe<TReceive>.NoValue;
+                                }
                                 return; // there will never be anything else
                         }
                     case FrameKind.Header:
+                        _unprocessedHeaders = FrameSequenceSegment.Create(nextGroup.Span);
+                        Release(ref nextGroup, releasePayload: false);
+                        continue;
                     case FrameKind.Trailer:
-                        // drop them on the floor for now
-                        break;
-                    case FrameKind.Payload:
-                        var maybe = TryDeserializePayload(ref nextGroup);
-                        if (maybe.HasValue)
-                        {
-                            lock (SyncLock)
-                            {
-                                _nextItemNeedsSync = maybe;
-                            }
-                            return; // a value has been provided; yay for us!
+                        _unprocessedTrailers = FrameSequenceSegment.Create(nextGroup.Span);
+                        Release(ref nextGroup, releasePayload: false);
+                        lock (SyncLock)
+                        {   // there will never be another value, so...
+                            _nextItemNeedsSync = Maybe<TReceive>.NoValue;
                         }
-                        break; // try again
+                        return; // not expecting any more
+                    case FrameKind.Payload:
+                        var value = DeserializePayload(ref nextGroup);
+                        lock (SyncLock)
+                        {
+                            _nextItemNeedsSync = new Maybe<TReceive>(value);
+                        }
+                        return;
                     default:
                         Logger.Information(kind, (state, _) => $"unexpected {state} frame-group received");
                         break;
@@ -239,36 +370,29 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             }
             finally
             {
-                Release(ref nextGroup);
+                Release(ref nextGroup, releasePayload: true);
             }
         }
     }
 
-    private Maybe<TReceive> TryDeserializePayload(ref ReadOnlyMemory<Frame> frameGroup)
+    private ReadOnlySequence<byte> _unprocessedHeaders, _unprocessedTrailers;
+
+    ValueTask SuspendWorkerAndAwaitReactivationAsync() // IMPORTANT; this is how the stream goes to sleep and waits to be activated by a new invocation
+    {
+        Logger.Debug("suspending worker...");
+        lock (SyncLock)
+        {
+            ChangeState(WorkerState.Active, WorkerState.Suspended);
+            return new ValueTask(this, _suspendedContinuationPoint.Version);
+        }
+    }
+
+    private TReceive DeserializePayload(ref ReadOnlyMemory<Frame> frameGroup)
     {
         Debug.Assert(!frameGroup.IsEmpty, "frame group should not be empty");
         var span = frameGroup.Span;
         var lastHeader = span[span.Length - 1].GetHeader();
         Debug.Assert(lastHeader.Kind == FrameKind.Payload, $"expected payload, got {lastHeader.Kind}");
-
-        // check the state flags
-        var flags = (PayloadFlags)lastHeader.KindFlags;
-        var isFinal = (flags & PayloadFlags.FinalItem) != 0;
-        if (isFinal)
-        {
-            lock (SyncLock) // record that we're not expecting anything more
-            {
-                var state = StreamState;
-                switch (state)
-                {
-                    case StreamState.ExpectHeaders:
-                    case StreamState.ExpectBody:
-                        StreamState = StreamState.ExpectTrailers;
-                        break;
-                }
-            }
-        }
-        if ((flags & PayloadFlags.NoItem) != 0) return default; // don't run the deserializer if they're telling is "no item" (caller will release the buffers)
 
         // run the deserializer
         var payload = FrameSequenceSegment.Create(span);
@@ -280,8 +404,8 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         ctx.Recycle();
 
         // we can release the original buffers now, before we push the value onwards
-        Release(ref frameGroup);
-        return new Maybe<TReceive>(value);
+        Release(ref frameGroup, releasePayload: true);
+        return value;
     }
 
 
@@ -344,7 +468,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     }
     public void Execute()
     {
-        Logging.SetSource((IsClient ? Logging.ClientPrefix : Logging.ServerPrefix) + "executor");
+        Logger.SetSource(IsClient ? LogKind.Client : LogKind.Server, "executor");
         try
         {
             WorkerState state;
@@ -380,7 +504,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     private bool ChangeState(WorkerState expectedOldState, WorkerState newState)
     {
-        Logger.Debug((expectedOldState, newState), (state, _) => $"changing worker state from {expectedOldState} to {newState}");
+        Logger.Debug((expectedOldState, newState), static (state, _) => $"changing worker state from {state.expectedOldState} to {state.newState}");
         WorkerState actualOld;
         lock (SyncLock)
         {   // this *might* be fine with interlocked, but frankly; I don't want to have to think about the subtle behaviours
@@ -417,15 +541,18 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    private void Release(ref ReadOnlyMemory<Frame> frames)
+    private void Release(ref ReadOnlyMemory<Frame> frames, bool releasePayload)
     {
         if (frames.IsEmpty) return;
         try
         {
-            // release the individual frames
-            foreach (var frame in frames.Span)
+            if (releasePayload)
             {
-                frame.Release();
+                // release the individual frames
+                foreach (var frame in frames.Span)
+                {
+                    frame.Release();
+                }
             }
             // and return the array we used for the bundle
             if (MemoryMarshal.TryGetArray(frames, out var segment))
@@ -447,28 +574,18 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     {
         int count;
         kind = FrameKind.None;
-        static bool IsTerminated(in Frame frame, out FrameKind kind)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool IsFinal(in Frame frame, out FrameKind kind)
         {
             var header = frame.GetHeader();
             kind = header.Kind;
-            switch (kind)
-            {
-                case FrameKind.Status:
-                case FrameKind.Header:
-                case FrameKind.Payload:
-                case FrameKind.Trailer:
-                    return (header.KindFlags & (byte)(PayloadFlags.EndItem | PayloadFlags.NoItem)) != 0;
-                default:
-                    return ThrowInvalidKind(kind);
-            }
-
+            return header.IsFinal;
         }
-        static bool ThrowInvalidKind(FrameKind kind) => throw new InvalidOperationException($"An unexpected {kind} frame was encountered in the backlog");
         static void ThrowMismatchedGroup(FrameKind group, FrameKind item) => throw new InvalidOperationException($"An unexpected {item} frame was encountered in the backlog while reading a {group} group");
 
         if (_backlogFrames is not null)
         {
-            if (_backlogFrames.TryPeek(out var frame) && IsTerminated(frame, out kind))
+            if (_backlogFrames.TryPeek(out var frame) && IsFinal(frame, out kind))
             {   // optimize for single-frame scenarions
                 count = 1;
             }
@@ -481,7 +598,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                 var iter = _backlogFrames.GetEnumerator(); // doesn't dequeue - this is a peek cursor, effectively
                 if (iter.MoveNext())
                 {
-                    if (IsTerminated(frame, out kind))
+                    if (IsFinal(frame, out kind))
                     {
                         count = 1;
                     }
@@ -490,7 +607,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                         count = -1; // use sign to track EOF; if we end up with a -ve number, we didn't find an end
                         while (iter.MoveNext())
                         {
-                            bool terminated = IsTerminated(iter.Current, out var nextKind);
+                            bool terminated = IsFinal(iter.Current, out var nextKind);
                             if (nextKind != kind) ThrowMismatchedGroup(kind, nextKind); // make sure all items in the group share a kind
                             if (terminated)
                             {
@@ -509,7 +626,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
         else
         {
-            count = _backlogFrame.HasValue && IsTerminated(_backlogFrame, out kind) ? 1 : 0;
+            count = _backlogFrame.HasValue && IsFinal(_backlogFrame, out kind) ? 1 : 0;
         }
         if (count <= 0) return default;
 
@@ -537,52 +654,77 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     private int _sequenceId;
 
     protected abstract bool IsClient { get; }
-    public ushort NextSequenceId()
-    {
-        // MSB bit is always off for clients, and always on for servers
-        var next = Utilities.IncrementToUInt32(ref _sequenceId) & 0x7FFF;
-        return (ushort)(IsClient ? next : next | 0x8000);
-    }
+    public ushort NextSequenceId() => Utilities.IncrementToUInt32(ref _sequenceId);
+
     protected IMethod Method { get; }
 
     protected IFrameConnection Output => _output;
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
 
-    public ValueTask SendInitializeAsync(string? host, CallOptions options)
-        => Output.WriteAsync(GetInitializeFrame(host), options.CancellationToken);
-
-    internal Frame GetInitializeFrame(string? host)
+    public ValueTask SendHeaderAsync(string? host, in CallOptions options)
     {
-        var fullName = Method.FullName;
-        if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();
-        if (!string.IsNullOrEmpty(host)) ThrowNotSupported(); // in future: delimit?
-        var length = Encoding.UTF8.GetByteCount(fullName);
-        if (length > FrameHeader.MaxPayloadSize) ThrowMethodTooLarge(length);
-
-        var slab = BufferManager.Rent(length);
+        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.Header, 0);
         try
         {
-            var header = new FrameHeader(FrameKind.NewStream, 0, Id, NextSequenceId(), (ushort)length);
-            slab.Advance(Encoding.UTF8.GetBytes(fullName, slab.ActiveBuffer.Span));
-            return slab.CreateFrameAndInvalidate(header, updateHeaderLength: false); // this will validate etc
+            MetadataEncoder.WriteHeader(ctx, IsClient, Method.FullName, host, options);
+            ctx.Complete();
         }
-        finally
+        catch
         {
-            slab?.Return();
+            ctx.Recycle();
+            throw;
         }
-
-        static void ThrowMissingMethod() => throw new ArgumentOutOfRangeException(nameof(fullName), "No method name was specified");
-        static void ThrowNotSupported() => throw new ArgumentOutOfRangeException(nameof(host), "Non-empty hosts are not currently supported");
-        static void ThrowMethodTooLarge(int length) => throw new InvalidOperationException($"The method name is too large at {length} bytes");
+        return WriteAndRecycleAsync(ctx);
     }
+    public ValueTask SendTrailerAsync(Metadata? metadata, Status? status)
+    {
+        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.Trailer, 0);
+        try
+        {
+            ctx.Complete(); // always empty for now
+        }
+        catch
+        {
+            ctx.Recycle();
+            throw;
+        }
+        return WriteAndRecycleAsync(ctx);
+    }
+    private ValueTask WriteAndRecycleAsync(PayloadFrameSerializationContext ctx)
+    {
+        var pending = ctx.WritePayloadAsync(Output, CancellationToken);
+        if (pending.IsCompleted)
+        {
+            ctx.Recycle();
+            pending.GetAwaiter().GetResult(); // required for IVTS and to propagate exceptions
+            return default;
+        }
+        else
+        {
+            return Awaited(pending, ctx);
+        }
+        static async ValueTask Awaited(ValueTask pending, PayloadFrameSerializationContext ctx)
+        {
+            try
+            {
+                await pending;
+            }
+            finally
+            {
+                ctx.Recycle();
+            }
+        }
+    }
+
 
     internal async Task SendSingleAsync(string? host, CallOptions options, TSend request)
     {
         try
         {
-            await SendInitializeAsync(host, options);
-            await SendAsync(request, PayloadFlags.FinalItem, options.CancellationToken);
+            await SendHeaderAsync(host, options);
+            await SendAsync(request);
+            await SendTrailerAsync(null, null);
         }
         catch (Exception ex)
         {
@@ -590,17 +732,17 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    public async ValueTask SendAsync(TSend value, PayloadFlags flags, CancellationToken cancellationToken)
+    public async ValueTask SendAsync(TSend value)
     {
         PayloadFrameSerializationContext? serializationContext = null;
-        cancellationToken.ThrowIfCancellationRequested();
+        CancellationToken.ThrowIfCancellationRequested();
         try
         {
-            Logger.Debug(value, (state, ex) => $"serializing {state}...");
-            serializationContext = PayloadFrameSerializationContext.Get(this, BufferManager, Id, flags);
+            Logger.Debug(value, static (state, ex) => $"serializing {state}...");
+            serializationContext = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.Payload, 0);
             Serializer(value, serializationContext);
-            Logger.Debug(serializationContext, (state, ex) => $"serialized; {serializationContext}");
-            await serializationContext.WritePayloadAsync(Output, cancellationToken);
+            Logger.Debug(serializationContext, static (state, _) => $"serialized; {state}");
+            await serializationContext.WritePayloadAsync(Output, CancellationToken);
         }
         catch (Exception ex)
         {

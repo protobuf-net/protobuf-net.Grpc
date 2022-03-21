@@ -3,10 +3,12 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipelines;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -38,7 +40,7 @@ public class BasicTests
         var invoker = channel.CreateCallInvoker();
     }
 
-    class DummyHandler : LiteStream<string, string>
+    class DummyStream : LiteStream<string, string>
     {
         class SimpleMethod : IMethod
         {
@@ -51,7 +53,7 @@ public class BasicTests
 
             public string FullName { get; }
         }
-        public DummyHandler(string fullName, ushort id)
+        public DummyStream(string fullName, ushort id)
             : base(new SimpleMethod(fullName), null!, null)
         {
             Id = id;
@@ -75,24 +77,34 @@ public class BasicTests
     [Fact]
     public void CanWriteAndParseFrame()
     {
-        var handler = new DummyHandler("/myservice/mymethod", 42);
-        var frame = handler.GetInitializeFrame("");
+        var stream = new DummyStream("/myservice/mymethod", 42);
 
-        var hex = GetHex(frame.RawBuffer);
-        Assert.Equal(
-    "02-00-2A-00-00-00-13-00-" // unary, id 42, length 19
-    + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // "/myservice/mymethod"
+        var ctx = PayloadFrameSerializationContext.Get(stream, RefCountedMemoryPool<byte>.Shared, FrameKind.Header, 0);
+        try
+        {
+            MetadataEncoder.WriteHeader(ctx, true, ((IStream)stream).Method, null, default);
+            ctx.Complete();
+            var frame = ctx.PendingFrames.Single();
+            var hex = GetHex(frame.Memory);
+            Assert.Equal(
+        "02-00-2A-00-00-00-13-80-" // unary, id 42, length 19, final
+        + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // "/myservice/mymethod"
 
-        frame = new Frame(frame.RawBuffer);
-        var header = frame.GetHeader();
-        Assert.Equal(FrameKind.NewStream, header.Kind);
-        Assert.Equal(0, header.KindFlags);
-        Assert.Equal(42, header.StreamId);
-        Assert.Equal(0, header.SequenceId);
-        Assert.Equal(19, header.PayloadLength);
-        Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.GetPayload().Span));
+            frame = new Frame(frame.Memory);
+            var header = frame.GetHeader();
+            Assert.Equal(FrameKind.Header, header.Kind);
+            Assert.Equal(0, header.KindFlags);
+            Assert.Equal(42, header.StreamId);
+            Assert.Equal(0, header.SequenceId);
+            Assert.Equal(19, header.PayloadLength);
+            Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.GetPayload().Span));
 
-        frame.Release();
+            frame.Release();
+        }
+        finally
+        {
+            ctx.Recycle();
+        }
 
     }
 
@@ -136,17 +148,18 @@ public class BasicTests
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!");
 
         // we don't expect a reply
-        var oce = await Assert.ThrowsAsync<TaskCanceledException>(() => call.ResponseAsync);
+        var oce = await Assert.ThrowsAsync<OperationCanceledException>(() => call.ResponseAsync);
         Assert.Equal(cts.Token, oce.CancellationToken);
         await Task.Delay(100);
         pipe.Close();
         await pipe.Complete;
         var hex = await GetHexAsync(server);
         Assert.Equal(
-            "02-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
+            "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "04-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1, length 13
-            + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
+            + "03-00-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
+            + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21-"
+            + "04-00-00-00-02-00-00-80", hex); // trailer, 0/2, empty (final)
     }
 
     private async ValueTask<string> GetHexAsync(IDuplexPipe pipe)
@@ -156,8 +169,9 @@ public class BasicTests
         return GetHex(ms);
     }
 
+    const int DEBUG_TIMEOPUT_MULTIPLIER = 1; // 10;
     private CancellationTokenSource Timeout(int seconds = 2)
-        => Debugger.IsAttached ? new CancellationTokenSource() : new CancellationTokenSource(seconds);
+        => new CancellationTokenSource(TimeSpan.FromSeconds(Debugger.IsAttached ? seconds * DEBUG_TIMEOPUT_MULTIPLIER : seconds));
 
     [Fact]
     public async Task CanWriteSimpleSyncMessage()
@@ -168,7 +182,7 @@ public class BasicTests
         var invoker = channel.CreateCallInvoker();
 
         // we don't expect a reply
-        var oce = Assert.Throws<TaskCanceledException>(() => invoker.BlockingUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
+        var oce = Assert.Throws<OperationCanceledException>(() => invoker.BlockingUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!"));
         Assert.Equal(cts.Token, oce.CancellationToken);
         await Task.Delay(100);
@@ -177,10 +191,11 @@ public class BasicTests
 
         var hex = await GetHexAsync(server);
         Assert.Equal(
-            "02-00-00-00-00-00-13-00-" // unary, id 0/0, length 19
+            "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "04-03-00-00-01-00-0D-00-" // payload, final chunk, final element, id 0/1 length 13
-            + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21", hex); // "hello, world!"
+            + "03-00-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
+            + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21-"
+            + "04-00-00-00-02-00-00-80", hex); // trailer, 0/2, empty (final)
     }
 
     [Fact]
@@ -188,7 +203,7 @@ public class BasicTests
     {
         var server = new LiteServer(Logger);
         server.ManualBind<MyService>();
-        Assert.Equal(2, server.MethodCount);
+        Assert.Equal(4, server.MethodCount);
     }
 
     [Fact]

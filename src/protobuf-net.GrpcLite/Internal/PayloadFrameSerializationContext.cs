@@ -1,6 +1,8 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -8,27 +10,26 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 {
     private readonly List<Frame> _frames = new();
 
-    private IStream? _handler;
-    private FrameBufferManager? _bufferManager;
+    private IStream? _stream;
     private FrameHeader _template;
     private int _declaredPayloadLength, _totalLength;
+    private Frame.Builder _builder;
+
+    internal List<Frame> PendingFrames => _frames;
 
     public override string ToString()
         => $"{_totalLength} bytes, {_frames.Count} frames (total bytes: {_totalLength + _frames.Count * FrameHeader.Size})";
 
-    internal static PayloadFrameSerializationContext Get(IStream handler, FrameBufferManager bufferManager, ushort streamId, PayloadFlags flags)
+    internal static PayloadFrameSerializationContext Get(IStream stream, RefCountedMemoryPool<byte> pool, FrameKind kind, byte kindFlags)
     {
         var obj = Pool<PayloadFrameSerializationContext>.Get();
-        obj._handler = handler;
-        obj._bufferManager = bufferManager;
-        flags &= ~PayloadFlags.EndItem; // we'll be the judge of that, thanks
-        obj._template = new FrameHeader(FrameKind.Payload, (byte)flags, streamId, 0, 0);
+        obj._stream = stream;
+        obj._template = new FrameHeader(kind, kindFlags, stream.Id, 0, payloadLength: 0, isFinal: false);
         obj._declaredPayloadLength = -1;
         obj._totalLength = 0;
+        obj._builder = Frame.CreateBuilder(pool);
         return obj;
     }
-
-    private FrameBufferManager.Slab? _current;
 
     public override void Complete(byte[] payload)
     {
@@ -37,6 +38,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
         Complete();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override IBufferWriter<byte> GetBufferWriter() => this;
 
     public override void SetPayloadLength(int payloadLength) => _declaredPayloadLength = payloadLength;
@@ -45,11 +47,10 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
     {
         Logging.DebugWriteLine($"[serialize] complete; {_totalLength} committed (declared: {_declaredPayloadLength})");
         if (_declaredPayloadLength >= 0 && _declaredPayloadLength != _totalLength) ThrowLengthMismatch(_declaredPayloadLength, _totalLength);
-        // update our template to add the "we're done" flag
-        _template = new FrameHeader(_template, (byte)(_template.KindFlags | (byte)PayloadFlags.EndItem));
+
         // make sure we have a buffer (if we have an existing one, the 0 ensures we don't flush and get fresh
-        GetMemoryImpl(0);
-        Flush();
+        GetMemoryImpl(0, externalCaller: false);
+        Flush(true);
 
         static void ThrowLengthMismatch(int declared, int actual) => throw new InvalidOperationException(
             $"The length declared via {nameof(SetPayloadLength)} ({declared}) does not match the actual length written ({actual})");
@@ -64,10 +65,8 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
             frame.Release();
         }
         _frames.Clear();
-        _current?.Return();
-        _current = null;
-        _handler = null;
-        _bufferManager = null;
+        _stream = null;
+        _builder.Release();
         _template = default;
         Pool<PayloadFrameSerializationContext>.Put(this);
     }
@@ -77,56 +76,49 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
         if (count != 0) // some serializers call Advance(0) without ever calling GetMemory()/GetSpan(); ask me how I know
         {
             _totalLength += count;
-            Logging.DebugWriteLine($"[serialize] committed {count} for a total of {_totalLength}; {_current!.DebugSummarize(count)}: {_current!.DebugGetHex(count)}");
-            _current!.Advance(count);
+            Logging.DebugWriteLine($"[serialize] committed {count} for a total of {_totalLength}");
+            _builder.Advance(count);
         }
     }
 
     public Memory<byte> GetMemory(int sizeHint)
     {
-        var buffer = GetMemoryImpl(Math.Max(sizeHint, 8)); // always give external callers *at least something*
-        Logging.DebugWriteLine($"[serialize] requested {sizeHint}, provided {_current!.DebugSummarize(buffer)}");
+        var buffer = GetMemoryImpl(sizeHint, externalCaller: true);
+        Logging.DebugWriteLine($"[serialize] requested {sizeHint}, provided {buffer.Length}");
         return buffer;
     }
-    private Memory<byte> GetMemoryImpl(int minBytes)
-    {   // note that GetMemoryImpl allows a zero-length request that means "just make sure we have allocated a buffer"
-        var current = _current;
-        const int REASONABLE_MIN_LENGTH = 128;
-        Memory<byte> buffer;
-        if (current is not null)
+    private Memory<byte> GetMemoryImpl(int sizeHint, bool externalCaller)
+    {
+        if (externalCaller)
+        {
+            // the IBufferWriter API is a bit... woolly; we need to fudge things a bit, because: often
+            // they'll ask for something humble (or even -ve/zero), and hope for more; we need to facilitate that
+            const int REASONABLE_MIN_LENGTH = 128;
+            sizeHint = Math.Min(Math.Max(sizeHint, REASONABLE_MIN_LENGTH), FrameHeader.MaxPayloadLength);
+        }
+
+        if (_builder.InProgress)
         {
             // continue using the existing buffer if there's something useful there
-            buffer = current.ActiveBuffer;
-            if (buffer.Length >= Math.Max(minBytes, REASONABLE_MIN_LENGTH)) return buffer;
+            var buffer = _builder.GetBuffer();
+            if (buffer.Length >= sizeHint) return buffer;
 
-            // otherwise, give up; we'll create a new buffer
-            Flush();
+            // otherwise, we'll flush the existing, and use a new frame
+            Flush(false);
         }
-        _current = current = _bufferManager!.Rent(minBytes);
 
-        buffer = current.ActiveBuffer;
-        if (buffer.Length < Math.Max(minBytes, REASONABLE_MIN_LENGTH))
-        {
-            current.Return();
-            throw new InvalidOperationException($"Newnly rented slab is undersized at {buffer.Length} bytes");
-        }
-        Logging.DebugWriteLine($"[serialize] rented slab; header is [{_current.CurrentHeaderOffset}, {_current.CurrentHeaderOffset + FrameHeader.Size})");
-        return buffer;
+        Debug.Assert(!_builder.InProgress, "not expecting an in-progress state");
+        return _builder.NewFrame(_template, _stream!.NextSequenceId(), sizeHint: (ushort)sizeHint);
     }
 
-    void Flush()
+    void Flush(bool isFinal)
     {
-        var current = _current;
-        _current = null;
-        if (current is not null)
+        if (_builder.InProgress)
         {
-            var header = new FrameHeader(_template, _handler!.NextSequenceId());
-            var buffer = current.CreateFrameAndInvalidate(header, updateHeaderLength: true);
-            _frames.Add(buffer);
-            current.Return();
-            // if we're flushing, it is because *either* we don't have enought space left for additional data,
-            // *or* we're all done; either way: we're done with the existing buffer!
+            _frames.Add(_builder.CreateFrame(isFinal));
+            Debug.Assert(!_builder.InProgress, "not expecting an in-progress state");
         }
+        if (isFinal) _builder.Release(); // not expecting any more
     }
 
     Span<byte> IBufferWriter<byte>.GetSpan(int sizeHint) => GetMemory(sizeHint).Span;

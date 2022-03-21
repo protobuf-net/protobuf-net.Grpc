@@ -1,32 +1,13 @@
-﻿using ProtoBuf.Grpc.Lite.Internal;
-using System.Buffers.Binary;
+﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
-public readonly struct Frame
+public readonly partial struct Frame
 {
-    public static bool TryRead(in ReadOnlyMemory<byte> buffer, out Frame frame, out int bytesRead)
-    {
-        var bufferLength = buffer.Length;
-        if (bufferLength >= FrameHeader.Size)
-        {
-            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(FrameHeader.PayloadLengthOffset));
-            AssertValidLength(declaredLength);
-            bytesRead = FrameHeader.Size + declaredLength;
-            if (bufferLength >= bytesRead)
-            {
-                frame = new Frame(buffer.Slice(0, bytesRead), true);
-                return true;
-            }
-        }
-        bytesRead = 0;
-        frame = default;
-        return false;
-    }
-
     public override string ToString() => GetHeader().ToString();
 
     public override int GetHashCode() => GetHeader().GetHashCode();
@@ -34,24 +15,20 @@ public readonly struct Frame
     public override bool Equals([NotNullWhen(true)] object? obj)
         => obj is Frame other && GetHeader().Equals(other.GetHeader());
 
-    internal static void AssertValidLength(ushort length)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void AssertValidLength(ushort payloadLength)
     {
-        if (length > FrameHeader.MaxPayloadSize) ThrowOversized(length);
-        static void ThrowOversized(ushort length) => throw new InvalidOperationException($"The declared payload length {length} exceeds the permitted maxiumum length of {FrameHeader.MaxPayloadSize}");
+        if (payloadLength > FrameHeader.MaxPayloadLength) ThrowOversized(payloadLength);
+        static void ThrowOversized(ushort length) => throw new InvalidOperationException($"The declared payload length {length} exceeds the permitted maxiumum length of {FrameHeader.MaxPayloadLength}");
     }
-    public Frame(in ReadOnlyMemory<byte> buffer) : this(buffer, false) { }
-    internal Frame(in ReadOnlyMemory<byte> buffer, bool trusted)
+    public Frame(in ReadOnlyMemory<byte> buffer)
     {
-#if DEBUG
-        trusted = false; // always validate in debug
-#endif
-        if (!trusted)
-        {
-            if (buffer.Length < FrameHeader.Size) ThrowTooSmall();
-            var declaredLength = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Span.Slice(FrameHeader.PayloadLengthOffset));
-            AssertValidLength(declaredLength);
-            if (buffer.Length != FrameHeader.Size + declaredLength) ThrowLengthMismatch();
-        }
+        Debug.Assert(MemoryMarshal.TryGetMemoryManager(buffer, out RefCountedMemoryManager<byte> _), "should have ref-counted memory manager");
+        
+        if (buffer.Length < FrameHeader.Size) ThrowTooSmall();
+        var declaredLength = FrameHeader.GetPayloadLength(buffer.Span);
+        AssertValidLength(declaredLength);
+        if (buffer.Length != FrameHeader.Size + declaredLength) ThrowLengthMismatch();
         _buffer = buffer;
 
         static void ThrowTooSmall() => throw new ArgumentException($"The buffer must include at least {FrameHeader.Size} bytes for the frame header", nameof(buffer));
@@ -59,7 +36,11 @@ public readonly struct Frame
     }
 
     private readonly ReadOnlyMemory<byte> _buffer;
-    internal ReadOnlyMemory<byte> RawBuffer => _buffer;
+
+    /// <summary>
+    /// Gets the entire memory representation for this frame, <em>including the header</em>; to get the payload by itself, use <see cref="GetPayload"/>.
+    /// </summary>
+    public ReadOnlyMemory<byte> Memory => _buffer;
 
     /// <summary>
     /// The length of the frame inscluding the header
@@ -96,14 +77,14 @@ public readonly struct Frame
 
     public void Release()
     {
-        if (MemoryMarshal.TryGetMemoryManager<byte, FrameBufferManager.Slab>(_buffer, out var slab))
-            slab.RemoveReference();
+        if (MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(_buffer, out var manager))
+            manager.Dispose();
     }
 
     public void Preserve()
     {
-        if (MemoryMarshal.TryGetMemoryManager<byte, FrameBufferManager.Slab>(_buffer, out var slab))
-            slab.AddReference();
+        if (MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(_buffer, out var manager))
+            manager.Preserve();
     }
 
     internal string GetPayloadString(Encoding? encoding = null)

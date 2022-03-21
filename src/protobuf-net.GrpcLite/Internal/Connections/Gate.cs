@@ -1,7 +1,7 @@
 ﻿using ProtoBuf.Grpc.Lite.Connections;
 using System.Threading.Channels;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
 internal abstract class Gate : IFrameConnection
 {

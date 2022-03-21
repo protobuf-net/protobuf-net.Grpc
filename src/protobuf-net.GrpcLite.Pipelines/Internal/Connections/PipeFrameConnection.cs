@@ -2,8 +2,9 @@
 using ProtoBuf.Grpc.Lite.Connections;
 using System.IO.Pipelines;
 using System.Buffers;
+using System.Diagnostics;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
 internal sealed class PipeFrameConnection : IRawFrameConnection
 {
@@ -35,49 +36,56 @@ internal sealed class PipeFrameConnection : IRawFrameConnection
 
     async IAsyncEnumerator<Frame> IAsyncEnumerable<Frame>.GetAsyncEnumerator(CancellationToken cancellationToken)
     {
+        _logger.Debug(this, static (state, _) => $"pipe reader starting");
+        var builder = Frame.CreateBuilder();
         try
         {
-            _logger.Debug(this, static (state, _) => $"pipe reader starting");
-            int requestNextTime = FrameHeader.Size;
             while (!cancellationToken.IsCancellationRequested)
             {
-                _logger.Debug(requestNextTime, static (state, _) => $"pipe reader requesting {state} bytes...");
-                var result = await _pipe.Input.ReadAtLeastAsync(requestNextTime, cancellationToken);
-
-                var buffer = result.Buffer;
-                if (result.IsCanceled) ThrowCancelled(cancellationToken);
-                if (buffer.Length < FrameHeader.Size && result.IsCompleted)
+                ReadResult result;
+                try
                 {
-                    if (buffer.IsEmpty) yield break; // natural EOF
-                    ThrowEOF();
+                    _logger.Debug(builder.RequestBytes, static (state, _) => $"pipe reader requesting {state} bytes...");
+                    result = await _pipe.Input.ReadAtLeastAsync(builder.RequestBytes, cancellationToken);
+
+                    if (result.IsCanceled) ThrowCancelled(cancellationToken);
                 }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex);
+                    throw;
+                }
+                var buffer = result.Buffer;
                 _logger.Debug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing...");
-                bool readFrame = true;
+                bool readFrame;
                 do
                 {
                     Frame frame;
                     try
-                    {   // some code gynmastics here so we can get exception logging 
-                        readFrame = TryReadFrame(ref buffer, out frame, out requestNextTime);
+                    {
+                        readFrame = builder.TryRead(ref buffer, out frame);
                     }
                     catch (Exception ex)
                     {
                         _logger.Error(ex);
-                        Close(ex);
                         throw;
                     }
-                    if (readFrame)
-                    {
-                        _logger.Debug(frame, (state, _) => $"yielding {state}...");
-                        yield return frame;
-                    }
-                } while (readFrame);
+                    yield return frame; // a lot of mess above simply because we can't 'yield' inside a 'try' with a 'catch'
+                }
+                while (readFrame);
 
                 _pipe.Input.AdvanceTo(buffer.Start, buffer.End);
+                Debug.Assert(buffer.IsEmpty, "we expect to consume the entire buffer"); // because we can't trust the pipe's allocator :(
+                if (result.IsCompleted)
+                {
+                    if (builder.InProgress) ThrowEOF();
+                    break; // exit main while
+                }
             }
         }
         finally
         {
+            builder.Release();
             _logger.Debug(this, static (state, _) => $"pipe reader exiting");
             Close();
         }
@@ -85,86 +93,16 @@ internal sealed class PipeFrameConnection : IRawFrameConnection
         static void ThrowEOF() => throw new EndOfStreamException();
     }
 
-    private bool TryReadFrame(ref ReadOnlySequence<byte> buffer, out Frame frame, out int requestNextTime)
-    {
-        FrameBufferManager.Slab? slab = null;
-        try
-        {
-            FrameHeader header;
-            if (!(TryReadHeader(buffer.First.Span, out header) || TryReadHeader(in buffer, out header)))
-            {
-                frame = default;
-                requestNextTime = FrameHeader.Size;
-                return false;
-            }
-            Frame.AssertValidLength(header.PayloadLength);
-            var totalLength = FrameHeader.Size + header.PayloadLength;
-            if (buffer.Length < totalLength)
-            {
-                frame = default;
-                requestNextTime = totalLength;
-                return false;
-            }
-            // rent a buffer and get the right-sized chunk
-            slab = FrameBufferManager.Shared.Rent(header.PayloadLength);
-            var payload = slab.ActiveBuffer.Slice(0, header.PayloadLength);
-
-            if (header.PayloadLength != 0)
-            {
-                // copy the payload portion of the data
-                buffer.Slice(start: FrameHeader.Size, length: header.PayloadLength).CopyTo(payload.Span);
-                slab.Advance(header.PayloadLength);
-            }
-            frame = slab.CreateFrameAndInvalidate(header, updateHeaderLength: false);
-            buffer = buffer.Slice(start: totalLength);
-            requestNextTime = FrameHeader.Size;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex);
-            throw;
-        }
-        finally
-        {
-            slab?.Return();
-        }
-
-    }
-
-    static bool TryReadHeader(ReadOnlySpan<byte> span, out FrameHeader header)
-    {
-        if (span.Length >= FrameHeader.Size)
-        {
-            header = FrameHeader.ReadUnsafe(in span[0]);
-            return true;
-        }
-        header = default;
-        return false;
-    }
-    static bool TryReadHeader(in ReadOnlySequence<byte> buffer, out FrameHeader header)
-    {
-        if (buffer.Length >= FrameHeader.Size)
-        {
-            Span<byte> span = stackalloc byte[FrameHeader.Size];
-            buffer.Slice(0, 8).CopyTo(span);
-            header = FrameHeader.ReadUnsafe(in span[0]);
-            return true;
-        }
-        header = default;
-        return false;
-    }
-
     private const int AUTO_FLUSH_EVERY_BYTES = 8 * 1024;
     private ValueTask WriteCoreAsync(Frame frame, CancellationToken cancellationToken)
     {
         var length = frame.TotalLength;
         _logger.Debug(length, static (state, _) => $"pipe writer writing {state} ({state} bytes, releasing)...");
-        _pipe.Output.Write(frame.RawBuffer.Span);
+        _pipe.Output.Write(frame.Memory.Span);
         frame.Release();
 
         _outstandingBytes += length;
-        
+
         return _outstandingBytes < AUTO_FLUSH_EVERY_BYTES ? default : FlushAsync(cancellationToken);
     }
 
@@ -172,7 +110,7 @@ internal sealed class PipeFrameConnection : IRawFrameConnection
     {
         var length = frames.Length;
         if (length == 0) return default;
-        
+
         _logger.Debug(length, static (state, _) => $"pipe writer writing {state} ({state} bytes)...");
         _pipe.Output.Write(frames.Span);
 

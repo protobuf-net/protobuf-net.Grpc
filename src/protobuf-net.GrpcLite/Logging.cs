@@ -2,25 +2,35 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite;
 
-internal static class Logging
+internal enum LogKind
 {
-    [Conditional("DEBUG")]
-    public static void SetSource(object source) => SetSource(source?.ToString());
+    None,
+    Client,
+    Server,
+}
 
+public static class Logging
+{
+    
     [Conditional("DEBUG")]
-    public static void SetSource(string? source)
+    internal static void SetSource(this ILogger? logger, LogKind kind, string? source)
     {
 #if DEBUG
-        s_source.Value = string.IsNullOrWhiteSpace(source) ? "" : source.Trim();
+        s_source.Value = string.IsNullOrWhiteSpace(source) ? "" : (kind switch
+        {
+            LogKind.Client => ClientPrefix,
+            LogKind.Server => ServerPrefix,
+            _ => "",
+        } + source.Trim());
 #endif
     }
 #if DEBUG
     private static AsyncLocal<string> s_source = new();
-    public static string? Source => s_source.Value;
+    private static string? Source => s_source.Value;
 
-    public const string ClientPrefix = "C:", ServerPrefix = "S:";
+    private const string ClientPrefix = "C:", ServerPrefix = "S:";
 #else
     public static string Source => "";
 #endif
@@ -74,7 +84,7 @@ internal static class Logging
         => logger?.LogWithPrefix<TState>(LogLevel.Information, state, exception, formatter);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining), Obsolete("needs implementation", error: false)]
-    public static void ThrowNotImplemented(this ILogger? logger, [CallerMemberName] string caller = "")
+    internal static void ThrowNotImplemented(this ILogger? logger, [CallerMemberName] string caller = "")
     {
         logger.Critical(caller, static (state, _) => $"{state} is not implemented");
         throw new NotImplementedException();

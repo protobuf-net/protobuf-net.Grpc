@@ -1,7 +1,7 @@
 ﻿using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
 
-namespace ProtoBuf.Grpc.Lite.Internal
+namespace ProtoBuf.Grpc.Lite.Internal.Connections
 {
     internal sealed class FrameSequenceSegment : ReadOnlySequenceSegment<byte>
     {

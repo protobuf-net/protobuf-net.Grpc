@@ -151,6 +151,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.GrpcLite", "sr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "protobuf-net.GrpcLite.Test", "tests\protobuf-net.GrpcLite.Test\protobuf-net.GrpcLite.Test.csproj", "{3C3B889B-1463-4948-9BC8-610FCFB62DA6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "protobuf-net.GrpcLite.Pipelines", "src\protobuf-net.GrpcLite.Pipelines\protobuf-net.GrpcLite.Pipelines.csproj", "{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -416,6 +418,12 @@ Global
 		{3C3B889B-1463-4948-9BC8-610FCFB62DA6}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3C3B889B-1463-4948-9BC8-610FCFB62DA6}.VS|Any CPU.ActiveCfg = Debug|Any CPU
 		{3C3B889B-1463-4948-9BC8-610FCFB62DA6}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D}.VS|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -478,6 +486,7 @@ Global
 		{80479131-FE55-473E-AE68-55601AD96668} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
 		{D6786AC8-1DEE-46BF-98AD-5B0A8F2179A5} = {3E0CF81A-BA7A-4AAB-B46D-5AC8E22B0644}
 		{3C3B889B-1463-4948-9BC8-610FCFB62DA6} = {0A84599D-2CE9-416E-888F-24652EEAB0B3}
+		{7AF3BF8A-5C85-45DE-8AF5-14BA84D3EE9D} = {3E0CF81A-BA7A-4AAB-B46D-5AC8E22B0644}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA14B07C-CA29-430D-A600-F37A050636D3}

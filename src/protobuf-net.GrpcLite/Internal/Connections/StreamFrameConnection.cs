@@ -3,7 +3,7 @@ using ProtoBuf.Grpc.Lite.Connections;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks.Sources;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
 internal sealed class StreamFrameConnection : IRawFrameConnection, IValueTaskSource
 {
@@ -31,7 +31,7 @@ internal sealed class StreamFrameConnection : IRawFrameConnection, IValueTaskSou
             _pendingWrite = default;
             try
             {
-                _logger.Debug(frame, (state, _) => $"write complete (async, releasing {state.TotalLength} bytes)");
+                _logger.Debug(frame, static (state, _) => $"write complete (async, releasing {state.TotalLength} bytes)");
                 frame.Release();
                 pending.GetResult();
                 _vts.SetResult(true);
@@ -56,78 +56,45 @@ internal sealed class StreamFrameConnection : IRawFrameConnection, IValueTaskSou
 
     public async IAsyncEnumerator<Frame> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        byte[] headerBuffer = new byte[FrameHeader.Size];
-        while (!cancellationToken.IsCancellationRequested)
+        var builder = Frame.CreateBuilder();
+        try
         {
-            int remaining = FrameHeader.Size, offset = 0, bytesRead;
-            _logger.Debug(true, (state, _) => $"reading next header...");
-            try
+            int bytesRead;
+            _logger.Debug(builder.GetBuffer(), static (state, _) => $"reading up-to {state.Length} bytes from stream...");
+            while (!cancellationToken.IsCancellationRequested & (bytesRead = await _duplex.ReadAsync(builder.GetBuffer(), cancellationToken)) > 0)
             {
-                while (remaining > 0 && (bytesRead = await _duplex.ReadAsync(headerBuffer, offset, remaining, cancellationToken)) > 0)
+                _logger.Debug(bytesRead, static (state, _) => $"read {state} bytes from stream; parsing...");
+                while (builder.TryRead(ref bytesRead, out var frame))
                 {
-                    remaining -= bytesRead;
-                    offset += bytesRead;
+                    _logger.Debug((frame, bytesRead), static (state, _) => $"parsed {state.frame}; {state.bytesRead} remaining");
+                    yield return frame;
                 }
-
-                if (remaining == FrameHeader.Size) yield break; // clean EOF
-                if (remaining != 0) ThrowEOF();
             }
-            catch (Exception ex)
+            if (!cancellationToken.IsCancellationRequested)
             {
-                _logger.Error(ex);
-                throw;
+                if (builder.InProgress) ThrowEOF(); // incomplete frame detected
+                static void ThrowEOF() => throw new EndOfStreamException();
             }
-
-            var header = FrameHeader.ReadUnsafe(in headerBuffer[0]);
-            _logger.Debug(header, (state, _) => $"reading {state}...");
-
-            // note we rent a new buffer even for zero-length payloads, so we can return a frame based on that segment
-            Frame.AssertValidLength(header.PayloadLength);
-            var slab = FrameBufferManager.Shared.Rent(header.PayloadLength);
-            Frame frame;
-            try
-            {
-                if (header.PayloadLength != 0)
-                {
-                    var payload = slab.ActiveBuffer.Slice(0, header.PayloadLength);
-                    while (!payload.IsEmpty && (bytesRead = await _duplex.ReadAsync(payload, cancellationToken)) > 0)
-                    {
-                        payload = payload.Slice(bytesRead);
-                    }
-                    if (!payload.IsEmpty) ThrowEOF();
-                    slab.Advance(header.PayloadLength);
-                }
-                frame = slab.CreateFrameAndInvalidate(header, updateHeaderLength: false);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex);
-                throw;
-            }
-            finally
-            {
-                slab?.Return();
-            }
-            _logger.Debug(frame, (state, _) => $"yielding {state}...");
-            yield return frame;
         }
-        _logger.Debug(cancellationToken.IsCancellationRequested, static (state, _) => $"stream-frame connection exiting cleanly; cancelled: {state}");
-        static void ThrowEOF() => throw new EndOfStreamException();
+        finally
+        {
+            builder.Release();
+        }
     }
 
     public ValueTask WriteAsync(ReadOnlyMemory<byte> frames, CancellationToken cancellationToken)
     {
-        _logger.Debug(frames, (state, _) => $"writing {state}, {state.Length} bytes...");
+        _logger.Debug(frames, static (state, _) => $"writing {state}, {state.Length} bytes...");
         return _duplex.WriteAsync(frames, cancellationToken);
     }
 
     public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
     {
-        _logger.Debug(frame, (state, _) => $"writing {state}, {state.TotalLength} bytes...");
-        var pending = _duplex.WriteAsync(frame.RawBuffer, cancellationToken);
+        _logger.Debug(frame, static (state, _) => $"writing {state}, {state.TotalLength} bytes...");
+        var pending = _duplex.WriteAsync(frame.Memory, cancellationToken);
         if (pending.IsCompleted)
         {
-            _logger.Debug(frame, (state, _) => $"write complete (sync, releasing {state.TotalLength} bytes)");
+            _logger.Debug(frame, static (state, _) => $"write complete (sync, releasing {state.TotalLength} bytes)");
             frame.Release();
             return pending;
         }

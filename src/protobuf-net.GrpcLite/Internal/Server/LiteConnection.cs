@@ -17,6 +17,8 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
 
         void IStreamOwner.Remove(ushort id) => _streams.Remove(id, out _);
 
+        CancellationToken IStreamOwner.Shutdown => _server.ServerShutdown;
+
         // will be null if not started
         public Task? Complete { get; private set; }
 
@@ -30,7 +32,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
         {
             _connection = connection;
             _logger = logger ?? server.Logger;
-            Id = server.NextId();
+            Id = server.NextStreamId();
             _server = server;
 
             _logger.Debug(Id, static (state, _) => $"connection {state} initialized");
@@ -38,7 +40,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
 
         public void Execute()
         {
-            Logging.SetSource(Logging.ServerPrefix + "connection " + Id);
+            _logger.SetSource(LogKind.Server, "connection " + Id);
             _logger.Debug("starting connection executor");
             Complete ??= this.RunAsync(_logger, _server.ServerShutdown);
         }
@@ -47,7 +49,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
         {
             if (_server.TryGetHandler(initialize.GetPayloadString(), out var serverHandler))
             {
-                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger, this, _server.ServerShutdown);
+                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger, this);
                 handler = serverHandler;
                 return handler is not null;
             }

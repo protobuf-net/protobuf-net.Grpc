@@ -20,13 +20,15 @@ public interface IRawFrameConnection : IFrameConnection
 
 public static class FrameConnectionExtensions
 {
+    [Obsolete("this is not the way")]
     public static ValueTask WriteAsync(this IFrameConnection connection, FrameHeader frame, CancellationToken cancellationToken = default)
     {
         try
         {
+            if (!frame.IsFinal || frame.PayloadLength != 0) throw new InvalidOperationException("Payload should be empty and the frame should be final");
             var oversized = ArrayPool<byte>.Shared.Rent(FrameHeader.Size);
             frame.UnsafeWrite(ref oversized[0]);
-            var fullFrame = new Frame(new ReadOnlyMemory<byte>(oversized, 0, FrameHeader.Size)); // note that this will check the payload length is correct (i.e. zero)
+            var fullFrame = new Frame(new ReadOnlyMemory<byte>(oversized, 0, FrameHeader.Size));
             var pending = connection.WriteAsync(fullFrame, cancellationToken);
             if (pending.IsCompleted)
             {

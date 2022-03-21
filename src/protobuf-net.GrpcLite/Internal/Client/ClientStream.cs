@@ -11,7 +11,6 @@ internal interface IClientStream : IStream, IDisposable
 
     Status Status { get; }
     Metadata Trailers();
-    void Cancel();
 }
 
 internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientStream where TRequest : class where TResponse : class
@@ -24,8 +23,6 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
 
     }
     protected sealed override bool IsClient => true;
-
-    CancellationTokenRegistration _ctr;
 
     private WriteOptions? _writeOptions;
     WriteOptions IAsyncStreamWriter<TRequest>.WriteOptions
@@ -40,8 +37,7 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
         return Task.CompletedTask;
     }
 
-    Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message)
-        => SendAsync(message, PayloadFlags.None, default).AsTask();
+    Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message) => SendAsync(message).AsTask();
 
 
     public Task<Metadata> ResponseHeadersAsync
@@ -59,33 +55,10 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
     protected override Func<DeserializationContext, TResponse> Deserializer => TypedMethod.ResponseMarshaller.ContextualDeserializer;
     private Method<TRequest, TResponse> TypedMethod => Unsafe.As<Method<TRequest, TResponse>>(Method);
 
-    private void Register(CancellationToken cancellationToken)
-    {
-        _writeOptions = WriteOptions.Default;
-        if (cancellationToken.CanBeCanceled)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _ctr = cancellationToken.Register(static state => ((IClientStream)state!).Cancel(), this);
-        }
-    }
 
     public Metadata Trailers()
     {
         Logger.ThrowNotImplemented();
         return Metadata.Empty;
-    }
-
-    public void UnregisterCancellation()
-    {
-        var tmp = _ctr;
-        _ctr = default;
-        tmp.Dispose();
-    }
-
-    void IClientStream.Cancel() => Cancel(_ctr.Token);
-
-    public void Cancel(CancellationToken cancellationToken)
-    {
-        Logger.ThrowNotImplemented();
     }
 }

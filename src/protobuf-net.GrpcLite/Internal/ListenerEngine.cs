@@ -33,11 +33,10 @@ internal static class ListenerEngine
                 {
                     case FrameKind.CloseConnection:
                     case FrameKind.Ping:
-                        var generalFlags = (GeneralFlags)header.KindFlags;
-                        if ((generalFlags & GeneralFlags.IsResponse) == 0)
+                        if (header.IsClientStream != listener.IsClient)
                         {
-                            // if this was a request, we reply in kind, but noting that it is a response
-                            await listener.Connection.WriteAsync(new FrameHeader(header.Kind, (byte)GeneralFlags.IsResponse, header.StreamId, header.SequenceId), cancellationToken);
+                            // the other end is initiating; acknowledge with an empty but similar frame
+                            await listener.Connection.WriteAsync(new FrameHeader(header.Kind, 0, header.StreamId, header.SequenceId), cancellationToken);
                         }
                         // shutdown if requested
                         if (header.Kind == FrameKind.CloseConnection)
@@ -45,7 +44,7 @@ internal static class ListenerEngine
                             listener.Connection.Close();
                         }
                         break;
-                    case FrameKind.NewStream:
+                    case FrameKind.Header when header.IsClientStream != listener.IsClient: // a header with the "other" stream marker means
                         if (listener.Streams.ContainsKey(header.StreamId))
                         {
                             logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
@@ -84,6 +83,12 @@ internal static class ListenerEngine
                             {
                                 logger.Information(frame, static (state, _) => $"frame {state} rejected by handler");
                             }
+
+                            if (header.Kind == FrameKind.Trailer && header.IsFinal)
+                            {
+                                logger.Information(header, static (state, _) => $"removing stream {state}");
+                                listener.Streams.Remove(header.StreamId, out _);
+                            }
                         }
                         else
                         {
@@ -93,7 +98,7 @@ internal static class ListenerEngine
                 }
                 if (release)
                 {
-                    logger.Information(frame.TotalLength, static (state, _) => $"releasing {state} bytes");
+                    logger.Debug(frame.TotalLength, static (state, _) => $"releasing {state} bytes");
                     frame.Release();
                 }
             }

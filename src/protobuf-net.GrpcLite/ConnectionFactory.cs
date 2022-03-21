@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System.IO.Compression;
 using System.IO.Pipes;
 using System.Net.Security;
@@ -161,23 +162,6 @@ public static class ConnectionFactory
         CancellationToken cancellationToken = default)
         => factory.WithFrameBuffer(0, 0).CreateChannelAsync();
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> WithPipelines(
-        this Func<CancellationToken, ValueTask<ConnectionState<System.IO.Pipelines.IDuplexPipe>>> factory) => async cancellationToken =>
-        {
-            var source = await factory(cancellationToken);
-            try
-            {
-                IFrameConnection pipe = new PipeFrameConnection(source.Value, source.Logger);
-                return source.ChangeType<IFrameConnection>(pipe);
-            }
-            catch(Exception ex)
-            {
-                try { await source.Value.Input.CompleteAsync(ex); } catch { }
-                try { await source.Value.Output.CompleteAsync(ex); } catch { }
-                throw;
-            }
-        };
-
     private static async ValueTask<LiteChannel> CreateChannel(ValueTask<ConnectionState<IFrameConnection>> pending)
     {
         var source = await pending;
@@ -222,7 +206,7 @@ public sealed class ConnectionState<T>
 
     public ILogger? Logger { get; set; }
 
-    internal ConnectionState<TTarget> ChangeType<TTarget>(TTarget connection)
+    public ConnectionState<TTarget> ChangeType<TTarget>(TTarget connection)
         => new ConnectionState<TTarget>(connection, Name)
         {
             Logger = Logger

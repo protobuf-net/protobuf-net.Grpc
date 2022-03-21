@@ -1,6 +1,6 @@
 ﻿using ProtoBuf.Grpc.Lite.Connections;
 
-namespace ProtoBuf.Grpc.Lite.Internal;
+namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
 
 internal sealed class SynchronizedGate : Gate

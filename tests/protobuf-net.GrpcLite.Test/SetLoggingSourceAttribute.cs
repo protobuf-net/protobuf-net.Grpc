@@ -1,4 +1,5 @@
-﻿using ProtoBuf.Grpc.Lite.Internal;
+﻿using ProtoBuf.Grpc.Lite;
+using ProtoBuf.Grpc.Lite.Internal;
 using System;
 using System.Reflection;
 using Xunit.Sdk;
@@ -9,5 +10,5 @@ namespace protobuf_net.GrpcLite.Test;
 internal sealed class SetLoggingSourceAttribute : BeforeAfterTestAttribute
 {
     public override void Before(MethodInfo methodUnderTest)
-        => Logging.SetSource(Logging.ClientPrefix + "test " + methodUnderTest.Name);
+        => Logging.SetSource(null, LogKind.Client, "test " + methodUnderTest.Name);
 }

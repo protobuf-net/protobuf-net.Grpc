@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
+using ProtoBuf.Grpc.Lite.Internal.Connections;
 using ProtoBuf.Grpc.Lite.Internal.Server;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
@@ -17,7 +18,7 @@ namespace ProtoBuf.Grpc.Lite
         internal readonly ILogger? Logger;
 
         private int id = -1;
-        internal int NextId() => Interlocked.Increment(ref id);
+        internal int NextStreamId() => Interlocked.Increment(ref id);
 
         internal CancellationToken ServerShutdown => _serverShutdown.Token;
 
@@ -42,7 +43,7 @@ namespace ProtoBuf.Grpc.Lite
 
         private async Task ListenAsyncCore(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
         {
-            Logging.SetSource(Logging.ServerPrefix + "listener");
+            Logger.SetSource(LogKind.Server, "listener");
             Logger.Debug("starting listener (accepts incoming connections)");
             try
             {
@@ -95,13 +96,13 @@ namespace ProtoBuf.Grpc.Lite
 
         public int MethodCount => _handlers.Count;
 
-        private readonly ConcurrentDictionary<string, Func<IServerHandler>> _handlers = new ConcurrentDictionary<string, Func<IServerHandler>>();
-        internal void AddHandler(string fullName, Func<IServerHandler> handlerFactory)
+        private readonly ConcurrentDictionary<string, Func<IServerStream>> _handlers = new ConcurrentDictionary<string, Func<IServerStream>>();
+        internal void AddHandler(string fullName, Func<IServerStream> handlerFactory)
         {
             if (!_handlers.TryAdd(fullName, handlerFactory)) ThrowDuplicate(fullName);
             static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
         }
-        internal bool TryGetHandler(string fullName, [MaybeNullWhen(false)] out IServerHandler handler)
+        internal bool TryGetHandler(string fullName, [MaybeNullWhen(false)] out IServerStream handler)
         {
             handler = _handlers.TryGetValue(fullName, out var factory) ? factory?.Invoke() : null;
             return handler is not null;

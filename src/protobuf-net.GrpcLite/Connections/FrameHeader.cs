@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -8,8 +9,9 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
 {
     public const int Size = sizeof(ulong); // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
-    internal const int PayloadLengthOffset = 6;
-    public const ushort MaxPayloadSize = ushort.MaxValue - Size; // so that header+payload fit in 64k
+    private const int PayloadLengthOffset = 6;
+    public const ushort MaxPayloadLength = (ushort.MaxValue >> 1) - Size; // so that header+payload fit in 32k
+    internal const ushort MSB = 1 << 15;
 
     internal void UnsafeWrite(ref byte destination)
     {
@@ -41,7 +43,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [FieldOffset(0)]
     private readonly ulong RawValue;
 
-    public FrameHeader(FrameKind kind, byte kindFlags, ushort streamId, ushort sequenceId, ushort length = 0)
+    public FrameHeader(FrameKind kind, byte kindFlags, ushort streamId, ushort sequenceId, ushort payloadLength = 0, bool isFinal = true)
     {
 #if NET5_0_OR_GREATER
         Unsafe.SkipInit(out this);
@@ -52,7 +54,10 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         KindFlags = kindFlags;
         StreamId = streamId;
         SequenceId = sequenceId;
-        PayloadLength = length;
+        if (payloadLength > MaxPayloadLength) Throw(); // also enforces MSB not set
+        _payloadLengthAndFinal = isFinal ? (ushort)(payloadLength | MSB) : payloadLength;
+
+        static void Throw() => throw new ArgumentOutOfRangeException(nameof(payloadLength));
     }
 
     [field: FieldOffset(0)]
@@ -64,12 +69,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     {
         this = template;
         SequenceId = sequenceId;
-    }
-
-    public FrameHeader(in FrameHeader template, byte kindFlags)
-    {
-        this = template;
-        KindFlags = kindFlags;
+        _payloadLengthAndFinal = 0;
     }
 
     [field: FieldOffset(1)]
@@ -77,6 +77,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [field: FieldOffset(2)]
     public ushort StreamId { get; }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] // mostly useful for little-endian mode
     internal static FrameHeader ReadUnsafe(in byte source)
     {
         if (BitConverter.IsLittleEndian)
@@ -94,7 +95,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
                         kindFlags: ptr[1],
                         streamId: (ushort)(ptr[2] | (ptr[3] << 8)),
                         sequenceId: (ushort)(ptr[4] | (ptr[5] << 8)),
-                        length: (ushort)(ptr[6] | (ptr[7] << 8))
+                        payloadLength: (ushort)(ptr[6] | (ptr[7] << 8))
                     );
                 }
             }
@@ -104,30 +105,41 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [field: FieldOffset(4)]
     public ushort SequenceId { get; }
     [field: FieldOffset(6)]
-    public ushort PayloadLength { get; }
-
-    private string FormattedFlags
+    private readonly ushort _payloadLengthAndFinal;
+    public ushort PayloadLength
     {
-        get
-        {
-            switch (Kind)
-            {
-                case FrameKind.Ping:
-                case FrameKind.CloseConnection:
-                    return ((GeneralFlags)KindFlags).ToString();
-                case FrameKind.Payload:
-                case FrameKind.Header:
-                case FrameKind.Trailer:
-                case FrameKind.Status:
-                    return ((PayloadFlags)KindFlags).ToString();
-                default:
-                    return KindFlags.ToString();
-            }
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (ushort)(_payloadLengthAndFinal & ~MSB);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ushort GetPayloadLength(ReadOnlySpan<byte> header)
+        => (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(PayloadLengthOffset)) & ~MSB);
+
+    internal static void SetPayloadLength(Span<byte> header, ushort payloadLength) // WARNING: wipes "final"
+    {
+        Frame.AssertValidLength(payloadLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.Slice(PayloadLengthOffset), payloadLength);
+    }
+
+    internal static void SetFinal(Span<byte> header)
+        => header[PayloadLengthOffset + 1] |= 0x80; // + 1 because little-endian, so MSB is in second octet
+
+    public bool IsFinal
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (_payloadLengthAndFinal & MSB) != 0;
+    }
+
+    public bool IsClientStream
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (StreamId & MSB) == 0;
+    }
+    
+
     /// <inheritdoc>
-    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}],{PayloadLength}; {FormattedFlags}";
+    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}], {PayloadLength} bytes (final: {IsFinal}, flags: {KindFlags})";
 
     /// <inheritdoc>
     public override int GetHashCode() => RawValue.GetHashCode();

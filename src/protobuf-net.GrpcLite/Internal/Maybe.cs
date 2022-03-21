@@ -7,6 +7,8 @@ internal readonly struct Maybe<T>
         HasValue = true;
         Value = value;
     }
+
+    public static Maybe<T> NoValue => default;
     public bool HasValue { get; }
     public T Value { get; }
 
