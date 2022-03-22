@@ -3,13 +3,15 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
-internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker, IStreamOwner
+internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 {
     private readonly ILogger? _logger;
     private readonly IFrameConnection _connection;
+    private readonly ChannelWriter<Frame> _output;
     private readonly string _target;
     private readonly CancellationTokenSource _clientShutdown = new();
     private readonly ConcurrentDictionary<ushort, IStream> _streams = new();
@@ -18,14 +20,14 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker, IStream
 
     private int _nextId = ushort.MaxValue; // so that our first id is zero
 
-    void IStreamOwner.Remove(ushort id) => _streams.Remove(id, out _);
+    void IConnection.Remove(ushort id) => _streams.Remove(id, out _);
 
-    CancellationToken IStreamOwner.Shutdown => _clientShutdown.Token;
+    CancellationToken IConnection.Shutdown => _clientShutdown.Token;
 
     private ClientStream<TRequest, TResponse> AddClientStream<TRequest, TResponse>(Method<TRequest, TResponse> method, in CallOptions options)
         where TRequest : class where TResponse : class
     {
-        var stream = new ClientStream<TRequest, TResponse>(method, _connection, _logger, this);
+        var stream = new ClientStream<TRequest, TResponse>(method, _output, _logger, this);
         for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
         {
             // MSB bit is always off for clients (and call-invoker is always a client)
@@ -53,7 +55,10 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker, IStream
         this._target = target;
         this._connection = connection;
         this._logger = logger;
+        _ = connection.StartWriterAsync(out _output, _clientShutdown.Token);
     }
+
+    ChannelWriter<Frame> IConnection.Output => _output;
 
     public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
         => SimpleUnary(method, host, options, request).GetAwaiter().GetResult();
@@ -72,11 +77,11 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker, IStream
     static readonly Func<object, Metadata> s_getTrailers = static state => ((IClientStream)state).Trailers();
     static readonly Action<object> s_dispose = static state => ((IClientStream)state).Dispose();
 
-    bool IListener.IsClient => true;
+    bool IConnection.IsClient => true;
 
-    IFrameConnection IListener.Connection => _connection;
+    IAsyncEnumerable<Frame> IConnection.Input => _connection;
 
-    ConcurrentDictionary<ushort, IStream> IListener.Streams => _streams;
+    ConcurrentDictionary<ushort, IStream> IConnection.Streams => _streams;
 
     public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
     {
@@ -108,7 +113,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IListener, IWorker, IStream
         return new AsyncServerStreamingCall<TResponse>(stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
-    bool IListener.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
+    bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
     {
         // not accepting server-initialized streams
         handler = null;

@@ -7,15 +7,16 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Channels;
 using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-interface IStreamOwner
-{
-    void Remove(ushort id);
-    CancellationToken Shutdown { get; }
-}
+//interface IStreamOwner
+//{
+//    void Remove(ushort id);
+//    CancellationToken Shutdown { get; }
+//}
 interface IStream
 {
     ushort Id { get; }
@@ -85,7 +86,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    protected LiteStream(IMethod method, IFrameConnection output, IStreamOwner? owner)
+    protected LiteStream(IMethod method, ChannelWriter<Frame> output, IConnection? owner)
     {
         Method = method;
         _output = output;
@@ -95,17 +96,17 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         _owner = owner;
         _workerStateNeedsSync = IsClient ? WorkerState.Active : WorkerState.NotStarted; // for clients, the caller is the initial executor
     }
-    IStreamOwner? _owner;
-    protected void SetOwner(IStreamOwner? owner) => _owner = owner;
+    IConnection? _owner;
+    protected void SetOwner(IConnection? owner) => _owner = owner;
 
     string IStream.Method => Method!.FullName;
     protected RefCountedMemoryPool<byte> MemoryPool => RefCountedMemoryPool<byte>.Shared;
 
     private ushort _streamId;
     public ILogger? Logger { get; set; }
-    protected void SetOutput(IFrameConnection output)
+    protected void SetOutput(ChannelWriter<Frame> output)
         => _output = output;
-    IFrameConnection _output;
+    ChannelWriter<Frame> _output;
 
     // IMPORTANT: state and backlog changes should be synchronized
     private Queue<Frame>? _backlogFrames;
@@ -658,7 +659,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     protected IMethod Method { get; }
 
-    protected IFrameConnection Output => _output;
+    protected ChannelWriter<Frame> Output => _output;
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
 

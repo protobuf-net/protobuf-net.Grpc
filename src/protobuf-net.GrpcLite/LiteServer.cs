@@ -38,8 +38,8 @@ namespace ProtoBuf.Grpc.Lite
         public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
             => Task.Run(() => ListenAsyncCore(listener));
 
-        internal void ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory)
-            => ListenAsync(factory.WithFrameBuffer(0, 0));
+        public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<Stream>>> listener)
+            => ListenAsync(listener.AsFrames());
 
         private async Task ListenAsyncCore(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
         {
@@ -58,7 +58,7 @@ namespace ProtoBuf.Grpc.Lite
                     }
 
                     Logger.Information(connection, static (state, _) => $"established connection {state.Name}");
-                    var server = new LiteConnection(this, connection.Value.WithThreadSafeWrite(), connection.Logger);
+                    var server = new LiteConnection(this, connection.Value, connection.Logger);
                     server.StartWorker();
                 }
             }

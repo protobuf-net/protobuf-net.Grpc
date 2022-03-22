@@ -3,6 +3,7 @@ using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -123,7 +124,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 
     Span<byte> IBufferWriter<byte>.GetSpan(int sizeHint) => GetMemory(sizeHint).Span;
 
-    internal ValueTask WritePayloadAsync(IFrameConnection output, CancellationToken cancellationToken)
+    internal ValueTask WritePayloadAsync(ChannelWriter<Frame> output, CancellationToken cancellationToken)
     {
         switch (_frames.Count)
         {
@@ -132,25 +133,31 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
             case 1:
                 var frame = _frames[0];
                 _frames.Clear();
-                return output.WriteAsync(frame, cancellationToken);
+                return output.TryWrite(frame) ? default : output.WriteAsync(frame, cancellationToken);
             default:
-                // TODO: use List<T> and cheat
-                return WriteAll(_frames, output, cancellationToken);
+                return WriteAllTrySync(_frames, output, cancellationToken);
         }
 
-        static async ValueTask WriteAll(List<Frame> frames, IFrameConnection output, CancellationToken cancellationToken)
+        static ValueTask WriteAllTrySync(List<Frame> frames, ChannelWriter<Frame> output, CancellationToken cancellationToken)
         {
-            try
+            var iter = frames.GetEnumerator();
+            while (iter.MoveNext())
             {
-                foreach (var frame in frames)
-                {
-                    await output.WriteAsync(frame, cancellationToken);
-                }
+                if (!output.TryWrite(iter.Current))
+                    return WriteAllAsync(frames, iter, output, cancellationToken);
             }
-            finally
-            {
-                frames.Clear();
-            }
+            frames.Clear();
+            iter.Dispose(); // no-op, but: let's follow the rules!
+            return default; // woohoo, we wrote them all synchronously; no state machines for us!
+        }
+        static async ValueTask WriteAllAsync(List<Frame> frames, List<Frame>.Enumerator iter, ChannelWriter<Frame> output, CancellationToken cancellationToken)
+        {
+            do
+            {   // we've already had to go sync; let's not try to be clever - just WriteAsync
+                await output.WriteAsync(iter.Current, cancellationToken);
+            } while (iter.MoveNext());
+            frames.Clear();
+            iter.Dispose(); // no-op, but: let's follow the rules!
         }
     }
 }

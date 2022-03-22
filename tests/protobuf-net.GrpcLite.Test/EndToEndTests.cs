@@ -79,14 +79,35 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     }
 
     [Fact]
+    public async Task CanCallNullDuplexAsync()
+    {
+        using var log = ServerLog();
+        using var timeout = After();
+        Debug.WriteLine($"[client] connecting {Name}...");
+
+        await using var client = this.Server.ConnectLocal();
+
+        await RunDuplex(client, timeout.Token);
+
+        timeout.Cancel();
+    }
+    [Fact]
     public async Task CanCallDuplexAsync()
     {
         using var log = ServerLog();
         using var timeout = After();
         Debug.WriteLine($"[client] connecting {Name}...");
         await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(timeout.Token);
+
+        await RunDuplex(client, timeout.Token);
+
+        timeout.Cancel();
+    }
+
+    private async Task RunDuplex(LiteChannel client, CancellationToken cancellationToken)
+    {
         var proxy = new FooService.FooServiceClient(client);
-        
+
         using var call = proxy.Duplex();
         for (int i = 0; i < 10; i++)
         {
@@ -98,12 +119,10 @@ public class EndToEndTests : IClassFixture<TestServerHost>
         for (int i = 0; i < 10; i++)
         {
             Logger.Information($"reading {i}...");
-            Assert.True(await call.ResponseStream.MoveNext(timeout.Token));
+            Assert.True(await call.ResponseStream.MoveNext(cancellationToken));
             Assert.Equal(i, call.ResponseStream.Current.Value);
         }
         Logger.Information($"all reads complete");
-
-        timeout.Cancel();
     }
 }
 
@@ -132,6 +151,8 @@ public class TestServerHost : IDisposable, ILogger
 
     private readonly LiteServer _server;
     public string Name { get; }
+
+    public LiteChannel ConnectLocal() => _server.CreateLocalClient();
 
     public TestServerHost()
     {

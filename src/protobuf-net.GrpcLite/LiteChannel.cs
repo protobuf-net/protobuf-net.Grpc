@@ -11,7 +11,6 @@ public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
     LiteCallInvoker _callInvoker;
     internal LiteChannel(IFrameConnection connection, string target, ILogger? logger = null) : base(target)
     {
-        connection = connection.WithThreadSafeWrite();
         _callInvoker = new LiteCallInvoker(target, connection, logger);
         _callInvoker.StartWorker();
     }

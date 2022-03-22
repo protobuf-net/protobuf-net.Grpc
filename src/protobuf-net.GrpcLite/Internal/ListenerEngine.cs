@@ -2,27 +2,30 @@
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-internal interface IListener
+internal interface IConnection
 {
     bool IsClient { get; }
-    IFrameConnection Connection { get; }
-    
+    ChannelWriter<Frame> Output { get; }
+    IAsyncEnumerable<Frame> Input { get; }
     bool TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler);
 
     ConcurrentDictionary<ushort, IStream> Streams { get; }
+    void Remove(ushort streamId);
+    CancellationToken Shutdown { get; }
 }
 internal static class ListenerEngine
 {
 
-    public async static Task RunAsync(this IListener listener, ILogger? logger, CancellationToken cancellationToken)
+    public async static Task RunAsync(this IConnection listener, ILogger? logger, CancellationToken cancellationToken)
     {
         try
         {
             logger.Debug(listener, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) processing streams...");
-            await using var iter = listener.Connection.GetAsyncEnumerator(cancellationToken);
+            await using var iter = listener.Input.GetAsyncEnumerator(cancellationToken);
             while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
             {
                 var frame = iter.Current;
@@ -36,19 +39,19 @@ internal static class ListenerEngine
                         if (header.IsClientStream != listener.IsClient)
                         {
                             // the other end is initiating; acknowledge with an empty but similar frame
-                            await listener.Connection.WriteAsync(new FrameHeader(header.Kind, 0, header.StreamId, header.SequenceId), cancellationToken);
+                            await listener.Output.WriteAsync(new FrameHeader(header.Kind, 0, header.StreamId, header.SequenceId), cancellationToken);
                         }
                         // shutdown if requested
                         if (header.Kind == FrameKind.CloseConnection)
                         {
-                            listener.Connection.Close();
+                            listener.Output.Complete();
                         }
                         break;
                     case FrameKind.Header when header.IsClientStream != listener.IsClient: // a header with the "other" stream marker means
                         if (listener.Streams.ContainsKey(header.StreamId))
                         {
                             logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                            await listener.Connection.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
+                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
                         }
                         else if (listener.TryCreateStream(in frame, out var newStream) && newStream is not null)
                         {
@@ -62,13 +65,13 @@ internal static class ListenerEngine
                             else
                             {
                                 logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                                await listener.Connection.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
+                                await listener.Output.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
                             }
                         }
                         else
                         {
                             logger.Debug(frame, static (state, _) => $"method not found: {state.GetPayloadString()}");
-                            await listener.Connection.WriteAsync(new FrameHeader(FrameKind.MethodNotFound, 0, header.StreamId, 0), cancellationToken);
+                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.MethodNotFound, 0, header.StreamId, 0), cancellationToken);
                         }
                         break;
                     default:
@@ -104,21 +107,19 @@ internal static class ListenerEngine
             }
 
             logger.Information(listener, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) exiting cleanly");
+            listener.Output.Complete(null);
         }
         catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
         { } // alt-success
         catch (Exception ex)
         {
             logger.Error(ex);
+            listener?.Output.Complete(ex);
             throw;
         }
         finally
         {
             logger.Information(listener, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) all done");
-            if (listener is not null)
-            {
-                await listener.Connection.SafeDisposeAsync();
-            }
         }
     }
 

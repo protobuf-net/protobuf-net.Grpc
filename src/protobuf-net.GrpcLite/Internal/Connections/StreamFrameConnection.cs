@@ -1,58 +1,27 @@
 ﻿using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading.Channels;
 using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
-internal sealed class StreamFrameConnection : IRawFrameConnection, IValueTaskSource
+internal sealed class StreamFrameConnection : IFrameConnection
 {
-    bool IFrameConnection.ThreadSafeWrite => false;
-
     private readonly ILogger? _logger;
     private readonly Stream _duplex;
+    private readonly bool _mergeWrites;
 
-    private readonly Action _writeComplete;
-    private ValueTaskAwaiter _pendingWrite;
-    private ManualResetValueTaskSourceCore<bool> _vts;
-    private object? _completion;
-
-    Frame _writingFrame;
-
-    public StreamFrameConnection(Stream duplex, ILogger? logger = null)
+    public StreamFrameConnection(Stream duplex, bool mergeWrites = true, ILogger? logger = null)
     {
         _duplex = duplex.CheckDuplex();
         _logger = logger;
-        _writeComplete = () =>
-        {
-            var frame = _writingFrame;
-            var pending = _pendingWrite;
-            _writingFrame = default;
-            _pendingWrite = default;
-            try
-            {
-                _logger.Debug(frame, static (state, _) => $"write complete (async, releasing {state.TotalLength} bytes)");
-                frame.Release();
-                pending.GetResult();
-                _vts.SetResult(true);
-            }
-            catch (Exception ex)
-            {
-                _vts.SetException(ex);
-            }
-        };
+        _mergeWrites = mergeWrites;
     }
 
-    public ValueTask DisposeAsync()
-    {
-        _ = Utilities.GetLazyCompletion(ref _completion, true);
-        return Utilities.SafeDisposeAsync(_duplex);
-    }
-
-    public ValueTask FlushAsync(CancellationToken cancellationToken)
-        => new ValueTask(_duplex.FlushAsync(cancellationToken));
-
-    Task IFrameConnection.Complete => Utilities.GetLazyCompletion(ref _completion, false);
+    public ValueTask DisposeAsync() => _duplex.SafeDisposeAsync();
 
     public async IAsyncEnumerator<Frame> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
@@ -82,56 +51,110 @@ internal sealed class StreamFrameConnection : IRawFrameConnection, IValueTaskSou
         }
     }
 
-    public ValueTask WriteAsync(ReadOnlyMemory<byte> frames, CancellationToken cancellationToken)
+    private int _nonFlushedBytes;
+    const int FLUSH_EVERY_BYTES = 8 * 1024;
+    private bool AutoFlush(int bytes)
     {
-        _logger.Debug(frames, static (state, _) => $"writing {state}, {state.Length} bytes...");
-        return _duplex.WriteAsync(frames, cancellationToken);
-    }
-
-    public ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken)
-    {
-        _logger.Debug(frame, static (state, _) => $"writing {state}, {state.TotalLength} bytes...");
-        var pending = _duplex.WriteAsync(frame.Memory, cancellationToken);
-        if (pending.IsCompleted)
+        _nonFlushedBytes += bytes;
+        if (_nonFlushedBytes >= FLUSH_EVERY_BYTES)
         {
-            _logger.Debug(frame, static (state, _) => $"write complete (sync, releasing {state.TotalLength} bytes)");
-            frame.Release();
-            return pending;
+            _logger.Debug(_nonFlushedBytes, static (state, _) => $"Auto-flushing {state} bytes");
+            _nonFlushedBytes = 0;
+            return true;
         }
-        return ScheduleRelease(frame, pending);
+        return false;
     }
-    private ValueTask ScheduleRelease(in Frame frame, in ValueTask pending)
+    private bool AutoFlush()
     {
-        _pendingWrite = pending.GetAwaiter();
-        _writingFrame = frame;
-        var result = new ValueTask(this, _vts.Version);
-        _pendingWrite.UnsafeOnCompleted(_writeComplete);
-        return result;
-    }
-
-    void IValueTaskSource.GetResult(short token)
-    {
-        try
+        if (_nonFlushedBytes != 0) // always flush when we've run out of sync work
         {
-            _vts.GetResult(token);
+            _logger.Debug(_nonFlushedBytes, static (state, _) => $"Flushing {state} bytes (end of sync loop)...");
+            _nonFlushedBytes = 0;
+            return true;
         }
-        finally
-        {
-            if (token == _vts.Version) _vts.Reset();
-        }
+        return false;
     }
 
-    ValueTaskSourceStatus IValueTaskSource.GetStatus(short token)
-        => _vts.GetStatus(token);
+    public Task WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken = default)
+        => _mergeWrites ? WriteWithMergeAsync(source, cancellationToken) : WriteSimpleAsync(source, cancellationToken);
 
-    void IValueTaskSource.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
-        => _vts.OnCompleted(continuation, state, token, flags);
-
-    public ValueTask WriteAsync(ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken = default)
-        => this.WriteAllAsync(frames, cancellationToken);
-
-    void IFrameConnection.Close(Exception? exception)
+    private async Task WriteSimpleAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
     {
-        _ = DisposeAsync().AsTask();
+        do
+        {
+            while (source.TryRead(out var frame))
+            {
+                var memory = frame.Memory;
+                _logger.Debug(memory, static (state, _) => $"Writing {state.Length} bytes...");
+                await _duplex.WriteAsync(memory, cancellationToken);
+                frame.Release();
+                if (AutoFlush(memory.Length))
+                    await _duplex.FlushAsync(cancellationToken);
+            }
+
+            if (AutoFlush())
+                await _duplex.FlushAsync(cancellationToken);
+            _logger.Debug($"Awaiting more work...");
+        }
+        while (await source.WaitToReadAsync(cancellationToken));
+    }
+
+    private async Task WriteWithMergeAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+    {
+        [DoesNotReturn]
+        static void ThrowMemoryManager() => throw new InvalidOperationException("Unable to get ref-counted memory manager");
+        do
+        {
+            while (source.TryRead(out var frame))
+            {
+                var current = frame.Memory;
+                if (!MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(current, out var currentManager, out var currentStart, out var currentLength))
+                    ThrowMemoryManager();
+
+                while (source.TryRead(out frame))
+                {
+                    var next = frame.Memory;
+                    if (!MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(next, out var nextManager, out var nextStart, out var nextLength))
+                        ThrowMemoryManager();
+                    
+                    if (ReferenceEquals(currentManager, nextManager) && nextStart == currentStart + currentLength)
+                    {
+                        // the data is contiguous; we can merge it to reduce writes
+                        _logger.Debug((currentStart, currentLength, nextStart, nextLength), static (state, _) => $"Merging [{state.currentStart},{state.currentStart + state.currentLength}) and [{state.nextStart},{state.nextStart + state.nextLength}) into [{state.currentStart},{state.nextStart + state.nextLength})...");
+                        current = currentManager.Memory.Slice(currentStart, currentLength + nextLength);
+                        currentLength += nextLength;
+                        currentManager.Dispose(); // account for the write that we've avoided
+                        continue; // keep trying to merge (note that manager and start don't change)
+                    }
+                    else
+                    {
+                        // not contiguous; write the old block
+                        _logger.Debug((currentStart, currentLength), static (state, _) => $"Writing [{state.currentStart},{state.currentStart + state.currentLength})...");
+                        await _duplex.WriteAsync(current, cancellationToken);
+                        currentManager!.Dispose();
+                        if (AutoFlush(current.Length))
+                            await _duplex.FlushAsync(cancellationToken);
+
+                        // start trying to merge data from the new block
+                        current = next;
+                        currentManager = nextManager;
+                        currentStart = nextStart;
+                        currentLength = nextLength;
+                    }
+                }
+
+                // write whatever we have left
+                _logger.Debug((currentStart, currentLength), static (state, _) => $"Writing [{state.currentStart},{state.currentStart + state.currentLength})...");
+                await _duplex.WriteAsync(current, cancellationToken);
+                currentManager.Dispose();
+                if (AutoFlush(current.Length))
+                        await _duplex.FlushAsync(cancellationToken);
+            }
+
+            if (AutoFlush())
+                await _duplex.FlushAsync(cancellationToken);
+            _logger.Debug($"Awaiting more work...");
+        }
+        while (await source.WaitToReadAsync(cancellationToken));
     }
 }

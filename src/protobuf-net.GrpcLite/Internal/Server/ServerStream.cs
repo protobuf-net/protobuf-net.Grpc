@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server;
 
@@ -17,7 +18,7 @@ internal interface IServerStream : IStream
     WriteOptions WriteOptions { get; set; }
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
-    void Initialize(ushort id, IFrameConnection output, ILogger? logger, IStreamOwner? owner);
+    void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner);
 }
 internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, TRequest>, IServerStream,
         IServerStreamWriter<TResponse>
@@ -34,7 +35,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         RequestHeaders = Metadata.Empty;
         WriteOptions = WriteOptions.Default;
     }
-    public void Initialize(ushort id, IFrameConnection output, ILogger? logger, IStreamOwner? owner)
+    public void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner)
     {
         Id = id;
         Logger = logger;

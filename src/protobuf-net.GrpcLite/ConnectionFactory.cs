@@ -57,16 +57,24 @@ public static class ConnectionFactory
         Func<ConnectionState<T>, ConnectionState<T>> selector)
         => async cancellationToken => selector(await factory(cancellationToken));
 
-    internal static IFrameConnection WithThreadSafeWrite(this IFrameConnection connection)
-        => connection.ThreadSafeWrite ? connection : new SynchronizedGate(connection, 0);
-
     public static Func<CancellationToken, ValueTask<ConnectionState<TTarget>>> With<TSource, TTarget>(
         this Func<CancellationToken, ValueTask<ConnectionState<TSource>>> factory,
         Func<TSource, TTarget> selector)
         => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
-            return source.ChangeType(selector(source.Value));
+            try
+            {
+                return source.ChangeType(selector(source.Value));
+            }
+            catch
+            {
+                if (source.Value is IAsyncDisposable disposable)
+                {
+                    await disposable.SafeDisposeAsync();
+                }
+                throw;
+            }
         };
 
     public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithGZip(
@@ -111,18 +119,14 @@ public static class ConnectionFactory
             }
         };
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> WithFrameBuffer(
+    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames(
         this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
-        int inputFrames, int outputFrames) => async cancellationToken =>
+        bool mergeWrites = true) => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
             try
             {
-                IFrameConnection nonGated = new StreamFrameConnection(source.Value, source.Logger),
-                    gated = inputFrames > 0
-                    ? new BufferedGate(nonGated, inputFrames, outputFrames)
-                    : new SynchronizedGate(nonGated, outputFrames);
-                return source.ChangeType<IFrameConnection>(gated);
+                return source.ChangeType<IFrameConnection>(new StreamFrameConnection(source.Value, mergeWrites, source.Logger));
             }
             catch
             {
@@ -132,12 +136,12 @@ public static class ConnectionFactory
         };
 
     public static Func<CancellationToken, ValueTask<ConnectionState<T>>> Log<T>(
-        this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
-        ILogger? logger) => factory.With(source =>
-        {
-            source.Logger = logger;
-            return source;
-        });
+            this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
+            ILogger? logger) => factory.With(source =>
+            {
+                source.Logger = logger;
+                return source;
+            });
 
     public async static ValueTask<LiteChannel> CreateChannelAsync(
         this Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> factory,
@@ -145,7 +149,7 @@ public static class ConnectionFactory
     {
         using var cts = new CancellationTokenSource();
         cts.CancelAfter(timeout);
-        return await CreateChannel(factory(cts.Token));
+        return await CreateChannelAsync(factory, cts.Token);
     }
 
     public async static ValueTask<LiteChannel> CreateChannelAsync(
@@ -154,17 +158,19 @@ public static class ConnectionFactory
     {
         using var cts = new CancellationTokenSource();
         cts.CancelAfter(timeout);
-        return await CreateChannel(factory.WithFrameBuffer(0, 0)(cts.Token));
+        return await CreateChannelAsync(factory.AsFrames(), cts.Token);
     }
 
     public static ValueTask<LiteChannel> CreateChannelAsync(
         this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
         CancellationToken cancellationToken = default)
-        => factory.WithFrameBuffer(0, 0).CreateChannelAsync();
+        => CreateChannelAsync(factory.AsFrames(), cancellationToken);
 
-    private static async ValueTask<LiteChannel> CreateChannel(ValueTask<ConnectionState<IFrameConnection>> pending)
+    public static async ValueTask<LiteChannel> CreateChannelAsync(
+        this Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> factory,
+        CancellationToken cancellationToken = default)
     {
-        var source = await pending;
+        var source = await factory(cancellationToken);
         try
         {
             return new LiteChannel(source.Value, source.Name, source.Logger);
@@ -174,21 +180,6 @@ public static class ConnectionFactory
             await source.Value.SafeDisposeAsync();
             throw;
         }
-
-    }
-    public static ValueTask<LiteChannel> CreateChannelAsync(
-        this Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> factory,
-        CancellationToken cancellationToken = default)
-        => CreateChannel(factory(cancellationToken));
-}
-
-static class Demo
-{
-    static async ValueTask Usage()
-    {
-        await Task.Delay(20);
-        ChannelBase simple = await ConnectionFactory.ConnectNamedPipe("foo").CreateChannelAsync();
-        ChannelBase nuanced = await ConnectionFactory.ConnectNamedPipe("foo").WithTls().WithGZip().WithFrameBuffer(0, 0).CreateChannelAsync();
     }
 }
 

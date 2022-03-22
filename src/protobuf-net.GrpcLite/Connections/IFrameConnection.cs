@@ -1,27 +1,18 @@
 ﻿using ProtoBuf.Grpc.Lite.Internal;
 using System.Buffers;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
 public interface IFrameConnection : IAsyncEnumerable<Frame>, IAsyncDisposable
 {
-    ValueTask WriteAsync(Frame frame, CancellationToken cancellationToken = default);
-    ValueTask WriteAsync(ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken = default);
-    bool ThreadSafeWrite { get; }
-    void Close(Exception? exception = null);
-    Task Complete { get; }
-    ValueTask FlushAsync(CancellationToken cancellationToken = default);
-}
-
-public interface IRawFrameConnection : IFrameConnection
-{
-    ValueTask WriteAsync(ReadOnlyMemory<byte> frames, CancellationToken cancellationToken = default);
+    Task WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken = default);
 }
 
 public static class FrameConnectionExtensions
 {
     [Obsolete("this is not the way")]
-    public static ValueTask WriteAsync(this IFrameConnection connection, FrameHeader frame, CancellationToken cancellationToken = default)
+    public static ValueTask WriteAsync(this ChannelWriter<Frame> output, FrameHeader frame, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -29,7 +20,9 @@ public static class FrameConnectionExtensions
             var oversized = ArrayPool<byte>.Shared.Rent(FrameHeader.Size);
             frame.UnsafeWrite(ref oversized[0]);
             var fullFrame = new Frame(new ReadOnlyMemory<byte>(oversized, 0, FrameHeader.Size));
-            var pending = connection.WriteAsync(fullFrame, cancellationToken);
+            
+            if (output.TryWrite(fullFrame)) return default;
+            var pending = output.WriteAsync(fullFrame, cancellationToken);
             if (pending.IsCompleted)
             {
                 pending.GetAwaiter().GetResult();

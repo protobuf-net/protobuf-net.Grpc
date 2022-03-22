@@ -151,8 +151,7 @@ public class BasicTests
         var oce = await Assert.ThrowsAsync<OperationCanceledException>(() => call.ResponseAsync);
         Assert.Equal(cts.Token, oce.CancellationToken);
         await Task.Delay(100);
-        pipe.Close();
-        await pipe.Complete;
+        await pipe.SafeDisposeAsync();
         var hex = await GetHexAsync(server);
         Assert.Equal(
             "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
@@ -186,8 +185,7 @@ public class BasicTests
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!"));
         Assert.Equal(cts.Token, oce.CancellationToken);
         await Task.Delay(100);
-        pipe.Close();
-        await pipe.Complete;
+        await pipe.SafeDisposeAsync();
 
         var hex = await GetHexAsync(server);
         Assert.Equal(

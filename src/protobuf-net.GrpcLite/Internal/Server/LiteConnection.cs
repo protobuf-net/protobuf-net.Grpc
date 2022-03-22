@@ -2,10 +2,11 @@
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Server
 {
-    internal sealed class LiteConnection : IWorker, IListener, IStreamOwner
+    internal sealed class LiteConnection : IWorker, IConnection
     {
         private readonly LiteServer _server;
         private readonly IFrameConnection _connection;
@@ -15,18 +16,18 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
 
         public int Id { get; }
 
-        void IStreamOwner.Remove(ushort id) => _streams.Remove(id, out _);
+        void IConnection.Remove(ushort id) => _streams.Remove(id, out _);
 
-        CancellationToken IStreamOwner.Shutdown => _server.ServerShutdown;
+        CancellationToken IConnection.Shutdown => _server.ServerShutdown;
 
         // will be null if not started
         public Task? Complete { get; private set; }
 
-        bool IListener.IsClient => false;
+        bool IConnection.IsClient => false;
 
-        IFrameConnection IListener.Connection => _connection;
+        IAsyncEnumerable<Frame> IConnection.Input => _connection;
 
-        ConcurrentDictionary<ushort, IStream> IListener.Streams => _streams;
+        ConcurrentDictionary<ushort, IStream> IConnection.Streams => _streams;
 
         public LiteConnection(LiteServer server, IFrameConnection connection, ILogger? logger)
         {
@@ -34,9 +35,12 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
             _logger = logger ?? server.Logger;
             Id = server.NextStreamId();
             _server = server;
-
+            _ = connection.StartWriterAsync(out _output, _server.ServerShutdown);
             _logger.Debug(Id, static (state, _) => $"connection {state} initialized");
         }
+
+        private readonly ChannelWriter<Frame> _output;
+        ChannelWriter<Frame> IConnection.Output => _output;
 
         public void Execute()
         {
@@ -45,11 +49,11 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
             Complete ??= this.RunAsync(_logger, _server.ServerShutdown);
         }
 
-        bool IListener.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
+        bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
         {
             if (_server.TryGetHandler(initialize.GetPayloadString(), out var serverHandler))
             {
-                serverHandler.Initialize(initialize.GetHeader().StreamId, _connection, _logger, this);
+                serverHandler.Initialize(initialize.GetHeader().StreamId, _output, _logger, this);
                 handler = serverHandler;
                 return handler is not null;
             }

@@ -1,4 +1,5 @@
 ﻿using ProtoBuf.Grpc.Lite.Connections;
+using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -76,67 +77,6 @@ internal static class Utilities
     public static ushort IncrementToUInt32(ref int value)
         => unchecked((ushort)Interlocked.Increment(ref value));
 
-    private static readonly ArraySegment<byte> EmptySegment = new ArraySegment<byte>(EmptyBuffer);
-    internal static bool TryGetEmptySegment(out ArraySegment<byte> segment)
-    {
-        segment = EmptySegment;
-        return true;
-    }
-
-    public static ValueTask WriteAllAsync(this IFrameConnection connection, ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken = default)
-    {
-        return frames.Length switch
-        {
-            0 => default,
-            1 => connection.WriteAsync(frames.Span[0], cancellationToken),
-            _ => SlowAsync(connection, frames, cancellationToken),
-        };
-        async static ValueTask SlowAsync(IFrameConnection connection, ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken)
-        {
-            var length = frames.Length;
-            for (int i = 0; i < length; i++)
-            {
-                await connection.WriteAsync(frames.Span[i], cancellationToken);
-            }
-        }
-    }
-
-    internal static Task GetLazyCompletion(ref object? taskOrCompletion, bool markComplete)
-    {   // lazily process _completion
-        while (true)
-        {
-            switch (Volatile.Read(ref taskOrCompletion))
-            {
-                case null:
-                    // try to swap in Task.CompletedTask
-                    object newFieldValue;
-                    Task result;
-                    if (markComplete)
-                    {
-                        newFieldValue = result = Task.CompletedTask;
-                    }
-                    else
-                    {
-                        var newTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                        newFieldValue = newTcs;
-                        result = newTcs.Task;
-                    }
-                    if (Interlocked.CompareExchange(ref taskOrCompletion, newFieldValue, null) is null)
-                    {
-                        return result;
-                    }
-                    continue; // if we fail the swap: redo from start
-                case Task task:
-                    return task; // this will be Task.CompletedTask
-                case TaskCompletionSource<bool> tcs:
-                    if (markComplete) tcs.TrySetResult(true);
-                    return tcs.Task;
-                default:
-                    throw new InvalidOperationException("unexpected completion object");
-            }
-        }
-    }
-
     public static Stream CheckDuplex(this Stream duplex)
     {
         if (duplex is null) throw new ArgumentNullException(nameof(duplex));
@@ -145,6 +85,29 @@ internal static class Utilities
         if (duplex.CanSeek) throw new ArgumentException("Stream is seekable, so cannot be duplex", nameof(duplex));
         return duplex;
     }
+
+    public static Task StartWriterAsync(this IFrameConnection connection, out ChannelWriter<Frame> writer, CancellationToken cancellationToken)
+    {
+        if (connection is NullConnection nil)
+        {
+            writer = nil.Output; // use the pre-existing output directly
+            return Task.CompletedTask;
+        }
+
+        var channel = Channel.CreateUnbounded<Frame>(UnboundedChannelOptions_SingleReadMultiWriterNoSync);
+        writer = channel.Writer;
+        return WithCapture(connection, channel.Reader, cancellationToken);
+
+        static Task WithCapture(IFrameConnection connection, ChannelReader<Frame> reader, CancellationToken cancellationToken)
+            => Task.Run(() => connection.WriteAsync(reader, cancellationToken));
+    }
+
+    public static readonly UnboundedChannelOptions UnboundedChannelOptions_SingleReadMultiWriterNoSync = new UnboundedChannelOptions
+    {
+        AllowSynchronousContinuations = false,
+        SingleReader = true,
+        SingleWriter = false,
+    };
 
     internal static ValueTask AsValueTask(this Exception ex)
     {

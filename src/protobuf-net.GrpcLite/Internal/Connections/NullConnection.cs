@@ -5,19 +5,15 @@ namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
 internal sealed class NullConnection : IFrameConnection
 {
-    static readonly UnboundedChannelOptions s_Options = new UnboundedChannelOptions
-    {
-        AllowSynchronousContinuations = false,
-        SingleReader = true,
-        SingleWriter = false,
-    };
     private readonly ChannelReader<Frame> _input;
     private readonly ChannelWriter<Frame> _output;
 
+    public ChannelWriter<Frame> Output => _output;
+
     internal static void CreateLinkedPair(out IFrameConnection x, out IFrameConnection y)
     {
-        var a = Channel.CreateUnbounded<Frame>(s_Options);
-        var b = Channel.CreateUnbounded<Frame>(s_Options);
+        var a = Channel.CreateUnbounded<Frame>(Utilities.UnboundedChannelOptions_SingleReadMultiWriterNoSync);
+        var b = Channel.CreateUnbounded<Frame>(Utilities.UnboundedChannelOptions_SingleReadMultiWriterNoSync);
 
         x = new NullConnection(a.Reader, b.Writer);
         y = new NullConnection(b.Reader, a.Writer);
@@ -28,28 +24,15 @@ internal sealed class NullConnection : IFrameConnection
         _output = output;
     }
 
-    bool IFrameConnection.ThreadSafeWrite => true;
-
-    Task IFrameConnection.Complete => _input.Completion;
-
-    void IFrameConnection.Close(Exception? exception)
-        => _output.TryComplete(exception);
-
     ValueTask IAsyncDisposable.DisposeAsync()
     {
         _output.TryComplete();
         return default;
     }
 
-    ValueTask IFrameConnection.FlushAsync(CancellationToken cancellationToken)
-        => default;
-
     IAsyncEnumerator<Frame> IAsyncEnumerable<Frame>.GetAsyncEnumerator(CancellationToken cancellationToken)
         => _input.GetAsyncEnumerator(_output, cancellationToken);
 
-    ValueTask IFrameConnection.WriteAsync(Frame frame, CancellationToken cancellationToken)
-        => _output.WriteAsync(frame, cancellationToken);
-
-    ValueTask IFrameConnection.WriteAsync(ReadOnlyMemory<Frame> frames, CancellationToken cancellationToken)
-        => this.WriteAllAsync(frames, cancellationToken);
+    Task IFrameConnection.WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 }

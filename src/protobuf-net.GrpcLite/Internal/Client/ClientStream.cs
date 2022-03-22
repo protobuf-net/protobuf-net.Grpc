@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
@@ -16,7 +17,7 @@ internal interface IClientStream : IStream, IDisposable
 internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientStream where TRequest : class where TResponse : class
 {
     void IDisposable.Dispose() { }
-    public ClientStream(IMethod method, IFrameConnection output, ILogger? logger, IStreamOwner? owner)
+    public ClientStream(IMethod method, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner)
         : base(method, output, owner)
     {
         Logger = logger;
