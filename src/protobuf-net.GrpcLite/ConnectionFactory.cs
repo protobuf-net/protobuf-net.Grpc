@@ -6,6 +6,8 @@ using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System.IO.Compression;
 using System.IO.Pipes;
 using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 
 namespace ProtoBuf.Grpc.Lite;
 
@@ -38,15 +40,14 @@ public static class ConnectionFactory
         {
             logger.Debug(pipeName, static (state, _) => $"waiting for connection... {state}");
             await pipe.WaitForConnectionAsync(cancellationToken);
-            logger.Debug(pipeName, static (state, _) => $"client connected to {state}");
+            logger.Information(pipeName, static (state, _) => $"client connected to {state}");
             return new ConnectionState<Stream>(pipe, pipeName)
             {
                 Logger = logger,
             };
         }
-        catch (Exception ex)
+        catch
         {
-            logger.Error(ex);
             await pipe.SafeDisposeAsync();
             throw;
         }
@@ -67,8 +68,9 @@ public static class ConnectionFactory
             {
                 return source.ChangeType(selector(source.Value));
             }
-            catch
+            catch (Exception ex)
             {
+                source.Logger.Error(ex);
                 if (source.Value is IAsyncDisposable disposable)
                 {
                     await disposable.SafeDisposeAsync();
@@ -77,19 +79,18 @@ public static class ConnectionFactory
             }
         };
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithGZip(
-        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
-        CompressionLevel compreessionLevel = CompressionLevel.Optimal)
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithGZip<T>(
+        this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
+        CompressionLevel compreessionLevel = CompressionLevel.Optimal) where T : Stream
         => async cancellationToken =>
     {
         var source = await factory(cancellationToken);
         var pair = source.Value;
         try
         {
-            source.Value = DuplexStream.Create(
+            return source.ChangeType(DuplexStream.Create(
                 read: new GZipStream(source.Value, CompressionMode.Decompress),
-                write: new GZipStream(source.Value, compreessionLevel));
-            return source;
+                write: new GZipStream(source.Value, compreessionLevel)));
         }
         catch
         {
@@ -98,7 +99,7 @@ public static class ConnectionFactory
         }
     };
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> WithTls(
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> WithTls(
         this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
         RemoteCertificateValidationCallback? userCertificateValidationCallback = null,
         LocalCertificateSelectionCallback? userCertificateSelectionCallback = null,
@@ -108,9 +109,9 @@ public static class ConnectionFactory
             var source = await factory(cancellationToken);
             try
             {
-                source.Value = new SslStream(source.Value, false,
-                    userCertificateValidationCallback, userCertificateSelectionCallback, encryptionPolicy);
-                return source;
+                var tls = new SslStream(source.Value, false, userCertificateValidationCallback,
+                    userCertificateSelectionCallback, encryptionPolicy);
+                return source.ChangeType(tls);
             }
             catch
             {
@@ -119,9 +120,66 @@ public static class ConnectionFactory
             }
         };
 
-    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames(
-        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
-        bool mergeWrites = true) => async cancellationToken =>
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsServer(
+        this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
+        X509Certificate serverCertificate)
+        => factory.AuthenticateAsServer(new SslServerAuthenticationOptions
+        {
+            ServerCertificate = serverCertificate
+        });
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsServer(
+        this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
+        SslServerAuthenticationOptions options)
+        => async cancellationToken =>
+    {
+        var source = await factory(cancellationToken);
+        try
+        {
+            source.Logger.Debug("Authenticating as server...");
+            await source.Value.AuthenticateAsServerAsync(options, cancellationToken);
+            source.Logger.Debug("Authenticated");
+            return source;
+        }
+        catch
+        {
+            await source.Value.SafeDisposeAsync();
+            throw;
+        }
+    };
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsClient(
+        this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
+        string targetHost)
+        => factory.AuthenticateAsClient(new SslClientAuthenticationOptions
+        {
+             TargetHost = targetHost
+        });
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsClient(
+        this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
+        SslClientAuthenticationOptions options)
+        => async cancellationToken =>
+    {
+        var source = await factory(cancellationToken);
+        try
+        {
+            source.Logger.Debug("Authenticating as client...");
+            await source.Value.AuthenticateAsClientAsync(options, cancellationToken);
+            source.Logger.Debug("Authenticated");
+            return source;
+        }
+        catch
+        {
+            await source.Value.SafeDisposeAsync();
+            throw;
+        }
+    };
+
+    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames<T>(
+        this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
+        bool mergeWrites = true) where T : Stream
+        => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
             try

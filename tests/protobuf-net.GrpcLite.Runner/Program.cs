@@ -19,26 +19,34 @@ using static FooService;
 //    var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
 //    await Run(unmanagedHttp);
 //}
-// TLS with Grpc.Core is a PITA to configure, so... meh
-using var localServer = new LiteServer();
-localServer.ManualBind<MyService>();
 
-using (var local = localServer.CreateLocalClient())
 {
-    await Run(local);
-}
-
-using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
-{
-    await Run(namedPipe);
-}
-using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
-{
-    await Run(namedPipe);
+    using var localServer = new LiteServer();
+    localServer.ManualBind<MyService>();
+    using (var local = localServer.CreateLocalClient())
+    {
+        await Run(local);
+    }
 }
 
 
-static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string caller = "")
+//using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+//{
+//    await Run(namedPipe);
+//}
+//using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+//{
+//    await Run(namedPipe);
+//}
+
+// THIS ONE NEEDS INVESTIGATION; TLS doesn't handshake
+//using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
+//{
+//    await Run(namedPipeTls);
+//}
+
+
+static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string caller = "", int repeatCount = 10)
 {
     try
     {
@@ -50,19 +58,16 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
         Console.WriteLine($"Connecting to {channel.Target} ({caller}, {invoker.GetType().Name})...");
         var client = new FooServiceClient(invoker);
 
+        using (var call = client.UnaryAsync(new FooRequest { Value = 42 }, options))
         {
-            using (var call = client.UnaryAsync(new FooRequest { Value = 42 }, options))
-            {
-                var result = await call.ResponseAsync;
-                if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
-                Console.WriteLine("(success)");
-            }
+            var result = await call.ResponseAsync;
+            if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
         }
 
-        //for (int j = 0; j < 5; j++)
+        //for (int j = 0; j < repeatCount; j++)
         //{
         //    var watch = Stopwatch.StartNew();
-        //    const int OPCOUNT = 100; // * 1024;
+        //    const int OPCOUNT = 10000;
         //    for (int i = 0; i < OPCOUNT; i++)
         //    {
         //        using var call = client.UnaryAsync(new FooRequest { Value = i }, options);
@@ -73,24 +78,26 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
         //    ShowTiming(nameof(client.UnaryAsync), watch, OPCOUNT);
         //}
 
-        //for (int j = 0; j < 5; j++)
-        //{
-        //    var watch = Stopwatch.StartNew();
-        //    using var call = client.ClientStreaming(options);
-        //    const int OPCOUNT = 50 * 1024;
-        //    int sum = 0;
-        //    for (int i = 0; i < OPCOUNT; i++)
-        //    {
-        //        await call.RequestStream.WriteAsync(new FooRequest { Value = i });
-        //        sum += i;
-        //    }
-        //    await call.RequestStream.CompleteAsync();
-        //    var result = await call.ResponseAsync;
-        //    if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
-        //    ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
-        //}
+        for (int j = 0; j < repeatCount; j++)
+        {
+            var watch = Stopwatch.StartNew();
+            using var call = client.ClientStreaming(options);
+            const int OPCOUNT = 50000;
+            int sum = 0;
+            for (int i = 0; i < OPCOUNT; i++)
+            {
+                await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+                sum += i;
+            }
+            await call.RequestStream.CompleteAsync();
+            Console.WriteLine("d");
+            var result = await call.ResponseAsync; // FIX: not completing
+            Console.WriteLine("e");
+            if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
+            ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
+        }
 
-        //for (int j = 0; j < 5; j++)
+        //for (int j = 0; j < repeatCount; j++)
         //{
         //    var watch = Stopwatch.StartNew();
         //    const int OPCOUNT = 100 * 1024;
@@ -106,7 +113,7 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
         //    ShowTiming(nameof(client.ServerStreaming), watch, OPCOUNT);
         //}
 
-        //for (int j = 0; j < 5; j++)
+        //for (int j = 0; j < repeatCount; j++)
         //{
         //    var watch = Stopwatch.StartNew();
         //    const int OPCOUNT = 20 * 1024;

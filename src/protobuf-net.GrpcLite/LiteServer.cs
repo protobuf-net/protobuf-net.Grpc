@@ -56,17 +56,24 @@ namespace ProtoBuf.Grpc.Lite
             {
                 while (!_serverShutdown.IsCancellationRequested)
                 {
+                    await Task.Yield(); // let's not hog a core if we have lots of connections...
                     Logger.Information("listening for new connection...");
-                    var connection = await listener(ServerShutdown);
-                    if (connection is null)
+                    try
                     {
-                        await Task.Yield(); // at least let's free up the core, if something odd is happening
-                        continue;
-                    }
+                        var connection = await listener(ServerShutdown);
+                        if (connection is null)
+                        {
+                            continue;
+                        }
 
-                    Logger.Information(connection, static (state, _) => $"established connection {state.Name}");
-                    var server = new LiteConnection(this, connection.Value, connection.Logger);
-                    server.StartWorker();
+                        Logger.Information(connection, static (state, _) => $"established connection {state.Name}");
+                        var server = new LiteConnection(this, connection.Value, connection.Logger);
+                        server.StartWorker();
+                    }
+                    catch(Exception ex)
+                    {
+                        Logger.Error(ex);
+                    }
                 }
             }
             catch (OperationCanceledException ex) when (ex.CancellationToken == _serverShutdown.Token)

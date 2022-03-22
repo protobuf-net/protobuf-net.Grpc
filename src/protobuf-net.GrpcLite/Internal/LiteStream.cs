@@ -6,17 +6,11 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
-//interface IStreamOwner
-//{
-//    void Remove(ushort id);
-//    CancellationToken Shutdown { get; }
-//}
 interface IStream
 {
     ushort Id { get; }
@@ -26,6 +20,7 @@ interface IStream
     bool TryAcceptFrame(in Frame frame);
     CancellationToken CancellationToken { get; }
     void Cancel();
+    IConnection? Connection { get; }
 }
 
 internal enum StreamState
@@ -50,10 +45,11 @@ internal enum WorkerState
     ActivatingFirstTime,
     Active,
     Suspended,
+    Unsuspending,
     RanToCompletion,
     Faulted,
 }
-internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive>, IValueTaskSource, IDisposable where TSend : class where TReceive : class
+internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive>, IValueTaskSource<bool>, IDisposable where TSend : class where TReceive : class
 {
 
     private Maybe<TReceive> _nextItemNeedsSync;
@@ -68,7 +64,8 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     TReceive IAsyncStreamReader<TReceive>.Current => GetNextItem().Value!;
     Task<bool> IAsyncStreamReader<TReceive>.MoveNext(CancellationToken cancellationToken)
     {
-        CancellationTokenRegistration ctr = this.RegisterCancellation(cancellationToken);
+        // note that RegisterCancellation may not do anything if it recognizes this as ctx.CancellationToken, etc
+        CancellationTokenRegistration ctr = cancellationToken.CanBeCanceled ? this.RegisterCancellation(cancellationToken) : default;
         var pending = MoveNextPayloadAsync();
         if (pending.IsCompletedSuccessfully)
         {
@@ -97,6 +94,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         _workerStateNeedsSync = IsClient ? WorkerState.Active : WorkerState.NotStarted; // for clients, the caller is the initial executor
     }
     IConnection? _owner;
+    IConnection? IStream.Connection => _owner;
     protected void SetOwner(IConnection? owner) => _owner = owner;
 
     string IStream.Method => Method!.FullName;
@@ -144,7 +142,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             ownerShutdown.ThrowIfCancellationRequested();
             scenario |= CancellationScenerio.OwnerShutdown;
         }
-        if (streamSpecificCancellation.CanBeCanceled)
+        if (streamSpecificCancellation.CanBeCanceled && streamSpecificCancellation != ownerShutdown)
         {
             _streamSpecificCancellation = streamSpecificCancellation;
             streamSpecificCancellation.ThrowIfCancellationRequested();
@@ -335,8 +333,8 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                         {
                             case StreamState.ExpectHeaders:
                             case StreamState.ExpectBody:
-                                await SuspendWorkerAndAwaitReactivationAsync();
-                                Logger.Debug("worker resumed");
+                                bool wasSuspended = await SuspendWorkerAndAwaitNextGroupAsync();
+                                if (wasSuspended) Logger.Debug("worker resumed");
                                 continue; // and try again when we resume
                             default:
                                 lock (SyncLock)
@@ -378,13 +376,15 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     private ReadOnlySequence<byte> _unprocessedHeaders, _unprocessedTrailers;
 
-    ValueTask SuspendWorkerAndAwaitReactivationAsync() // IMPORTANT; this is how the stream goes to sleep and waits to be activated by a new invocation
+    ValueTask<bool> SuspendWorkerAndAwaitNextGroupAsync() // IMPORTANT; this is how the stream goes to sleep and waits to be activated by a new invocation
     {
-        Logger.Debug("suspending worker...");
         lock (SyncLock)
         {
+            if (PeekNextFrameGroupSizeLocked(out _) > 0) return default; // there already is another group (racing)
+
+            Logger.Debug("suspending worker...");
             ChangeState(WorkerState.Active, WorkerState.Suspended);
-            return new ValueTask(this, _suspendedContinuationPoint.Version);
+            return new ValueTask<bool>(this, _suspendedContinuationPoint.Version);
         }
     }
 
@@ -422,6 +422,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                     this.StartWorker();
                     break;
                 case WorkerState.Suspended:
+                    _workerStateNeedsSync = WorkerState.Unsuspending;
                     this.StartWorker();
                     break;
             }
@@ -472,29 +473,29 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         Logger.SetSource(IsClient ? LogKind.Client : LogKind.Server, "executor");
         try
         {
-            WorkerState state;
+            WorkerState previousState;
             lock (SyncLock)
             {
-                state = _workerStateNeedsSync;
-                switch (state)
+                previousState = _workerStateNeedsSync;
+                switch (previousState)
                 {
                     case WorkerState.ActivatingFirstTime:
-                    case WorkerState.Suspended:
+                    case WorkerState.Unsuspending:
                         _workerStateNeedsSync = WorkerState.Active;
                         break;
                 }
             }
             // now do the real code outside of the lock
-            switch (state)
+            switch (previousState)
             {
                 case WorkerState.ActivatingFirstTime:
                     _ = ExecuteCoreAsync();
                     break;
-                case WorkerState.Suspended:
-                    _suspendedContinuationPoint.SetResult(false); // the value is irrelevant
+                case WorkerState.Unsuspending:
+                    _suspendedContinuationPoint.SetResult(true); // the result here is just used to say "yes, you were suspended"
                     break;
                 default:
-                    throw new InvalidOperationException($"unexpected worker state '{state}' when attempting to activate worker");
+                    throw new InvalidOperationException($"unexpected worker state '{previousState}' when attempting to activate worker");
             }
         }
         catch (Exception ex)
@@ -571,10 +572,8 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    private ReadOnlyMemory<Frame> ReadNextFrameGroupLocked(out FrameKind kind)
+    private int PeekNextFrameGroupSizeLocked(out FrameKind kind)
     {
-        int count;
-        kind = FrameKind.None;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static bool IsFinal(in Frame frame, out FrameKind kind)
         {
@@ -583,6 +582,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             return header.IsFinal;
         }
         static void ThrowMismatchedGroup(FrameKind group, FrameKind item) => throw new InvalidOperationException($"An unexpected {item} frame was encountered in the backlog while reading a {group} group");
+
+        int count;
+        kind = FrameKind.None;
 
         if (_backlogFrames is not null)
         {
@@ -629,6 +631,11 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         {
             count = _backlogFrame.HasValue && IsFinal(_backlogFrame, out kind) ? 1 : 0;
         }
+        return count;
+    }
+    private ReadOnlyMemory<Frame> ReadNextFrameGroupLocked(out FrameKind kind)
+    {
+        int count = PeekNextFrameGroupSizeLocked(out kind);
         if (count <= 0) return default;
 
         Frame[] oversized = ArrayPool<Frame>.Shared.Rent(count);
@@ -757,13 +764,13 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     }
 
     ManualResetValueTaskSourceCore<bool> _suspendedContinuationPoint;
-    void IValueTaskSource.GetResult(short token)
+    bool IValueTaskSource<bool>.GetResult(short token)
     {
         lock (SyncLock)
         {
             try
             {
-                _suspendedContinuationPoint.GetResult(token);
+                return _suspendedContinuationPoint.GetResult(token);
             }
             finally
             {
@@ -772,7 +779,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    ValueTaskSourceStatus IValueTaskSource.GetStatus(short token)
+    ValueTaskSourceStatus IValueTaskSource<bool>.GetStatus(short token)
     {
         lock (SyncLock)
         {
@@ -780,7 +787,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    void IValueTaskSource.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
+    void IValueTaskSource<bool>.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
         => _suspendedContinuationPoint.OnCompleted(continuation, state, token, flags);
 
     MethodType IStream.MethodType => Method!.Type;

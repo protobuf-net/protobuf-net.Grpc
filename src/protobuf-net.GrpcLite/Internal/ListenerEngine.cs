@@ -89,7 +89,7 @@ internal static class ListenerEngine
 
                             if (header.Kind == FrameKind.Trailer && header.IsFinal)
                             {
-                                logger.Information(header, static (state, _) => $"removing stream {state}");
+                                logger.Debug(header, static (state, _) => $"removing stream {state}");
                                 listener.Streams.Remove(header.StreamId, out _);
                             }
                         }

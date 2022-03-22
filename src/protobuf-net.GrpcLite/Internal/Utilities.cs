@@ -9,7 +9,7 @@ internal static class Utilities
 {
     public static readonly byte[] EmptyBuffer = Array.Empty<byte>(); // static readonly field to make the JIT's life easy
 
-    
+
 
     public static void SafeDispose(this IDisposable? disposable)
     {
@@ -186,7 +186,11 @@ internal static class Utilities
 
     internal static CancellationTokenRegistration RegisterCancellation(this IStream stream, CancellationToken cancellationToken)
     {
-        if (stream is null || !cancellationToken.CanBeCanceled) return default;
+        if (stream is null || !cancellationToken.CanBeCanceled || cancellationToken == stream.CancellationToken
+            || cancellationToken == stream.Connection?.Shutdown)
+        {
+            return default; // nothing to do, or we'd already be handling it because it is our own CT
+        }
         cancellationToken.ThrowIfCancellationRequested();
         return cancellationToken.Register(s_CancelStream, stream, false);
     }

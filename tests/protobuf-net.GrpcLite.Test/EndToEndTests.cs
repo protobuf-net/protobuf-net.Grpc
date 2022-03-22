@@ -83,14 +83,37 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        Debug.WriteLine($"[client] connecting {Name}...");
-
         await using var client = this.Server.ConnectLocal();
 
         await RunDuplex(client, timeout.Token);
 
         timeout.Cancel();
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    [InlineData(100)]
+    [InlineData(1000)]
+    [InlineData(10000)]
+    public async Task LongNullUnaryAsync(int count, int timeoutSeconds = 10)
+    {
+        using var log = ServerLog();
+        using var timeout = After(TimeSpan.FromSeconds(timeoutSeconds));
+        await using var client = this.Server.ConnectLocal();
+
+        var proxy = new FooService.FooServiceClient(client);
+        var options = new CallOptions(cancellationToken: timeout.Token);
+        for (int i = 0; i < count; i++)
+        {
+            var result = await proxy.UnaryAsync(new FooRequest { Value = i }, options);
+            Assert.Equal(i, result.Value);
+        }
+        await RunDuplex(client, timeout.Token);
+
+        timeout.Cancel();
+    }
+
     [Fact]
     public async Task CanCallDuplexAsync()
     {
