@@ -146,8 +146,12 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
         }
         Console.WriteLine();
         // store the average nanos-per-op
-        timings.Add(caller, (AutoScale(unary / repeatCount), AutoScale(clientStreaming / repeatCount),
-            AutoScale(serverStreaming / repeatCount), AutoScale(duplex / repeatCount)));
+        timings.Add(caller, (
+            AutoScale(unary / repeatCount, true),
+            AutoScale(clientStreaming / repeatCount, true),
+            AutoScale(serverStreaming / repeatCount, true),
+            AutoScale(duplex / repeatCount, true)
+        ));
     }
     catch (Exception ex)
     {
@@ -165,14 +169,15 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
         Console.WriteLine($"{label} ×{operations}: {AutoScale(nanos)}, {AutoScale(nanos / operations)}/op");
         return nanos / operations;
     }
-    static string AutoScale(long nanos)
+    static string AutoScale(long nanos, bool forceNanos = false)
     {
         long qty = nanos;
-        if (qty < 10000) return $"{qty}ns";
+        if (forceNanos) return $"{qty:###,###,##0}ns";
+        if (qty < 10000) return $"{qty:#,##0}ns";
         qty /= 1000;
-        if (qty < 10000) return $"{qty}μs";
+        if (qty < 10000) return $"{qty:#,##0}μs";
         qty /= 1000;
-        if (qty < 10000) return $"{qty}ms";
+        if (qty < 10000) return $"{qty:#,##0}ms";
 
         return TimeSpan.FromMilliseconds(qty).ToString();
     }
