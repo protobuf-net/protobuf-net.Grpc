@@ -31,13 +31,13 @@ using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
 }
 
 
-using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+using (var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(namedPipe);
+    await Run(namedPipeMerge);
 }
-using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+using (var namedPipeVanilla = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(false).CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(namedPipe);
+    await Run(namedPipeVanilla);
 }
 // THIS ONE NEEDS INVESTIGATION; TLS doesn't handshake
 //using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
