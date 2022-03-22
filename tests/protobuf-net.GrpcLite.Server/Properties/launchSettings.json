@@ -1,0 +1,13 @@
+﻿{
+  "profiles": {
+    "protobuf-net.GrpcLite.Server": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5074;https://localhost:7074",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

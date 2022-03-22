@@ -177,7 +177,7 @@ public class TestServerHost : IDisposable, ILogger
     IDisposable ILogger.BeginScope<TState>(TState state) => null!;
 }
 
-class MyService : FooService.FooServiceBase
+public class MyService : FooService.FooServiceBase
 {
     public event Action<string>? Log;
     
@@ -200,5 +200,27 @@ class MyService : FooService.FooServiceBase
             await responseStream.WriteAsync(new FooResponse {  Value = value.Value });
         }
         OnLog("duplex returning");
+    }
+
+    public override async Task ServerStreaming(FooRequest request, IServerStreamWriter<FooResponse> responseStream, ServerCallContext context)
+    {
+        var count = request.Value;
+        for (int i = 0; i < count; i++)
+        {
+            await responseStream.WriteAsync(new FooResponse { Value = i });
+        }
+    }
+    public override async Task<FooResponse> ClientStreaming(IAsyncStreamReader<FooRequest> requestStream, ServerCallContext context)
+    {
+        OnLog("client-streaming starting");
+        int sum = 0;
+        while (await requestStream.MoveNext(context.CancellationToken))
+        {
+            var value = requestStream.Current;
+            OnLog($"client-streaming received {value.Value}");
+            sum += value.Value;
+        }
+        OnLog("client-streaming returning");
+        return new FooResponse { Value = sum };
     }
 }

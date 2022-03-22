@@ -22,14 +22,14 @@
     <IncludeSymbols>false</IncludeSymbols>
     <IsTestProject>$(MSBuildProjectName.Contains('Test'))</IsTestProject>
     <Nullable>enable</Nullable>
-    <LangVersion>8.0</LangVersion>
+    <LangVersion>latest</LangVersion>
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>1.0.147</PBGRPCLibVersion>
-    <GrpcDotNetVersion>2.37.0</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.15.6</GoogleProtobufVersion>
-    <GrpcVersion>2.37.0</GrpcVersion>
+    <GrpcDotNetVersion>2.44.0</GrpcDotNetVersion>
+    <GoogleProtobufVersion>3.19.2</GoogleProtobufVersion>
+    <GrpcVersion>2.44.0</GrpcVersion>
 
     <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
     <ProtoBufNet3Version>3.0.101</ProtoBufNet3Version>

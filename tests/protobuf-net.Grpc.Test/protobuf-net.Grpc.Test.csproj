@@ -5,7 +5,6 @@
     <TargetFrameworks>net461;net472;netcoreapp5.0;netcoreapp3.1</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
-    <LangVersion>preview</LangVersion>
     <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">

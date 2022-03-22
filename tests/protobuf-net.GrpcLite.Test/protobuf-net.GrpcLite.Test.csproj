@@ -5,13 +5,12 @@
     <TargetFramework>net6.0</TargetFramework>
     <RootNamespace>protobuf_net.GrpcLite.Test</RootNamespace>
     <IsPackable>false</IsPackable>
-    <LangVersion>preview</LangVersion>
     <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.19.4" />
-    <PackageReference Include="Grpc.AspNetCore" Version="2.43.0" />
+    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufVersion)" />
+    <PackageReference Include="Grpc.AspNetCore" Version="$(GrpcDotNetVersion)" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.9.1" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
