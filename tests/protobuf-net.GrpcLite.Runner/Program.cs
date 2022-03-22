@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using Grpc.Net.Client;
 using ProtoBuf.Grpc.Lite;
+using protobuf_net.GrpcLite.Test;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using static FooService;
@@ -19,6 +20,13 @@ using static FooService;
 //    await Run(unmanagedHttp);
 //}
 // TLS with Grpc.Core is a PITA to configure, so... meh
+using var localServer = new LiteServer();
+localServer.ManualBind<MyService>();
+
+using (var local = localServer.CreateLocalClient())
+{
+    await Run(local);
+}
 
 using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
@@ -34,12 +42,16 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
 {
     try
     {
+        var cts = new CancellationTokenSource();
+        cts.CancelAfter(TimeSpan.FromSeconds(60));
+        var options = new CallOptions(cancellationToken: cts.Token);
+
         var invoker = channel.CreateCallInvoker();
         Console.WriteLine($"Connecting to {channel.Target} ({caller}, {invoker.GetType().Name})...");
         var client = new FooServiceClient(invoker);
 
         {
-            using (var call = client.UnaryAsync(new FooRequest { Value = 42 }))
+            using (var call = client.UnaryAsync(new FooRequest { Value = 42 }, options))
             {
                 var result = await call.ResponseAsync;
                 if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
@@ -47,70 +59,70 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
             }
         }
 
-        for (int j = 0; j < 5; j++)
-        {
-            var watch = Stopwatch.StartNew();
-            const int OPCOUNT = 5 * 1024;
-            for (int i = 0; i < OPCOUNT; i++)
-            {
-                using var call = client.UnaryAsync(new FooRequest { Value = i });
-                var result = await call.ResponseAsync;
+        //for (int j = 0; j < 5; j++)
+        //{
+        //    var watch = Stopwatch.StartNew();
+        //    const int OPCOUNT = 100; // * 1024;
+        //    for (int i = 0; i < OPCOUNT; i++)
+        //    {
+        //        using var call = client.UnaryAsync(new FooRequest { Value = i }, options);
+        //        var result = await call.ResponseAsync;
 
-                if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
-            }
-            ShowTiming(nameof(client.UnaryAsync), watch, OPCOUNT);
-        }
+        //        if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+        //    }
+        //    ShowTiming(nameof(client.UnaryAsync), watch, OPCOUNT);
+        //}
 
-        for (int j = 0; j < 5; j++)
-        {
-            var watch = Stopwatch.StartNew();
-            using var call = client.ClientStreaming();
-            const int OPCOUNT = 50 * 1024;
-            int sum = 0;
-            for (int i = 0; i < OPCOUNT; i++)
-            {
-                await call.RequestStream.WriteAsync(new FooRequest { Value = i });
-                sum += i;
-            }
-            await call.RequestStream.CompleteAsync();
-            var result = await call.ResponseAsync;
-            if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
-            ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
-        }
+        //for (int j = 0; j < 5; j++)
+        //{
+        //    var watch = Stopwatch.StartNew();
+        //    using var call = client.ClientStreaming(options);
+        //    const int OPCOUNT = 50 * 1024;
+        //    int sum = 0;
+        //    for (int i = 0; i < OPCOUNT; i++)
+        //    {
+        //        await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+        //        sum += i;
+        //    }
+        //    await call.RequestStream.CompleteAsync();
+        //    var result = await call.ResponseAsync;
+        //    if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
+        //    ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
+        //}
 
-        for (int j = 0; j < 5; j++)
-        {
-            var watch = Stopwatch.StartNew();
-            const int OPCOUNT = 100 * 1024;
-            using var call = client.ServerStreaming(new FooRequest { Value = OPCOUNT });
-            int count = 0;
-            while (await call.ResponseStream.MoveNext())
-            {
-                var result = call.ResponseStream.Current;
-                if (result?.Value != count) throw new InvalidOperationException("Incorrect response received: " + result);
-                count++;
-            }
-            if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
-            ShowTiming(nameof(client.ServerStreaming), watch, OPCOUNT);
-        }
+        //for (int j = 0; j < 5; j++)
+        //{
+        //    var watch = Stopwatch.StartNew();
+        //    const int OPCOUNT = 100 * 1024;
+        //    using var call = client.ServerStreaming(new FooRequest { Value = OPCOUNT },options);
+        //    int count = 0;
+        //    while (await call.ResponseStream.MoveNext())
+        //    {
+        //        var result = call.ResponseStream.Current;
+        //        if (result?.Value != count) throw new InvalidOperationException("Incorrect response received: " + result);
+        //        count++;
+        //    }
+        //    if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
+        //    ShowTiming(nameof(client.ServerStreaming), watch, OPCOUNT);
+        //}
 
-        for (int j = 0; j < 5; j++)
-        {
-            var watch = Stopwatch.StartNew();
-            const int OPCOUNT = 20 * 1024;
-            using var call = client.Duplex();
+        //for (int j = 0; j < 5; j++)
+        //{
+        //    var watch = Stopwatch.StartNew();
+        //    const int OPCOUNT = 20 * 1024;
+        //    using var call = client.Duplex(options);
 
-            for (int i = 0; i < OPCOUNT; i++)
-            {
-                await call.RequestStream.WriteAsync(new FooRequest { Value = i });
-                if (!await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream terminated early");
-                var result = call.ResponseStream.Current;
-                if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
-            }
-            await call.RequestStream.CompleteAsync();
-            if (await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream ran over");
-            ShowTiming(nameof(client.Duplex), watch, OPCOUNT);
-        }
+        //    for (int i = 0; i < OPCOUNT; i++)
+        //    {
+        //        await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+        //        if (!await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream terminated early");
+        //        var result = call.ResponseStream.Current;
+        //        if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+        //    }
+        //    await call.RequestStream.CompleteAsync();
+        //    if (await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream ran over");
+        //    ShowTiming(nameof(client.Duplex), watch, OPCOUNT);
+        //}
     }
     catch (Exception ex)
     {

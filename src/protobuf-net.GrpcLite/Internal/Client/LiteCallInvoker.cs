@@ -46,7 +46,14 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 
     internal void StopWorker()
     {
-        _clientShutdown.Cancel();
+        try
+        {
+            if (!_clientShutdown.IsCancellationRequested)
+            {
+                _clientShutdown.Cancel();
+            }
+        }
+        catch { }
         _clientShutdown.SafeDispose();
     }
 

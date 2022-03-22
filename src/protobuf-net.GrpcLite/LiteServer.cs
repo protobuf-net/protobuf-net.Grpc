@@ -10,7 +10,7 @@ using System.Reflection;
 
 namespace ProtoBuf.Grpc.Lite
 {
-    public sealed class LiteServer
+    public sealed class LiteServer : IDisposable, IAsyncDisposable
     {
         public LiteServer(ILogger? logger = null)
             => Logger = logger;
@@ -24,6 +24,13 @@ namespace ProtoBuf.Grpc.Lite
 
         CancellationTokenSource _serverShutdown = new CancellationTokenSource();
         public void Stop() => _serverShutdown.Cancel();
+
+        void IDisposable.Dispose() => Stop();
+        ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            Stop();
+            return default;
+        }
 
         public LiteChannel CreateLocalClient(string? name = null)
         {
@@ -91,7 +98,10 @@ namespace ProtoBuf.Grpc.Lite
 
             server ??= Activator.CreateInstance<T>();
             _serviceBinder ??= new LiteServiceBinder(this);
+            var countBefore = MethodCount;
             method.Invoke(null, new object[] { _serviceBinder, server });
+            var methodsAdded = MethodCount - countBefore;
+            Logger.Information((type: typeof(T), methodsAdded), static (state, ex) => $"bound {state.type.FullName}, {state.methodsAdded} methods added");
         }
 
         public int MethodCount => _handlers.Count;

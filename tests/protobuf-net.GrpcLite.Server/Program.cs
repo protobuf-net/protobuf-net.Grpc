@@ -8,13 +8,20 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddGrpc();
-
-var server = new LiteServer();
-_ = server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge").AsFrames(true));
-_ = server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_nomerge").AsFrames(false));
-builder.Services.AddSingleton(server); // keep it alive
+builder.Services.AddSingleton<MyService>();
+builder.Services.AddSingleton<LiteServer>(services =>
+{
+    var logger = services.GetService<ILogger<LiteServer>>();
+    var server = new LiteServer(logger);
+    server.ManualBind(services.GetService<MyService>());
+    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge").AsFrames(true));
+    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_nomerge").AsFrames(false));
+    return server;
+});
 
 var app = builder.Build();
+
+var grpc = app.Services.GetService<LiteServer>()!;
 
 // Configure the HTTP request pipeline.
 app.MapGrpcService<MyService>();
