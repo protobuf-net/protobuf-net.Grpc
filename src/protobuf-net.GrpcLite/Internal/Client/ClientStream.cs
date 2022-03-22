@@ -33,10 +33,7 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
     }
 
     Task IClientStreamWriter<TRequest>.CompleteAsync()
-    {
-        //CompleteResponseChannel();
-        return Task.CompletedTask;
-    }
+        => SendTrailerAsync(null, null).AsTask();
 
     Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message) => SendAsync(message).AsTask();
 

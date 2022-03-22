@@ -160,37 +160,42 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             }
         }
         Logger.Debug(scenario, static (state, _) => $"Cancellation mode: {state}");
+
+        CancellationToken newCancellationToken;
         // 8 possibilities
         switch (scenario)
         {
             case CancellationScenerio.None:
+                newCancellationToken = CancellationToken.None;
                 break; // nothing to do
             case CancellationScenerio.OwnerShutdown:
-                CancellationToken = ownerShutdown;
+                newCancellationToken = ownerShutdown;
                 break;
             case CancellationScenerio.StreamSpecific:
-                CancellationToken = streamSpecificCancellation;
+                newCancellationToken = streamSpecificCancellation;
                 break;
             case CancellationScenerio.Deadline:
                 _cancellation = new CancellationTokenSource();
-                break; // deadline and StreamCancellation dealt with below
+                newCancellationToken = _cancellation.Token;
+                break; // deadline dealt with below
             case CancellationScenerio.OwnerShutdown | CancellationScenerio.StreamSpecific:
             case CancellationScenerio.OwnerShutdown | CancellationScenerio.StreamSpecific | CancellationScenerio.Deadline:
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(ownerShutdown, streamSpecificCancellation);
-                break; // deadline and StreamCancellation dealt with below
+                newCancellationToken = _cancellation.Token;
+                break; // deadline dealt with below
             case CancellationScenerio.OwnerShutdown | CancellationScenerio.Deadline:
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(ownerShutdown);
-                break; // deadline and StreamCancellation dealt with below
+                newCancellationToken = _cancellation.Token;
+                break; // deadline dealt with below
             case CancellationScenerio.StreamSpecific | CancellationScenerio.Deadline:
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(streamSpecificCancellation);
-                break; // deadline and StreamCancellation dealt with below
-
+                newCancellationToken = _cancellation.Token;
+                break; // deadline dealt with below
             default:
                 throw new InvalidOperationException($"Unexpected cancellation scenario: {scenario}");
         }
         if (_cancellation is not null)
         {
-            CancellationToken = _cancellation.Token;
             if ((scenario & CancellationScenerio.Deadline) != 0)
             {
                 try
@@ -204,7 +209,8 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                 }
             }
         }
-        _onCancelRegistration = this.RegisterCancellation(CancellationToken);
+        _onCancelRegistration = this.RegisterCancellation(newCancellationToken);
+        CancellationToken = newCancellationToken; // need to do this *afer* RegisterCancellation has checked
     }
 
     void IStream.Cancel()
@@ -581,8 +587,11 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             kind = header.Kind;
             return header.IsFinal;
         }
+        static void ThrowWorkserState(WorkerState state) => throw new InvalidOperationException($"Unexpected worker state: {state}");
         static void ThrowMismatchedGroup(FrameKind group, FrameKind item) => throw new InvalidOperationException($"An unexpected {item} frame was encountered in the backlog while reading a {group} group");
 
+        CancellationToken.ThrowIfCancellationRequested();
+        if (_workerStateNeedsSync != WorkerState.Active) ThrowWorkserState(_workerStateNeedsSync);
         int count;
         kind = FrameKind.None;
 

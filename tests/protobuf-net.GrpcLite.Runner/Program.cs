@@ -6,19 +6,20 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using static FooService;
 
+Dictionary<string, (string unary, string clientStreaming, string serverStreaming, string duplex)> timings = new();
 
-//using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
-//{
-//    await Run(managedHttp);
-//}
-//using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
-//{
-//    await Run(managedHttps);
-//}
-//{
-//    var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
-//    await Run(unmanagedHttp);
-//}
+using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
+{
+    await Run(managedHttp);
+}
+using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
+{
+    await Run(managedHttps);
+}
+{
+    var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
+    await Run(unmanagedHttp);
+}
 
 {
     using var localServer = new LiteServer();
@@ -30,23 +31,30 @@ using static FooService;
 }
 
 
-//using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
-//{
-//    await Run(namedPipe);
-//}
-//using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
-//{
-//    await Run(namedPipe);
-//}
-
+using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+{
+    await Run(namedPipe);
+}
+using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+{
+    await Run(namedPipe);
+}
 // THIS ONE NEEDS INVESTIGATION; TLS doesn't handshake
 //using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
 //{
 //    await Run(namedPipeTls);
 //}
 
+Console.WriteLine();
+Console.WriteLine("| Scenario | Unary | Client-Streaming | Server-Streaming | Duplex |");
+Console.WriteLine("| -------- | ----- | ---------------- | ---------------- | ------ |");
+foreach (var (scenario, data) in timings.OrderBy(x => x.Key))
+{
+    Console.WriteLine($"| {scenario} | {data.unary} | {data.clientStreaming} | {data.serverStreaming} | {data.duplex} |");
+}
 
-static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string caller = "", int repeatCount = 10)
+
+async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string caller = "", int repeatCount = 10)
 {
     try
     {
@@ -62,22 +70,26 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
         {
             var result = await call.ResponseAsync;
             if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
+            Console.WriteLine();
         }
 
-        //for (int j = 0; j < repeatCount; j++)
-        //{
-        //    var watch = Stopwatch.StartNew();
-        //    const int OPCOUNT = 10000;
-        //    for (int i = 0; i < OPCOUNT; i++)
-        //    {
-        //        using var call = client.UnaryAsync(new FooRequest { Value = i }, options);
-        //        var result = await call.ResponseAsync;
+        long unary = 0;
+        for (int j = 0; j < repeatCount; j++)
+        {
+            var watch = Stopwatch.StartNew();
+            const int OPCOUNT = 10000;
+            for (int i = 0; i < OPCOUNT; i++)
+            {
+                using var call = client.UnaryAsync(new FooRequest { Value = i }, options);
+                var result = await call.ResponseAsync;
 
-        //        if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
-        //    }
-        //    ShowTiming(nameof(client.UnaryAsync), watch, OPCOUNT);
-        //}
+                if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+            }
+            unary += ShowTiming(nameof(client.UnaryAsync), watch, OPCOUNT);
+        }
+        Console.WriteLine();
 
+        long clientStreaming = 0;
         for (int j = 0; j < repeatCount; j++)
         {
             var watch = Stopwatch.StartNew();
@@ -90,46 +102,52 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
                 sum += i;
             }
             await call.RequestStream.CompleteAsync();
-            Console.WriteLine("d");
-            var result = await call.ResponseAsync; // FIX: not completing
-            Console.WriteLine("e");
+            var result = await call.ResponseAsync;
             if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
-            ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
+            clientStreaming += ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
         }
+        Console.WriteLine();
 
-        //for (int j = 0; j < repeatCount; j++)
-        //{
-        //    var watch = Stopwatch.StartNew();
-        //    const int OPCOUNT = 100 * 1024;
-        //    using var call = client.ServerStreaming(new FooRequest { Value = OPCOUNT },options);
-        //    int count = 0;
-        //    while (await call.ResponseStream.MoveNext())
-        //    {
-        //        var result = call.ResponseStream.Current;
-        //        if (result?.Value != count) throw new InvalidOperationException("Incorrect response received: " + result);
-        //        count++;
-        //    }
-        //    if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
-        //    ShowTiming(nameof(client.ServerStreaming), watch, OPCOUNT);
-        //}
+        long serverStreaming = 0;
+        for (int j = 0; j < repeatCount; j++)
+        {
+            var watch = Stopwatch.StartNew();
+            const int OPCOUNT = 50000;
+            using var call = client.ServerStreaming(new FooRequest { Value = OPCOUNT }, options);
+            int count = 0;
+            while (await call.ResponseStream.MoveNext())
+            {
+                var result = call.ResponseStream.Current;
+                if (result?.Value != count) throw new InvalidOperationException("Incorrect response received: " + result);
+                count++;
+            }
+            if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
+            serverStreaming += ShowTiming(nameof(client.ServerStreaming), watch, OPCOUNT);
+        }
+        Console.WriteLine();
 
-        //for (int j = 0; j < repeatCount; j++)
-        //{
-        //    var watch = Stopwatch.StartNew();
-        //    const int OPCOUNT = 20 * 1024;
-        //    using var call = client.Duplex(options);
+        long duplex = 0;
+        for (int j = 0; j < repeatCount; j++)
+        {
+            var watch = Stopwatch.StartNew();
+            const int OPCOUNT = 25000;
+            using var call = client.Duplex(options);
 
-        //    for (int i = 0; i < OPCOUNT; i++)
-        //    {
-        //        await call.RequestStream.WriteAsync(new FooRequest { Value = i });
-        //        if (!await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream terminated early");
-        //        var result = call.ResponseStream.Current;
-        //        if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
-        //    }
-        //    await call.RequestStream.CompleteAsync();
-        //    if (await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream ran over");
-        //    ShowTiming(nameof(client.Duplex), watch, OPCOUNT);
-        //}
+            for (int i = 0; i < OPCOUNT; i++)
+            {
+                await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+                if (!await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream terminated early");
+                var result = call.ResponseStream.Current;
+                if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+            }
+            await call.RequestStream.CompleteAsync();
+            if (await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream ran over");
+            duplex += ShowTiming(nameof(client.Duplex), watch, OPCOUNT);
+        }
+        Console.WriteLine();
+        // store the average nanos-per-op
+        timings.Add(caller, (AutoScale(unary / repeatCount), AutoScale(clientStreaming / repeatCount),
+            AutoScale(serverStreaming / repeatCount), AutoScale(duplex / repeatCount)));
     }
     catch (Exception ex)
     {
@@ -138,23 +156,24 @@ static async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")]
     finally
     {
         await channel.ShutdownAsync();
-        Console.WriteLine();
     }
 
-    static void ShowTiming(string label, Stopwatch watch, int operations)
+    static long ShowTiming(string label, Stopwatch watch, int operations)
     {
         watch.Stop();
-        var micros = (watch.ElapsedTicks * 1_000_000) / Stopwatch.Frequency;
-        Console.WriteLine($"{label}×{operations}: {AutoScale(micros)}, {AutoScale(micros / operations)}/op");
+        var nanos = (watch.ElapsedTicks * 1_000_000_000) / Stopwatch.Frequency;
+        Console.WriteLine($"{label} ×{operations}: {AutoScale(nanos)}, {AutoScale(nanos / operations)}/op");
+        return nanos / operations;
+    }
+    static string AutoScale(long nanos)
+    {
+        long qty = nanos;
+        if (qty < 10000) return $"{qty}ns";
+        qty /= 1000;
+        if (qty < 10000) return $"{qty}μs";
+        qty /= 1000;
+        if (qty < 10000) return $"{qty}ms";
 
-        static string AutoScale(long micros)
-        {
-            long qty = micros;
-            if (qty < 10000) return $"{qty}μs";
-            qty /= 1000;
-            if (qty < 10000) return $"{qty}ms";
-
-            return TimeSpan.FromMilliseconds(qty).ToString();
-        }
+        return TimeSpan.FromMilliseconds(qty).ToString();
     }
 }

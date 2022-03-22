@@ -32,7 +32,8 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     CancellationTokenSource After(TimeSpan timeout)
     {
         var cts = new CancellationTokenSource();
-        if (!Debugger.IsAttached) cts.CancelAfter(timeout);
+        //if (!Debugger.IsAttached)
+        cts.CancelAfter(timeout);
         return cts;
     }
 
@@ -112,6 +113,33 @@ public class EndToEndTests : IClassFixture<TestServerHost>
         await RunDuplex(client, timeout.Token);
 
         timeout.Cancel();
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    [InlineData(100)]
+    [InlineData(1000)]
+    [InlineData(10000)]
+    public async Task LongClientStreamingAsync(int count, int timeoutSeconds = 10)
+    {
+        using var log = ServerLog();
+        using var timeout = After(TimeSpan.FromSeconds(timeoutSeconds));
+        await using var client = this.Server.ConnectLocal();
+
+        var proxy = new FooService.FooServiceClient(client);
+        var options = new CallOptions(cancellationToken: timeout.Token);
+
+        using var call = proxy.ClientStreaming(options);
+        int sum = 0;
+        for (int i = 0; i < count; i++)
+        {
+            await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+            sum += i;
+        }
+        await call.RequestStream.CompleteAsync();
+        var resp = await call.ResponseAsync;
+        Assert.Equal(sum, resp.Value);
     }
 
     [Fact]
