@@ -36,24 +36,24 @@ internal static class ListenerEngine
                 bool release = true;
                 switch (header.Kind)
                 {
-                    case FrameKind.CloseConnection:
-                    case FrameKind.Ping:
+                    case FrameKind.ConnectionClose:
+                    case FrameKind.ConnectionPing:
                         if (header.IsClientStream != listener.IsClient)
                         {
                             // the other end is initiating; acknowledge with an empty but similar frame
                             await listener.Output.WriteAsync(new FrameHeader(header.Kind, 0, header.StreamId, header.SequenceId), cancellationToken);
                         }
                         // shutdown if requested
-                        if (header.Kind == FrameKind.CloseConnection)
+                        if (header.Kind == FrameKind.ConnectionClose)
                         {
                             listener.Output.Complete();
                         }
                         break;
-                    case FrameKind.Header when header.IsClientStream != listener.IsClient: // a header with the "other" stream marker means
+                    case FrameKind.StreamHeader when header.IsClientStream != listener.IsClient: // a header with the "other" stream marker means
                         if (listener.Streams.ContainsKey(header.StreamId))
                         {
                             logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
+                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.StreamCancel, 0, header.StreamId, 0), cancellationToken);
                         }
                         else if (listener.TryCreateStream(in frame, out var newStream) && newStream is not null)
                         {
@@ -64,13 +64,13 @@ internal static class ListenerEngine
                             else
                             {
                                 logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                                await listener.Output.WriteAsync(new FrameHeader(FrameKind.Cancel, 0, header.StreamId, 0), cancellationToken);
+                                await listener.Output.WriteAsync(new FrameHeader(FrameKind.StreamCancel, 0, header.StreamId, 0), cancellationToken);
                             }
                         }
                         else
                         {
                             logger.Debug(frame, static (state, _) => $"method not found: {state.GetPayloadString()}");
-                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.MethodNotFound, 0, header.StreamId, 0), cancellationToken);
+                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.StreamMethodNotFound, 0, header.StreamId, 0), cancellationToken);
                         }
                         break;
                     default:
@@ -86,7 +86,7 @@ internal static class ListenerEngine
                                 logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
                             }
 
-                            if (header.Kind == FrameKind.Trailer && header.IsFinal)
+                            if (header.Kind == FrameKind.StreamTrailer && header.IsFinal)
                             {
                                 logger.Debug(header, static (state, _) => $"removing stream {state}");
                                 listener.Streams.Remove(header.StreamId, out _);

@@ -5,9 +5,11 @@ using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Security;
 using System.Runtime.CompilerServices;
 using static FooService;
 
+RemoteCertificateValidationCallback trustAny = delegate { return true; };
 Dictionary<string, (string unary, string clientStreaming, string serverStreaming, string duplex)> timings = new();
 
 using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
@@ -32,7 +34,6 @@ using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
     }
 }
 
-
 using (var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
     await Run(namedPipeMerge);
@@ -45,15 +46,20 @@ using (var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctes
 {
     await Run(namedPipePassThru);
 }
-using (var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+using (var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
     await Run(tcp);
 }
-// THIS ONE NEEDS INVESTIGATION; TLS doesn't handshake
-//using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
-//{
-//    await Run(namedPipeTls);
-//}
+using (var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043))
+    .WithTls().AuthenticateAsClient("mytestserver", trustAny).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
+{
+    await Run(tcpTls);
+}
+using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls()
+    .AuthenticateAsClient("mytestserver", trustAny).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
+{
+    await Run(namedPipeTls);
+}
 
 Console.WriteLine();
 Console.WriteLine("| Scenario | Unary | Client-Streaming | Server-Streaming | Duplex |");
@@ -169,7 +175,8 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
     }
     finally
     {
-        await channel.ShutdownAsync();
+        try { await channel.ShutdownAsync(); }
+        catch { }
     }
 
     static long ShowTiming(string label, Stopwatch watch, int operations)

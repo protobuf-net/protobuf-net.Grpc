@@ -273,9 +273,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         {
             var need = header.Kind switch
             {
-                FrameKind.Header => StreamState.AcceptHeader,
-                FrameKind.Payload => StreamState.AcceptPayload,
-                FrameKind.Trailer => StreamState.AcceptTrailer,
+                FrameKind.StreamHeader => StreamState.AcceptHeader,
+                FrameKind.StreamPayload => StreamState.AcceptPayload,
+                FrameKind.StreamTrailer => StreamState.AcceptTrailer,
                 _ => default,
             };
             if ((StreamState & need) == 0) return false; // not expecting that
@@ -384,11 +384,11 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                                 }
                                 return; // there will never be anything else
                         }
-                    case FrameKind.Header:
+                    case FrameKind.StreamHeader:
                         _unprocessedHeaders = FrameSequenceSegment.Create(nextGroup.Span);
                         Release(ref nextGroup, releasePayload: false);
                         continue;
-                    case FrameKind.Trailer:
+                    case FrameKind.StreamTrailer:
                         _unprocessedTrailers = FrameSequenceSegment.Create(nextGroup.Span);
                         Release(ref nextGroup, releasePayload: false);
                         lock (SyncLock)
@@ -396,7 +396,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                             _nextItemNeedsSync = Maybe<TReceive>.NoValue;
                         }
                         return; // not expecting any more
-                    case FrameKind.Payload:
+                    case FrameKind.StreamPayload:
                         var value = DeserializePayload(ref nextGroup);
                         lock (SyncLock)
                         {
@@ -434,7 +434,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         Debug.Assert(!frameGroup.IsEmpty, "frame group should not be empty");
         var span = frameGroup.Span;
         var lastHeader = span[span.Length - 1].GetHeader();
-        Debug.Assert(lastHeader.Kind == FrameKind.Payload, $"expected payload, got {lastHeader.Kind}");
+        Debug.Assert(lastHeader.Kind == FrameKind.StreamPayload, $"expected payload, got {lastHeader.Kind}");
 
         // run the deserializer
         var payload = FrameSequenceSegment.Create(span);
@@ -719,7 +719,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     public ValueTask SendHeaderAsync(string? host, in CallOptions options)
     {
-        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.Header, 0);
+        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamHeader, 0);
         try
         {
             MetadataEncoder.WriteHeader(ctx, IsClient, Method.FullName, host, options);
@@ -734,7 +734,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     }
     public ValueTask SendTrailerAsync(Metadata? metadata, Status? status)
     {
-        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.Trailer, 0);
+        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamTrailer, 0);
         try
         {
             ctx.Complete(); // always empty for now
@@ -794,7 +794,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         try
         {
             Logger.Debug(value, static (state, ex) => $"serializing {state}...");
-            serializationContext = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.Payload, 0);
+            serializationContext = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamPayload, 0);
             Serializer(value, serializationContext);
             Logger.Debug(serializationContext, static (state, _) => $"serialized; {state}");
             await serializationContext.WritePayloadAsync(Output, CancellationToken);

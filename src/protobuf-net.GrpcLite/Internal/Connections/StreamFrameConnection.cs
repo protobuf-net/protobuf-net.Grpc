@@ -80,8 +80,15 @@ internal sealed class StreamFrameConnection : IFrameConnection
             do
             {
                 bool haveWritten = false;
-                while (source.TryRead(out var frame))
+                while (true)
                 {
+                    if (!source.TryRead(out var frame))
+                    {
+                        break;
+                        //await Task.Yield(); // blink; see if things improved
+                        //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
+                    }
+
                     _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
                     var memory = frame.Memory;
                     if (memory.IsEmpty)
@@ -130,8 +137,9 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 {
                     if (!source.TryRead(out var frame))
                     {
-                        await Task.Yield(); // blink; see if things improved
-                        if (!source.TryRead(out frame)) break; // nope, definitely nothing there
+                        break;
+                        //await Task.Yield(); // blink; see if things improved
+                        //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
                     }
 
                     _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
@@ -288,8 +296,15 @@ internal sealed class StreamFrameConnection : IFrameConnection
             do
             {
                 bool haveWritten = false;
-                while (source.TryRead(out var frame))
+                while (true)
                 {
+                    if (!source.TryRead(out var frame))
+                    {
+                        break;
+                        //await Task.Yield(); // blink; see if things improved
+                        //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
+                    }
+
                     _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
                     var current = frame.Memory;
                     if (current.IsEmpty)

@@ -229,10 +229,11 @@ public static class ConnectionFactory
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsClient(
         this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
-        string targetHost)
+        string targetHost, RemoteCertificateValidationCallback? remoteCertificateValidationCallback = null)
         => factory.AuthenticateAsClient(new SslClientAuthenticationOptions
         {
-            TargetHost = targetHost
+            TargetHost = targetHost,
+            RemoteCertificateValidationCallback = remoteCertificateValidationCallback,
         });
 
     /// <summary>

@@ -79,7 +79,7 @@ public class BasicTests
     {
         var stream = new DummyStream("/myservice/mymethod", 42);
 
-        var ctx = PayloadFrameSerializationContext.Get(stream, RefCountedMemoryPool<byte>.Shared, FrameKind.Header, 0);
+        var ctx = PayloadFrameSerializationContext.Get(stream, RefCountedMemoryPool<byte>.Shared, FrameKind.StreamHeader, 0);
         try
         {
             MetadataEncoder.WriteHeader(ctx, true, ((IStream)stream).Method, null, default);
@@ -92,7 +92,7 @@ public class BasicTests
 
             frame = new Frame(frame.Memory);
             var header = frame.GetHeader();
-            Assert.Equal(FrameKind.Header, header.Kind);
+            Assert.Equal(FrameKind.StreamHeader, header.Kind);
             Assert.Equal(0, header.KindFlags);
             Assert.Equal(42, header.StreamId);
             Assert.Equal(0, header.SequenceId);

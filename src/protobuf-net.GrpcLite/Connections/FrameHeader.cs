@@ -165,7 +165,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         => header[PayloadLengthOffset + 1] |= 0x80; // + 1 because little-endian, so MSB is in second octet
 
     /// <summary>
-    /// Indicates that this is the last frame in a group that collectively make up a <see cref="FrameKind.Header"/>, <see cref="FrameKind.Payload"/>, <see cref="FrameKind.Trailer"/>, etc.
+    /// Indicates that this is the last frame in a group that collectively make up a <see cref="FrameKind.StreamHeader"/>, <see cref="FrameKind.StreamPayload"/>, <see cref="FrameKind.StreamTrailer"/>, etc.
     /// </summary>
     public bool IsFinal
     {
