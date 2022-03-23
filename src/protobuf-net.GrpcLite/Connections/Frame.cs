@@ -6,12 +6,18 @@ using System.Text;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
+/// <summary>
+/// Represents a gRPC header and payload
+/// </summary>
 public readonly partial struct Frame
 {
+    /// <inheritdoc/>
     public override string ToString() => GetHeader().ToString();
 
+    /// <inheritdoc/>
     public override int GetHashCode() => GetHeader().GetHashCode();
 
+    /// <inheritdoc/>
     public override bool Equals([NotNullWhen(true)] object? obj)
         => obj is Frame other && GetHeader().Equals(other.GetHeader());
 
@@ -21,6 +27,10 @@ public readonly partial struct Frame
         if (payloadLength > FrameHeader.MaxPayloadLength) ThrowOversized(payloadLength);
         static void ThrowOversized(ushort length) => throw new InvalidOperationException($"The declared payload length {length} exceeds the permitted maxiumum length of {FrameHeader.MaxPayloadLength}");
     }
+
+    /// <summary>
+    /// Create a new <see cref="Frame"/> from an existing buffer; this is a zero-copy operation - the buffer now belongs to the new frame.
+    /// </summary>
     public Frame(in ReadOnlyMemory<byte> buffer)
     {
         Debug.Assert(MemoryMarshal.TryGetMemoryManager(buffer, out RefCountedMemoryManager<byte> _), "should have ref-counted memory manager");
@@ -46,6 +56,10 @@ public readonly partial struct Frame
     /// The length of the frame inscluding the header
     /// </summary>
     public int TotalLength => _buffer.Length;
+
+    /// <summary>
+    /// Is the <see cref="Frame"/> well-defined, i.e. has a complete header an a valid <see cref="FrameKind"/>.
+    /// </summary>
     public bool HasValue
     {
         get
@@ -55,12 +69,21 @@ public readonly partial struct Frame
         }
     }
 
+    /// <summary>
+    /// Parses the header portion of this frame.
+    /// </summary>
     public FrameHeader GetHeader()
         => _buffer.Length >= FrameHeader.Size ? FrameHeader.ReadUnsafe(in _buffer.Span[0]) : default;
 
+    /// <summary>
+    /// Obtains the payload portion of this frame.
+    /// </summary>
     public ReadOnlyMemory<byte> GetPayload()
         => _buffer.Length >= FrameHeader.Size ? _buffer.Slice(start: FrameHeader.Size) : default;
 
+    /// <summary>
+    /// Obtain the head and payload from this frame.
+    /// </summary>
     public void Deconstruct(out FrameHeader header, out ReadOnlyMemory<byte> payload)
     {
         if (_buffer.Length >= FrameHeader.Size)
@@ -75,12 +98,18 @@ public readonly partial struct Frame
         }
     }
 
+    /// <summary>
+    /// If using a ref-counted memory manager: signal that this memory is no longer required.
+    /// </summary>
     public void Release()
     {
         if (MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(_buffer, out var manager))
             manager.Dispose();
     }
 
+    /// <summary>
+    /// If using a ref-counted memory manager: signal that this memory required for an extended duration (must be paired with an additional call to <see cref="Release"/>).
+    /// </summary>
     public void Preserve()
     {
         if (MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(_buffer, out var manager))

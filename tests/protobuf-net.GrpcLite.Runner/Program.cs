@@ -1,5 +1,6 @@
 ﻿using Grpc.Core;
 using Grpc.Net.Client;
+using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System.Diagnostics;
@@ -23,7 +24,7 @@ using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
 
 {
     using var localServer = new LiteServer();
-    localServer.ManualBind<MyService>();
+    localServer.Bind<MyService>();
     using (var local = localServer.CreateLocalClient())
     {
         await Run(local);
@@ -35,9 +36,13 @@ using (var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_m
 {
     await Run(namedPipeMerge);
 }
-using (var namedPipeVanilla = await ConnectionFactory.ConnectNamedPipe("grpctest_nomerge").AsFrames(false).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+using (var namedPipeBuffer = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(namedPipeVanilla);
+    await Run(namedPipeBuffer);
+}
+using (var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+{
+    await Run(namedPipePassThru);
 }
 // THIS ONE NEEDS INVESTIGATION; TLS doesn't handshake
 //using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
@@ -180,5 +185,29 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
         if (qty < 10000) return $"{qty:#,##0}ms";
 
         return TimeSpan.FromMilliseconds(qty).ToString();
+    }
+}
+
+sealed class ConsoleLogger : ILogger, IDisposable
+{
+    private static ILogger? s_Information, s_Debug, s_Error;
+    public static ILogger Information => s_Information ??= new ConsoleLogger(LogLevel.Information);
+    public static ILogger Debug => s_Debug ??= new ConsoleLogger(LogLevel.Debug);
+    public static ILogger Error => s_Error ??= new ConsoleLogger(LogLevel.Error);
+
+    private readonly LogLevel _level;
+    private ConsoleLogger(LogLevel level) => _level = level;
+    IDisposable ILogger.BeginScope<TState>(TState state) => this;
+
+    void IDisposable.Dispose() { }
+
+    bool ILogger.IsEnabled(LogLevel logLevel) => logLevel >= _level;
+
+    void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        if (logLevel >= _level)
+        {
+            (logLevel < LogLevel.Error ? Console.Out : Console.Error).WriteLine(formatter(state, exception));
+        }
     }
 }

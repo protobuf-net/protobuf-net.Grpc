@@ -44,10 +44,10 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
     }
 
     protected sealed override bool IsClient => false;
-    private LiteServerCallContext CreateServerCallContext()
+    private LiteServerCallContext CreateServerCallContext(out CancellationTokenRegistration cancellationTokenRegistration)
     {
         // TODO: handle OOB cancellation
-        RegisterForCancellation(default, Deadline); // this is the earliest that we might need an executor CT, and know what we need to do so
+        cancellationTokenRegistration = RegisterForCancellation(default, Deadline); // this is the earliest that we might need an executor CT, and know what we need to do so
         return LiteServerCallContext.Get(this);
     }
 
@@ -60,8 +60,8 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
 
     protected override async ValueTask ExecuteAsync()
     {
-        var ctx = CreateServerCallContext();
         Metadata? trailers;
+        var ctx = CreateServerCallContext(out var ctr);
         try
         {
             switch (_executor)
@@ -118,6 +118,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         }
         finally
         {
+            ctr.SafeDispose();
             ctx.Recycle();
         }
         await SendTrailerAsync(trailers, Status);

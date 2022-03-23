@@ -1,6 +1,7 @@
 ﻿using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
@@ -9,8 +10,11 @@ internal static class Utilities
 {
     public static readonly byte[] EmptyBuffer = Array.Empty<byte>(); // static readonly field to make the JIT's life easy
 
-
-
+    public static void SafeDispose<T>(this T disposable) where T : struct, IDisposable
+    {
+        try { disposable.Dispose(); }
+        catch { }
+    }
     public static void SafeDispose(this IDisposable? disposable)
     {
         if (disposable is not null)
@@ -39,6 +43,20 @@ internal static class Utilities
             try { await pending; }
             catch { } // swallow
         }
+    }
+
+    public static string ToHex(this Memory<byte> data) => ToHex((ReadOnlyMemory<byte>)data);
+    public static string ToHex(this ReadOnlyMemory<byte> data)
+    {
+#if NET5_0_OR_GREATER
+        return Convert.ToHexString(data.Span);
+#else
+        if (MemoryMarshal.TryGetArray<byte>(data, out var segment) && segment.Array is not null)
+        {
+            return BitConverter.ToString(segment.Array, segment.Offset, segment.Count);
+        }
+        return "n/a";
+#endif
     }
 
     public static ValueTask SafeDisposeAsync(IAsyncDisposable? first, IAsyncDisposable? second)
@@ -86,7 +104,7 @@ internal static class Utilities
         return duplex;
     }
 
-    public static Task StartWriterAsync(this IFrameConnection connection, out ChannelWriter<Frame> writer, CancellationToken cancellationToken)
+    public static Task StartWriterAsync(this IFrameConnection connection, bool isClient, out ChannelWriter<Frame> writer, CancellationToken cancellationToken)
     {
         if (connection is NullConnection nil)
         {
@@ -96,10 +114,14 @@ internal static class Utilities
 
         var channel = Channel.CreateUnbounded<Frame>(UnboundedChannelOptions_SingleReadMultiWriterNoSync);
         writer = channel.Writer;
-        return WithCapture(connection, channel.Reader, cancellationToken);
+        return WithCapture(connection, isClient, channel.Reader, cancellationToken);
 
-        static Task WithCapture(IFrameConnection connection, ChannelReader<Frame> reader, CancellationToken cancellationToken)
-            => Task.Run(() => connection.WriteAsync(reader, cancellationToken));
+        static Task WithCapture(IFrameConnection connection, bool isClient, ChannelReader<Frame> reader, CancellationToken cancellationToken)
+            => Task.Run(() =>
+            {
+                Logging.SetSource(null, isClient ? LogKind.Client : LogKind.Server, "writer");
+                return connection.WriteAsync(reader, cancellationToken);
+            });
     }
 
     public static readonly UnboundedChannelOptions UnboundedChannelOptions_SingleReadMultiWriterNoSync = new UnboundedChannelOptions

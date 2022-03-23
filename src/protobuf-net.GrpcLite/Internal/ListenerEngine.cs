@@ -11,7 +11,7 @@ internal interface IConnection
     bool IsClient { get; }
     ChannelWriter<Frame> Output { get; }
     IAsyncEnumerable<Frame> Input { get; }
-    bool TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler);
+    bool TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream);
 
     ConcurrentDictionary<ushort, IStream> Streams { get; }
     void Remove(ushort streamId);
@@ -55,9 +55,6 @@ internal static class ListenerEngine
                         }
                         else if (listener.TryCreateStream(in frame, out var newStream) && newStream is not null)
                         {
-                            //var method = ;
-                            //var handler = _server.TryGetHandler(method, out var handlerFactory) ? handlerFactory() : null;
-                            // handler.Initialize(header.StreamId, _connection, logger);
                             if (listener.Streams.TryAdd(header.StreamId, newStream))
                             {
                                 logger.Debug(frame, static (state, _) => $"method accepted: {state.GetPayloadString()}");
@@ -77,14 +74,14 @@ internal static class ListenerEngine
                     default:
                         if (listener.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null)
                         {
-                            logger.Debug((handler: existingStream, frame: frame), static (state, _) => $"pushing {state.frame} to {state.handler.Method} ({state.handler.MethodType})");
+                            logger.Debug((stream: existingStream, frame: frame), static (state, _) => $"pushing {state.frame} to {state.stream.Method} ({state.stream.MethodType})");
                             if (existingStream.TryAcceptFrame(in frame))
                             {
                                 release = false;
                             }
                             else
                             {
-                                logger.Information(frame, static (state, _) => $"frame {state} rejected by handler");
+                                logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
                             }
 
                             if (header.Kind == FrameKind.Trailer && header.IsFinal)

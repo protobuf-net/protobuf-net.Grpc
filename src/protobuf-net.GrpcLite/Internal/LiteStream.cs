@@ -66,19 +66,35 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     {
         // note that RegisterCancellation may not do anything if it recognizes this as ctx.CancellationToken, etc
         CancellationTokenRegistration ctr = cancellationToken.CanBeCanceled ? this.RegisterCancellation(cancellationToken) : default;
-        var pending = MoveNextPayloadAsync();
-        if (pending.IsCompletedSuccessfully)
+        try
         {
-            ctr.Dispose();
-            return GetNextItem().HasValue ? Utilities.AsyncTrue : Utilities.AsyncFalse;
+            var pending = MoveNextPayloadAsync();
+            if (pending.IsCompletedSuccessfully)
+            {
+                return GetNextItem().HasValue ? Utilities.AsyncTrue : Utilities.AsyncFalse;
+            }
+            else
+            {
+                var tmp = ctr;
+                ctr = default; // to disable cancel
+                return Awaited(this, pending, tmp);
+            }
         }
-        return Awaited(this, pending, ctr);
+        finally
+        {
+            ctr.SafeDispose();
+        }
+        
         async Task<bool> Awaited(LiteStream<TSend, TReceive> stream, ValueTask pending, CancellationTokenRegistration ctr)
         {
-            using (ctr)
+            try
             {
                 await pending;
                 return GetNextItem().HasValue;
+            }
+            finally
+            {
+                ctr.SafeDispose();
             }
         }
     }
@@ -121,9 +137,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     private CancellationToken _streamSpecificCancellation;
 
-    protected CancellationTokenRegistration _onCancelRegistration;
-
-    public virtual void Dispose() => _onCancelRegistration.Dispose();
+    public virtual void Dispose() { }
 
     [Flags]
     private enum CancellationScenerio : byte
@@ -133,8 +147,14 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         StreamSpecific = 1 << 1,
         Deadline = 1 << 2,
     }
-    internal void RegisterForCancellation(CancellationToken streamSpecificCancellation, DateTime? deadline)
+
+    int cancellationRegistered;
+    internal virtual CancellationTokenRegistration RegisterForCancellation(CancellationToken streamSpecificCancellation, DateTime? deadline)
     {
+        if (Interlocked.CompareExchange(ref cancellationRegistered, 1, 0) != 0)
+        {
+            throw new InvalidOperationException("Cancellation already registered");
+        }
         CancellationScenerio scenario = CancellationScenerio.None;
         var ownerShutdown = _owner?.Shutdown ?? CancellationToken.None;
         if (ownerShutdown.CanBeCanceled)
@@ -209,8 +229,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                 }
             }
         }
-        _onCancelRegistration = this.RegisterCancellation(newCancellationToken);
+        var reg = this.RegisterCancellation(newCancellationToken);
         CancellationToken = newCancellationToken; // need to do this *afer* RegisterCancellation has checked
+        return reg;
     }
 
     void IStream.Cancel()
@@ -220,8 +241,16 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             try
             {
                 // try to give the most meaningful cancellation
-                _streamSpecificCancellation.ThrowIfCancellationRequested();
-                _owner?.Shutdown.ThrowIfCancellationRequested();
+                var token = _owner?.Shutdown ?? CancellationToken.None;
+                if (token.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} is being shut-down.", token);
+                }
+                token = _streamSpecificCancellation;
+                if (token.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} stream is being cancelled.", token);
+                }
                 throw new TimeoutException(); // that leaves a deadline, then
             }
             catch (Exception ex)
@@ -267,13 +296,19 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             {
                 _backlogFrame = frame;
             }
-            Logger.Debug((frame, frames: _backlogFrames), static (state, _) => $"added backlog frame: {state.frame}; total frames: {state.frames?.Count ?? 1}");
+            Logger.Debug((frame, obj: this), static (state, _) => $"added backlog frame: {state.frame}; total frames: {state.obj.CountBacklogFramesLocked()}");
             if (header.IsFinal)
             {
                 StartWorkerAsNeeded();
             }
             return true;
         }
+    }
+
+    private int CountBacklogFramesLocked()
+    {
+        if (_backlogFrames is not null) return _backlogFrames.Count;
+        return _backlogFrame.HasValue ? 1 : 0;
     }
 
     internal async ValueTask<TReceive> AssertSingleAsync()
@@ -330,7 +365,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                     }
                     return total;
                 }
-                Logger.Debug((nextGroup, kind, streamState), static (state, ex) => $"got {CountBytes(state.nextGroup)} payload bytes in {state.nextGroup.Length} buffers; {state.kind}, {state.streamState}");
+                Logger.Debug((nextGroup, kind, streamState), static (state, ex) => $"got {CountBytes(state.nextGroup)} {state.kind} bytes in {state.nextGroup.Length} buffers (stream: {state.streamState})");
                 switch (kind)
                 {
                     case FrameKind.None:
@@ -369,7 +404,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                         }
                         return;
                     default:
-                        Logger.Information(kind, (state, _) => $"unexpected {state} frame-group received");
+                        Logger.Information(kind, static (state, _) => $"unexpected {state} frame-group received");
                         break;
                 }
             }
@@ -438,6 +473,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     private void ReleaseBacklogLocked()
     {
         _backlogFrame.Release();
+        _backlogFrame = default;
         if (_backlogFrames is not null)
         {
             while (_backlogFrames.TryDequeue(out var frame))
@@ -447,11 +483,11 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    private void ReportFault(Exception ex)
+    private void ReportFault(Exception ex, [CallerMemberName] string caller = "")
     {
         try
         {
-            Logger.Critical(ex);
+            Logger.Critical(caller, static (state, e) => $"{e?.Message} (from: {state})", ex);
             lock (SyncLock)
             {
                 // normally when setting state we'd need to preserve the active flag,
@@ -491,6 +527,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                         break;
                 }
             }
+
             // now do the real code outside of the lock
             switch (previousState)
             {
@@ -524,7 +561,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
         if (actualOld != expectedOldState) // log outside the lock
         {
-            Logger.Critical((expectedOldState, newState, actualOld), (state, _) => $"unexpected worker state '{state.actualOld}' when attempting to move from '{state.expectedOldState}' to '{state.newState}'");
+            Logger.Critical((expectedOldState, newState, actualOld), static (state, _) => $"unexpected worker state '{state.actualOld}' when attempting to move from '{state.expectedOldState}' to '{state.newState}'");
             return false;
         }
         return true;
@@ -660,6 +697,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             oversized[0] = _backlogFrame;
             _backlogFrame = default;
         }
+        Logger.Debug((count, kind, obj: this), static (state, _) => $"Dequeued {state.kind} in {state.count} buffers; {state.obj.CountBacklogFramesLocked()} buffers remain");
         return new ReadOnlyMemory<Frame>(oversized, 0, count);
     }
 

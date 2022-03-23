@@ -200,7 +200,7 @@ public class BasicTests
     public void CanBindService()
     {
         var server = new LiteServer(Logger);
-        server.ManualBind<MyService>();
+        server.Bind<MyService>();
         Assert.Equal(4, server.MethodCount);
     }
 
@@ -210,7 +210,30 @@ public class BasicTests
         using var obj = new TestServerHost();
     }
 
+    [Fact]
+    public void CanParseMultiFrame()
+    {
+        const string hex = "02-00-EB-02-00-00-11-80-2F-46-6F-6F-53-65-72-76-69-63-65-2F-55-6E-61-72-79-03-00-EB-02-01-00-03-80-08-EA-05-04-00-EB-02-02-00-00-80";
+        var builder = Frame.CreateBuilder();
+        var data = Convert.FromHexString(hex.Replace("-", ""));
+        data.CopyTo(builder.GetBuffer()); // we'll just assume that this has capacity!
+        int bytesRead = data.Length;
+        Assert.Equal(44, bytesRead);
+        Assert.True(builder.TryRead(ref bytesRead, out var frame), "first");
+        Assert.Equal(25, frame.TotalLength);
+        Assert.Equal(19, bytesRead);
 
+        Assert.True(builder.TryRead(ref bytesRead, out frame), "second");
+        Assert.Equal(11, frame.TotalLength);
+        Assert.Equal(8, bytesRead);
+
+        Assert.True(builder.TryRead(ref bytesRead, out frame), "third");
+        Assert.Equal(8, frame.TotalLength);
+        Assert.Equal(0, bytesRead);
+
+        Assert.False(builder.TryRead(ref bytesRead, out frame), "fourth");
+        Assert.Equal(0, bytesRead);
+    }
 
 }
 

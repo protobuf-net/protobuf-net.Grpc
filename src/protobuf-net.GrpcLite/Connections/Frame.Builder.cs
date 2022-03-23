@@ -1,14 +1,20 @@
-﻿using System.Buffers;
-using System.Buffers.Binary;
+﻿using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc.Lite.Internal;
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
-
+/// <summary>
+/// A <see cref="MemoryPool{T}"/> implementation that incorporates reference-counted tracking.
+/// </summary>
 public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
 {
+    /// <summary>
+    /// Gets a <see cref="RefCountedMemoryPool{T}"/> that uses <see cref="ArrayPool{T}"/>.
+    /// </summary>
     public static new RefCountedMemoryPool<T> Shared
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -19,6 +25,9 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         public static readonly RefCountedMemoryPool<T> Instance = new ArrayRefCountedMemoryPool<T>(ArrayPool<T>.Shared);
     }
 
+    /// <summary>
+    /// Create a <see cref="RefCountedMemoryPool{T}"/> instance.
+    /// </summary>
     public static RefCountedMemoryPool<T> Create(ArrayPool<T>? pool = default)
     {
         if (pool is null || ReferenceEquals(pool, ArrayPool<T>.Shared))
@@ -26,6 +35,9 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         return new ArrayRefCountedMemoryPool<T>(pool);
     }
 
+    /// <summary>
+    /// Create a <see cref="RefCountedMemoryPool{T}"/> instance.
+    /// </summary>
     public static RefCountedMemoryPool<T> Create(MemoryPool<T> memoryPool)
     {
         if (memoryPool is RefCountedMemoryPool<T> refCounted) return refCounted;
@@ -34,8 +46,10 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         return new WrappedRefCountedMemoryPool<T>(memoryPool);
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing) { }
 
+    /// <inheritdoc/>
     public sealed override IMemoryOwner<T> Rent(int minBufferSize = -1)
     {
         var manager = RentRefCounted(minBufferSize);
@@ -44,11 +58,18 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         return manager;
     }
 
+    /// <summary>
+    /// Identical to <see cref="MemoryPool{T}.Rent(int)"/>, but with support for reference-counting.
+    /// </summary>
     protected abstract RefCountedMemoryManager<T> RentRefCounted(int minBufferSize = -1);
 }
+
+/// <summary>
+/// A <see cref="MemoryManager{T}"/> implementation that incorporates reference-counted tracking.
+/// </summary>
 public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable // re-implement
 {
-
+    /// <inheritdoc/>
     public sealed override Memory<T> Memory
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -57,14 +78,23 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
 
     private int _refCount, _pinCount;
     private MemoryHandle _pinHandle;
+    /// <summary>
+    /// Create a new instance.
+    /// </summary>
     protected RefCountedMemoryManager()
     {
         _refCount = 1;
     }
+
+    /// <inheritdoc/>
     protected sealed override void Dispose(bool disposing)
     {   // shouldn't get here since re-implemented, but!
         if (disposing) Dispose();
     }
+
+    /// <summary>
+    /// Decrement the reference count associated with this instance; calls <see cref="Release"/> when the count becomes zero.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Decrement(ref _refCount) == 0)
@@ -73,10 +103,23 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
             GC.SuppressFinalize(this);
         }
     }
+
+    /// <summary>
+    /// Recycle the data held by this instance.
+    /// </summary>
     protected abstract void Release();
 
+    /// <summary>
+    /// Increment the reference count associated with this instance.
+    /// </summary>
     public void Preserve() => Interlocked.Increment(ref _refCount);
+
+    /// <summary>
+    /// Pin this data so that it does not move during garbage collection.
+    /// </summary>
     protected virtual MemoryHandle Pin() => throw new NotSupportedException(nameof(Pin));
+
+    /// <inheritdoc/>
     public sealed override MemoryHandle Pin(int elementIndex = 0)
     {
         if (elementIndex < 0 || elementIndex >= Memory.Length) Throw();
@@ -99,6 +142,7 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
         static void Throw() => throw new ArgumentOutOfRangeException(nameof(elementIndex));
     }
 
+    /// <inheritdoc/>
     public sealed override void Unpin()
     {
         lock (this) // use lock when pinning to avoid races
@@ -229,38 +273,57 @@ internal sealed class WrappedRefCountedMemoryPool<T> : RefCountedMemoryPool<T>
 
 public readonly partial struct Frame
 {
-    public static Builder CreateBuilder(RefCountedMemoryPool<byte>? pool = default)
-        => new Builder(pool ?? RefCountedMemoryPool<byte>.Shared);
+    /// <summary>
+    /// Create a new <see cref="Builder"/> for constructing <see cref="Frame"/> values.
+    /// </summary>
+    public static Builder CreateBuilder(RefCountedMemoryPool<byte>? pool = default, ILogger? logger = null)
+        => new Builder(pool ?? RefCountedMemoryPool<byte>.Shared, logger);
 
+    /// <summary>
+    /// Assists with constructing <see cref="Frame"/> values, either from a source stream (etc), or from a writer.
+    /// </summary>
     public struct Builder
     {
         private readonly RefCountedMemoryPool<byte> _pool;
         private Memory<byte> _oversizedCurrentFrame;
         private int _bytesIntoCurrentFrame;
+        private readonly ILogger? _logger;
 
+        /// <summary>
+        /// Insicates that a frame is actively being constructed (i.e. unconsumed data is held in the <see cref="Builder"/> instance).
+        /// </summary>
         public bool InProgress
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => _bytesIntoCurrentFrame != 0;
         }
 
-        internal Builder(RefCountedMemoryPool<byte> pool)
+        internal Builder(RefCountedMemoryPool<byte> pool, ILogger? logger)
         {
             _pool = pool;
+            _logger = logger;
             _bytesIntoCurrentFrame = 0;
             _oversizedCurrentFrame = default;
         }
 
+        /// <summary>
+        /// Gets a buffer that can be used to perform writes; this buffer will automatically be big enough to be useful in the current state.
+        /// </summary>
         public Memory<byte> GetBuffer()
         {
-            if (_bytesIntoCurrentFrame == 0) EnsureCapacityFor(FrameHeader.Size); // useful for first read
+            if (_bytesIntoCurrentFrame == 0) EnsureCapacityFor(FrameHeader.Size, 0); // useful for first read
             DebugAssertCapacity(); // check we can read *either* a header or a header+frame
             var buffer = _oversizedCurrentFrame.Slice(_bytesIntoCurrentFrame);
+            Debug.Assert(!buffer.IsEmpty, "providing empty buffer!");
             return buffer;
         }
 
         // if we haven't read a header yet: request the header bytes (minus whatever we've already read); otherwise, request the entire frame,
         // i.e. the header bytes plus the payload bytes (minus whatever we've already read)
+
+        /// <summary>
+        /// Indicates the necessary number of bytes required to make definite progress in constructing a <see cref="Frame"/>.
+        /// </summary>
         public int RequestBytes => (_bytesIntoCurrentFrame < FrameHeader.Size ? 0 : GetPayloadLength()) + FrameHeader.Size - _bytesIntoCurrentFrame;
 
         [Conditional("DEBUG")]
@@ -280,14 +343,15 @@ public readonly partial struct Frame
             Frame.AssertValidLength(len);
             return len;
         }
-        private void EnsureCapacityFor(int required)
+        private void EnsureCapacityFor(int required, int bytesRead)
         {
             if (_oversizedCurrentFrame.Length < required)
             {
                 var newBuffer = RentNewBuffer();
-                if (_bytesIntoCurrentFrame != 0)
+                var usedBytes = _bytesIntoCurrentFrame + bytesRead;
+                if (usedBytes != 0)
                 {   // copy over any bytes we've already read
-                    _oversizedCurrentFrame.Slice(start: 0, length: _bytesIntoCurrentFrame)
+                    _oversizedCurrentFrame.Slice(start: 0, length: usedBytes)
                         .CopyTo(newBuffer);
                 }
                 Return(_oversizedCurrentFrame);
@@ -295,6 +359,10 @@ public readonly partial struct Frame
             }
         }
 
+        /// <summary>
+        /// Releases all resources associated with this builder.
+        /// </summary>
+        /// <remarks><see cref="IDisposable.Dispose"/> is not used because this is a mutable value-type, and would not work well with "using" etc.</remarks>
         public void Release()
         {
             var buffer = _oversizedCurrentFrame;
@@ -314,6 +382,9 @@ public readonly partial struct Frame
             return lease.Memory;
         }
 
+        /// <summary>
+        /// Try to construct a <see cref="Frame"/> from data already written to the buffer; a buffer could contain multiple un-processed frames.
+        /// </summary>
         public bool TryRead(ref int bytesRead, out Frame frame)
         {
             if (bytesRead <= 0)
@@ -337,8 +408,8 @@ public readonly partial struct Frame
                     return false;
                 }
             }
-
             var totalLength = FrameHeader.Size + GetPayloadLength();
+            _logger.Debug((totalLength, buffer: _oversizedCurrentFrame), static (state, _) => $"parsing header '{state.buffer.Slice(0, FrameHeader.Size).ToHex()}'; total length {state.totalLength}");
             take = Math.Min(bytesRead, totalLength - _bytesIntoCurrentFrame);
             bytesRead -= take;
             _bytesIntoCurrentFrame += take;
@@ -346,28 +417,33 @@ public readonly partial struct Frame
             if (_bytesIntoCurrentFrame == totalLength)
             {
                 // we've got enough \o/
-                frame = CreateFrame();
+                frame = CreateFrame(bytesRead);
+                _logger.Debug(frame, static (state, _) => $"parsed {state}: {state.GetPayload().ToHex()}");
                 return true;
             }
 
             // check we have capacity for the payload (this preserves data, note)
-            EnsureCapacityFor(totalLength);
+            Debug.Assert(bytesRead == 0, "we should have used everything already?");
+            EnsureCapacityFor(totalLength, bytesRead);
             frame = default;
             return false;
         }
 
+        /// <summary>
+        /// Attempts to construct a <see cref="Frame"/> from data written to the buffer.
+        /// </summary>
         public bool TryRead(ref ReadOnlySequence<byte> buffer, out Frame frame)
         {
             var take = (int)Math.Min(buffer.Length, RequestBytes);
             if (take > 0)
             {
-                EnsureCapacityFor(_bytesIntoCurrentFrame + take);
+                EnsureCapacityFor(_bytesIntoCurrentFrame + take, 0);
                 buffer.Slice(start: 0, length: take).CopyTo(GetBuffer().Span);
                 _bytesIntoCurrentFrame += take;
                 buffer = buffer.Slice(start: take);
                 if (RequestBytes == 0)
                 {
-                    frame = CreateFrame();
+                    frame = CreateFrame(0);
                     return true;
                 }
             }
@@ -375,10 +451,13 @@ public readonly partial struct Frame
             return false;
         }
 
+        /// <summary>
+        /// Starts constructing a new frame.
+        /// </summary>
         public Memory<byte> NewFrame(in FrameHeader headerTemplate, ushort sequenceId, ushort sizeHint)
         {
             if (InProgress) Throw();
-            EnsureCapacityFor(FrameHeader.Size + sizeHint); // the hint only affects the buffer; we write it as zero, and await Advance()
+            EnsureCapacityFor(FrameHeader.Size + sizeHint, 0); // the hint only affects the buffer; we write it as zero, and await Advance()
 
             // write the header (note: we already validated we have enough capacity)
             new FrameHeader(in headerTemplate, sequenceId).UnsafeWrite(ref _oversizedCurrentFrame.Span[0]);
@@ -390,11 +469,29 @@ public readonly partial struct Frame
             static void Throw() => throw new InvalidOperationException("A new frame cannot be started while an existing frame is in progress");
         }
 
-        public Frame CreateFrame(bool setFinal = false)
+        /// <summary>
+        /// Creates a frame from the data already written.
+        /// </summary>
+        public Frame CreateFrame(bool setFinal)
+        {
+            AssertInProgress();
+            if (setFinal) FrameHeader.SetFinal(_oversizedCurrentFrame.Span);
+            return CreateFrameCore(0);
+        }
+
+        private Frame CreateFrame(int bytesRead)
+        {
+            AssertInProgress();
+            return CreateFrameCore(bytesRead);
+        }
+        void AssertInProgress()
         {
             if (!InProgress) Throw();
-            if (setFinal) FrameHeader.SetFinal(_oversizedCurrentFrame.Span);
-            var frame = new Frame(_oversizedCurrentFrame.Slice(start: 0, length: _bytesIntoCurrentFrame));
+            static void Throw() => throw new InvalidOperationException("No frame is in progress");
+        }
+        private Frame CreateFrameCore(int bytesRead)
+        {
+            var frame = new Frame(_oversizedCurrentFrame.Slice(start: 0, length: _bytesIntoCurrentFrame)); // performs a range of validations
             if (!MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(_oversizedCurrentFrame, out var refCounted))
                 return Throw();
             refCounted.Preserve();
@@ -402,10 +499,15 @@ public readonly partial struct Frame
             // book-keeping etc
             _oversizedCurrentFrame = _oversizedCurrentFrame.Slice(start: _bytesIntoCurrentFrame);
             _bytesIntoCurrentFrame = 0;
+            EnsureCapacityFor(FrameHeader.Size, bytesRead); // make sure we have capacity for the next header
+
             return frame;
             static Frame Throw() => throw new InvalidOperationException("Unable to obtain the ref-counted memory manager");
         }
 
+        /// <summary>
+        /// Indicates that a numer of bytes have been written to an existing buffer.
+        /// </summary>
         public void Advance(int count)
         {
             if (count < 0 || count > _oversizedCurrentFrame.Length - _bytesIntoCurrentFrame) Throw();

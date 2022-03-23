@@ -17,14 +17,15 @@ builder.Services.AddSingleton<LiteServer>(services =>
 {
     var logger = services.GetService<ILogger<LiteServer>>();
     var server = new LiteServer(logger);
-    server.ManualBind(services.GetService<MyService>());
-    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger).AsFrames(true));
-    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_nomerge", logger).AsFrames(false));
-    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger).WithTls().AuthenticateAsServer(
-        new SslServerAuthenticationOptions
-        {
-            ServerCertificate = cert
-        }).AsFrames());
+    server.Bind(services.GetService<MyService>());
+    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
+    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
+    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
+    //server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(
+    //    new SslServerAuthenticationOptions
+    //    {
+    //        ServerCertificate = cert
+    //    }).AsFrames());
     return server;
 });
 

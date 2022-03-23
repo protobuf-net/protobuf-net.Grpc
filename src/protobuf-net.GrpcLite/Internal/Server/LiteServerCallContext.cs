@@ -8,11 +8,11 @@ internal sealed class LiteServerCallContext : ServerCallContext, IPooled
 
     private const bool AllowRecycling = false;
 
-    public static LiteServerCallContext Get(IServerStream handler)
+    public static LiteServerCallContext Get(IServerStream stream)
     {
 
         var obj = AllowRecycling ? Pool<LiteServerCallContext>.Get() : new LiteServerCallContext();
-        obj._stream = handler;
+        obj._stream = stream;
         return obj;
     }
 

@@ -4,12 +4,23 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
+
+/// <summary>
+/// Represents an encoded gRPC frame header.
+/// </summary>
 [StructLayout(LayoutKind.Explicit, Size = Size)]
 public readonly struct FrameHeader : IEquatable<FrameHeader>
 {
+    /// <summary>
+    /// The size required for a <see cref="FrameHeader"/>.
+    /// </summary>
     public const int Size = sizeof(ulong); // kind=1,kindFlags=1,reqid=2,seqid=2,length=2
 
     private const int PayloadLengthOffset = 6;
+
+    /// <summary>
+    /// The maximum valid payload length that can be represented in a single <see cref="Frame"/>.
+    /// </summary>
     public const ushort MaxPayloadLength = (ushort.MaxValue >> 1) - Size; // so that header+payload fit in 32k
     internal const ushort MSB = 1 << 15;
 
@@ -43,6 +54,9 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [FieldOffset(0)]
     private readonly ulong RawValue;
 
+    /// <summary>
+    /// Create a new <see cref="FrameHeader"/> value.
+    /// </summary>
     public FrameHeader(FrameKind kind, byte kindFlags, ushort streamId, ushort sequenceId, ushort payloadLength = 0, bool isFinal = true)
     {
 #if NET5_0_OR_GREATER
@@ -60,20 +74,34 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         static void Throw() => throw new ArgumentOutOfRangeException(nameof(payloadLength));
     }
 
+    /// <summary>
+    /// The type of frame being represented.
+    /// </summary>
+
     [field: FieldOffset(0)]
     public FrameKind Kind { get; }
 
+    /// <summary>
+    /// Indicates whether this <see cref="FrameKind"/> is valid, i.e. not <see cref="FrameKind.None"/>.
+    /// </summary>
     public bool HasValue => Kind != FrameKind.None;
 
-    public FrameHeader(in FrameHeader template, ushort sequenceId)
+    internal FrameHeader(in FrameHeader template, ushort sequenceId)
     {
         this = template;
         SequenceId = sequenceId;
         _payloadLengthAndFinal = 0;
     }
 
+    /// <summary>
+    /// Gets any optional flags (specific to the <see cref="Kind"/>) associated with this value.
+    /// </summary>
     [field: FieldOffset(1)]
     public byte KindFlags { get; } // kind-specific
+
+    /// <summary>
+    /// Gets the stream identifier of this value.
+    /// </summary>
     [field: FieldOffset(2)]
     public ushort StreamId { get; }
 
@@ -102,16 +130,27 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         }
     }
 
+    /// <summary>
+    /// Gets the sequence identifier of this value.
+    /// </summary>
+
     [field: FieldOffset(4)]
     public ushort SequenceId { get; }
     [field: FieldOffset(6)]
     private readonly ushort _payloadLengthAndFinal;
+
+    /// <summary>
+    /// Gets the length of the payload data in this frame.
+    /// </summary>
     public ushort PayloadLength
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => (ushort)(_payloadLengthAndFinal & ~MSB);
     }
 
+    /// <summary>
+    /// Gets the length of the payload data that would be represented by the header value provided.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ushort GetPayloadLength(ReadOnlySpan<byte> header)
         => (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(PayloadLengthOffset)) & ~MSB);
@@ -125,12 +164,18 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     internal static void SetFinal(Span<byte> header)
         => header[PayloadLengthOffset + 1] |= 0x80; // + 1 because little-endian, so MSB is in second octet
 
+    /// <summary>
+    /// Indicates that this is the last frame in a group that collectively make up a <see cref="FrameKind.Header"/>, <see cref="FrameKind.Payload"/>, <see cref="FrameKind.Trailer"/>, etc.
+    /// </summary>
     public bool IsFinal
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => (_payloadLengthAndFinal & MSB) != 0;
     }
 
+    /// <summary>
+    /// Indicates if this stream was initiated from a client, vs a server.
+    /// </summary>
     public bool IsClientStream
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -138,15 +183,18 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     }
     
 
-    /// <inheritdoc>
+    /// <inheritdoc/>
     public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}], {PayloadLength} bytes (final: {IsFinal}, flags: {KindFlags})";
 
-    /// <inheritdoc>
+    /// <inheritdoc/>
     public override int GetHashCode() => RawValue.GetHashCode();
 
-    /// <inheritdoc>
+    /// <inheritdoc/>
     public override bool Equals([NotNullWhen(true)] object? obj)
         => obj is FrameHeader other && RawValue == other.RawValue;
 
+    /// <summary>
+    /// Compares this value with another <see cref="FrameHeader"/> value.
+    /// </summary>
     public bool Equals(FrameHeader other) => RawValue == other.RawValue;
 }

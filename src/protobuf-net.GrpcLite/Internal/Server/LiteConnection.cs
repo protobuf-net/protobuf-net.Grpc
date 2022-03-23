@@ -35,7 +35,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
             _logger = logger ?? server.Logger;
             Id = server.NextStreamId();
             _server = server;
-            _ = connection.StartWriterAsync(out _output, _server.ServerShutdown);
+            _ = connection.StartWriterAsync(false, out _output, _server.ServerShutdown);
             _logger.Debug(Id, static (state, _) => $"connection {state} initialized");
         }
 
@@ -49,17 +49,17 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
             Complete ??= this.RunAsync(_logger, _server.ServerShutdown);
         }
 
-        bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
+        bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream)
         {
-            if (_server.TryGetHandler(initialize.GetPayloadString(), out var serverHandler))
+            if (_server.TryCreateStream(initialize.GetPayloadString(), out var serverStream) && serverStream is not null)
             {
-                serverHandler.Initialize(initialize.GetHeader().StreamId, _output, _logger, this);
-                handler = serverHandler;
-                return handler is not null;
+                serverStream.Initialize(initialize.GetHeader().StreamId, _output, _logger, this);
+                stream = serverStream;
+                return true;
             }
             else
             {
-                handler = null;
+                stream = null;
                 return false;
             }
         }

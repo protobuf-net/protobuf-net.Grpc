@@ -62,7 +62,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
         this._target = target;
         this._connection = connection;
         this._logger = logger;
-        _ = connection.StartWriterAsync(out _output, _clientShutdown.Token);
+        _ = connection.StartWriterAsync(true, out _output, _clientShutdown.Token);
     }
 
     ChannelWriter<Frame> IConnection.Output => _output;
@@ -74,7 +74,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
         where TRequest : class
         where TResponse : class
     {
-        var stream = AddClientStream(method, options);
+        using var stream = AddClientStream(method, options);
         await stream.SendSingleAsync(host, options, request);
         return await stream.AssertSingleAsync();
     }
@@ -120,10 +120,10 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
         return new AsyncServerStreamingCall<TResponse>(stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
-    bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream handler)
+    bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream)
     {
         // not accepting server-initialized streams
-        handler = null;
+        stream = null;
         return false;
     }
 

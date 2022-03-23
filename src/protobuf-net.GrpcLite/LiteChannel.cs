@@ -6,6 +6,9 @@ using ProtoBuf.Grpc.Lite.Internal.Client;
 
 namespace ProtoBuf.Grpc.Lite;
 
+/// <summary>
+/// A light-weight gRPC <see cref="ChannelBase"/> implementation, for gRPC clients.
+/// </summary>
 public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
 {
     LiteCallInvoker _callInvoker;
@@ -15,19 +18,27 @@ public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
         _callInvoker.StartWorker();
     }
 
+    /// <inheritdoc/>
     public override CallInvoker CreateCallInvoker() => _callInvoker;
 
+    /// <summary>
+    /// Releases all resources associated with this instance.
+    /// </summary>
     public void Dispose()
     {
         _callInvoker.StopWorker();
     }
 
+    /// <summary>
+    /// Releases all resources associated with this instance.
+    /// </summary>
     public ValueTask DisposeAsync()
     {
         _callInvoker.StopWorker();
         return default;
     }
 
+    /// <inheritdoc/>
     protected override Task ShutdownAsyncCore()
     {
         _callInvoker.StopWorker();

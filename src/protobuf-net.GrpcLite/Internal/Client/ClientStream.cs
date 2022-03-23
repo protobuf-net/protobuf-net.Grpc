@@ -16,7 +16,18 @@ internal interface IClientStream : IStream, IDisposable
 
 internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, TResponse>, IClientStreamWriter<TRequest>, IClientStream where TRequest : class where TResponse : class
 {
-    void IDisposable.Dispose() { }
+    public override void Dispose()
+    {
+        var tmp = _ctr;
+        _ctr = default;
+        tmp.SafeDispose();
+        base.Dispose();
+    }
+
+    private CancellationTokenRegistration _ctr;
+    internal override CancellationTokenRegistration RegisterForCancellation(CancellationToken streamSpecificCancellation, DateTime? deadline)
+        => _ctr = base.RegisterForCancellation(streamSpecificCancellation, deadline);
+
     public ClientStream(IMethod method, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner)
         : base(method, output, owner)
     {

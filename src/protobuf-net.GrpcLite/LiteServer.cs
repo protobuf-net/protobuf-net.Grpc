@@ -8,121 +8,146 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
-namespace ProtoBuf.Grpc.Lite
+namespace ProtoBuf.Grpc.Lite;
+
+/// <summary>
+/// A lightweight gRPC server implementation.
+/// </summary>
+public sealed class LiteServer : IDisposable, IAsyncDisposable
 {
-    public sealed class LiteServer : IDisposable, IAsyncDisposable
+    /// <summary>
+    /// Create a new instance.
+    /// </summary>
+    public LiteServer(ILogger? logger = null)
+        => Logger = logger;
+
+    internal readonly ILogger? Logger;
+
+    private int id = -1;
+    internal int NextStreamId() => Interlocked.Increment(ref id);
+
+    internal CancellationToken ServerShutdown => _serverShutdown.Token;
+
+    CancellationTokenSource _serverShutdown = new CancellationTokenSource();
+
+    /// <summary>
+    /// Stop the server and all streams being serviced by this server.
+    /// </summary>
+    public void Stop() => _serverShutdown.Cancel();
+
+    void IDisposable.Dispose() => Stop();
+    ValueTask IAsyncDisposable.DisposeAsync()
     {
-        public LiteServer(ILogger? logger = null)
-            => Logger = logger;
+        Stop();
+        return default;
+    }
 
-        internal readonly ILogger? Logger;
+    /// <summary>
+    /// Create an in-process client channel to this server that still uses serialization and routing, but does not go via the network stack etc.
+    /// </summary>
+    public LiteChannel CreateLocalClient(string? name = null)
+    {
+        if (string.IsNullOrWhiteSpace(name)) name = "(local)";
+        NullConnection.CreateLinkedPair(out var x, out var y);
+        var server = new LiteConnection(this, x, Logger);
+        var client = new LiteChannel(y, name, Logger);
+        server.StartWorker();
+        return client;
+    }
 
-        private int id = -1;
-        internal int NextStreamId() => Interlocked.Increment(ref id);
+    /// <summary>
+    /// Listen for new connection requests on the designated endpoint.
+    /// </summary>
+    public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
+        => Task.Run(() => ListenAsyncCore(listener));
 
-        internal CancellationToken ServerShutdown => _serverShutdown.Token;
+    /// <summary>
+    /// Listen for new connection requests on the designated endpoint.
+    /// </summary>
+    public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<Stream>>> listener)
+        => ListenAsync(listener.AsFrames());
 
-        CancellationTokenSource _serverShutdown = new CancellationTokenSource();
-        public void Stop() => _serverShutdown.Cancel();
-
-        void IDisposable.Dispose() => Stop();
-        ValueTask IAsyncDisposable.DisposeAsync()
+    private async Task ListenAsyncCore(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
+    {
+        Logger.SetSource(LogKind.Server, "listener");
+        Logger.Debug("starting listener (accepts incoming connections)");
+        try
         {
-            Stop();
-            return default;
-        }
-
-        public LiteChannel CreateLocalClient(string? name = null)
-        {
-            if (string.IsNullOrWhiteSpace(name)) name = "(local)";
-            NullConnection.CreateLinkedPair(out var x, out var y);
-            var server = new LiteConnection(this, x, Logger);
-            var client = new LiteChannel(y, name, Logger);
-            server.StartWorker();
-            return client;
-        }
-
-        public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
-            => Task.Run(() => ListenAsyncCore(listener));
-
-        public Task ListenAsync(Func<CancellationToken, ValueTask<ConnectionState<Stream>>> listener)
-            => ListenAsync(listener.AsFrames());
-
-        private async Task ListenAsyncCore(Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> listener)
-        {
-            Logger.SetSource(LogKind.Server, "listener");
-            Logger.Debug("starting listener (accepts incoming connections)");
-            try
+            while (!_serverShutdown.IsCancellationRequested)
             {
-                while (!_serverShutdown.IsCancellationRequested)
+                await Task.Yield(); // let's not hog a core if we have lots of connections...
+                Logger.Information("listening for new connection...");
+                try
                 {
-                    await Task.Yield(); // let's not hog a core if we have lots of connections...
-                    Logger.Information("listening for new connection...");
-                    try
+                    var connection = await listener(ServerShutdown);
+                    if (connection is null)
                     {
-                        var connection = await listener(ServerShutdown);
-                        if (connection is null)
-                        {
-                            continue;
-                        }
+                        continue;
+                    }
 
-                        Logger.Information(connection, static (state, _) => $"established connection {state.Name}");
-                        var server = new LiteConnection(this, connection.Value, connection.Logger);
-                        server.StartWorker();
-                    }
-                    catch(Exception ex)
-                    {
-                        Logger.Error(ex);
-                    }
+                    Logger.Information(connection, static (state, _) => $"established connection {state.Name}");
+                    var server = new LiteConnection(this, connection.Value, connection.Logger);
+                    server.StartWorker();
+                }
+                catch(Exception ex)
+                {
+                    Logger.Error(ex);
                 }
             }
-            catch (OperationCanceledException ex) when (ex.CancellationToken == _serverShutdown.Token)
-            { } // that's success
         }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == _serverShutdown.Token)
+        { } // that's success
+    }
 
-        private LiteServiceBinder? _serviceBinder;
-        public void ManualBind<T>(T? server = null) where T : class
-        {
-            var binder = typeof(T).GetCustomAttribute<BindServiceMethodAttribute>(true);
-            if (binder is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + " found");
-            if (binder.BindType is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + "." + nameof(BindServiceMethodAttribute.BindType) + " found");
+    private LiteServiceBinder? _serviceBinder;
 
-            var method = binder.BindType.FindMembers(MemberTypes.Method, BindingFlags.Public | BindingFlags.Static,
-                static (member, state) =>
-                {
-                    if (member is not MethodInfo method) return false;
-                    if (method.Name != (string)state!) return false;
+    /// <summary>
+    /// Attach endpoints to this instance, using the configuration from <see cref="BindServiceMethodAttribute"/> on the type.
+    /// </summary>
+    public void Bind<T>(T? server = null) where T : class
+    {
+        var binder = typeof(T).GetCustomAttribute<BindServiceMethodAttribute>(true);
+        if (binder is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + " found");
+        if (binder.BindType is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + "." + nameof(BindServiceMethodAttribute.BindType) + " found");
 
-                    if (method.ReturnType != typeof(void)) return false;
-                    var args = method.GetParameters();
-                    if (args.Length != 2) return false;
-                    if (args[0].ParameterType != typeof(ServiceBinderBase)) return false;
-                    if (!args[1].ParameterType.IsAssignableFrom(typeof(T))) return false;
-                    return true;
+        var method = binder.BindType.FindMembers(MemberTypes.Method, BindingFlags.Public | BindingFlags.Static,
+            static (member, state) =>
+            {
+                if (member is not MethodInfo method) return false;
+                if (method.Name != (string)state!) return false;
 
-                }, binder.BindMethodName).OfType<MethodInfo>().SingleOrDefault();
-            if (method is null) throw new InvalidOperationException("No suitable " + binder.BindType.Name + "." + binder.BindMethodName + " method found");
+                if (method.ReturnType != typeof(void)) return false;
+                var args = method.GetParameters();
+                if (args.Length != 2) return false;
+                if (args[0].ParameterType != typeof(ServiceBinderBase)) return false;
+                if (!args[1].ParameterType.IsAssignableFrom(typeof(T))) return false;
+                return true;
 
-            server ??= Activator.CreateInstance<T>();
-            _serviceBinder ??= new LiteServiceBinder(this);
-            var countBefore = MethodCount;
-            method.Invoke(null, new object[] { _serviceBinder, server });
-            var methodsAdded = MethodCount - countBefore;
-            Logger.Information((type: typeof(T), methodsAdded), static (state, ex) => $"bound {state.type.FullName}, {state.methodsAdded} methods added");
-        }
+            }, binder.BindMethodName).OfType<MethodInfo>().SingleOrDefault();
+        if (method is null) throw new InvalidOperationException("No suitable " + binder.BindType.Name + "." + binder.BindMethodName + " method found");
 
-        public int MethodCount => _handlers.Count;
+        server ??= Activator.CreateInstance<T>();
+        _serviceBinder ??= new LiteServiceBinder(this);
+        var countBefore = MethodCount;
+        method.Invoke(null, new object[] { _serviceBinder, server });
+        var methodsAdded = MethodCount - countBefore;
+        Logger.Information((type: typeof(T), methodsAdded), static (state, ex) => $"bound {state.type.FullName}, {state.methodsAdded} methods added");
+    }
 
-        private readonly ConcurrentDictionary<string, Func<IServerStream>> _handlers = new ConcurrentDictionary<string, Func<IServerStream>>();
-        internal void AddHandler(string fullName, Func<IServerStream> handlerFactory)
-        {
-            if (!_handlers.TryAdd(fullName, handlerFactory)) ThrowDuplicate(fullName);
-            static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
-        }
-        internal bool TryGetHandler(string fullName, [MaybeNullWhen(false)] out IServerStream handler)
-        {
-            handler = _handlers.TryGetValue(fullName, out var factory) ? factory?.Invoke() : null;
-            return handler is not null;
-        }
+    /// <summary>
+    /// Gets the number of methods bound to this server, over all services.
+    /// </summary>
+    public int MethodCount => _methods.Count;
+
+    private readonly ConcurrentDictionary<string, Func<IServerStream>> _methods = new ConcurrentDictionary<string, Func<IServerStream>>();
+    internal void AddStream(string fullName, Func<IServerStream> streamFactory)
+    {
+        if (!_methods.TryAdd(fullName, streamFactory)) ThrowDuplicate(fullName);
+        static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
+    }
+    internal bool TryCreateStream(string fullName, [MaybeNullWhen(false)] out IServerStream stream)
+    {
+        stream = _methods.TryGetValue(fullName, out var factory) ? factory?.Invoke() : null;
+        return stream is not null;
     }
 }
