@@ -44,6 +44,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
             => throw new InvalidOperationException($"It was not possible to reserve a new stream id; {count} streams are currently in use");
     }
 
+    void IConnection.Close(Exception? fault) => StopWorker();
     internal void StopWorker()
     {
         try
@@ -62,7 +63,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
         this._target = target;
         this._connection = connection;
         this._logger = logger;
-        _ = connection.StartWriterAsync(true, out _output, _clientShutdown.Token);
+        _ = connection.StartWriterAsync(this, out _output, _clientShutdown.Token);
     }
 
     ChannelWriter<Frame> IConnection.Output => _output;

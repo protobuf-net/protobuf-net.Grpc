@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System.Diagnostics;
+using System.Net;
 using System.Runtime.CompilerServices;
 using static FooService;
 
@@ -43,6 +44,10 @@ using (var namedPipeBuffer = await ConnectionFactory.ConnectNamedPipe("grpctest_
 using (var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
     await Run(namedPipePassThru);
+}
+using (var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+{
+    await Run(tcp);
 }
 // THIS ONE NEEDS INVESTIGATION; TLS doesn't handshake
 //using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))

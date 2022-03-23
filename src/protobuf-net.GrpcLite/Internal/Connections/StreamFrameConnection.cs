@@ -3,6 +3,7 @@ using ProtoBuf.Grpc.Lite.Connections;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -37,8 +38,16 @@ internal sealed class StreamFrameConnection : IFrameConnection
             while (!cancellationToken.IsCancellationRequested)
             {
                 _logger.Debug(builder.GetBuffer(), static (state, _) => $"reading up-to {state.Length} bytes from stream...");
-                bytesRead = await _duplex.ReadAsync(builder.GetBuffer(), cancellationToken);
-                if (bytesRead <= 0) break; // natural EOF
+                try
+                {
+                    bytesRead = await _duplex.ReadAsync(builder.GetBuffer(), cancellationToken);
+                    if (bytesRead <= 0) break; // natural EOF
+                }
+                catch (IOException ex)
+                {   // treat as EOF (we'll check for incomplete reads below)
+                    _logger.Debug(ex.Message);
+                    break;
+                }
                 _logger.Debug((builder, bytesRead), static (state, _) => $"read {state.bytesRead} bytes from stream; parsing {state.builder.GetBuffer().Slice(start: 0, length: state.bytesRead).ToHex()}");
                 while (builder.TryRead(ref bytesRead, out var frame))
                 {

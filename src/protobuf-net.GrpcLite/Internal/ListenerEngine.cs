@@ -16,6 +16,8 @@ internal interface IConnection
     ConcurrentDictionary<ushort, IStream> Streams { get; }
     void Remove(ushort streamId);
     CancellationToken Shutdown { get; }
+
+    void Close(Exception? fault);
 }
 internal static class ListenerEngine
 {

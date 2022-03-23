@@ -5,7 +5,9 @@ using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System.IO.Compression;
 using System.IO.Pipes;
+using System.Net;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 
 namespace ProtoBuf.Grpc.Lite;
@@ -60,6 +62,54 @@ public static class ConnectionFactory
             throw;
         }
     };
+
+    /// <summary>
+    /// Connect (as a client) to a socket server.
+    /// </summary>
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ConnectSocket(EndPoint endpoint, ILogger? logger = null) => async cancellationToken =>
+    {
+        var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        socket.NoDelay = true;
+        try
+        {
+            await socket.ConnectAsync(endpoint);
+            var ns = new NetworkStream(socket, true);
+            return new ConnectionState<Stream>(ns, endpoint.ToString())
+            {
+                Logger = logger,
+            };
+        }
+        catch
+        {
+            socket.SafeDispose();
+            throw;
+        }
+    };
+
+    /// <summary>
+    /// Listen (as a server) to a socket.
+    /// </summary>
+    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ListenSocket(EndPoint endpoint, ILogger? logger = null)
+    {
+        var listener = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        listener.Bind(endpoint);
+        listener.Listen(backlog: 10);
+        logger.Debug(endpoint, static (state, _) => $"Listening for socket connections from {state}...");
+        return async cancellationToken =>
+        {
+            logger.Information(endpoint, static (state, _) => $"waiting for connection... {state}");
+            var socket = await listener.AcceptAsync();
+            if (socket is null) return null!;
+            var name = socket.LocalEndPoint.ToString();
+            socket.NoDelay = true;
+            logger.Information(name, static (state, _) => $"client connected to {state}");
+            var ns = new NetworkStream(socket, true);
+            return new ConnectionState<Stream>(ns, name)
+            {
+                Logger = logger,
+            };
+        };
+    }
 
     /// <summary>
     /// Applies a selector to the connection.

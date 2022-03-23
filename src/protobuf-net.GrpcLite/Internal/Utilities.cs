@@ -104,7 +104,7 @@ internal static class Utilities
         return duplex;
     }
 
-    public static Task StartWriterAsync(this IFrameConnection connection, bool isClient, out ChannelWriter<Frame> writer, CancellationToken cancellationToken)
+    public static Task StartWriterAsync(this IFrameConnection connection, IConnection owner, out ChannelWriter<Frame> writer, CancellationToken cancellationToken)
     {
         if (connection is NullConnection nil)
         {
@@ -114,13 +114,21 @@ internal static class Utilities
 
         var channel = Channel.CreateUnbounded<Frame>(UnboundedChannelOptions_SingleReadMultiWriterNoSync);
         writer = channel.Writer;
-        return WithCapture(connection, isClient, channel.Reader, cancellationToken);
+        return WithCapture(connection, owner, channel.Reader, cancellationToken);
 
-        static Task WithCapture(IFrameConnection connection, bool isClient, ChannelReader<Frame> reader, CancellationToken cancellationToken)
-            => Task.Run(() =>
+        static Task WithCapture(IFrameConnection connection, IConnection owner, ChannelReader<Frame> reader, CancellationToken cancellationToken)
+            => Task.Run(async () =>
             {
-                Logging.SetSource(null, isClient ? LogKind.Client : LogKind.Server, "writer");
-                return connection.WriteAsync(reader, cancellationToken);
+                try
+                {
+                    Logging.SetSource(null, owner.IsClient ? LogKind.Client : LogKind.Server, "writer");
+                    await connection.WriteAsync(reader, cancellationToken);
+                    owner.Close(null);
+                }
+                catch (Exception ex)
+                {
+                    owner.Close(ex);
+                }
             });
     }
 

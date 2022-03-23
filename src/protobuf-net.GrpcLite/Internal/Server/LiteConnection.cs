@@ -20,6 +20,11 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
 
         CancellationToken IConnection.Shutdown => _server.ServerShutdown;
 
+        void IConnection.Close(Exception? fault)
+        {
+            // TODO: need a per-stream shutdown source, rather than per-server?
+        }
+
         // will be null if not started
         public Task? Complete { get; private set; }
 
@@ -35,7 +40,7 @@ namespace ProtoBuf.Grpc.Lite.Internal.Server
             _logger = logger ?? server.Logger;
             Id = server.NextStreamId();
             _server = server;
-            _ = connection.StartWriterAsync(false, out _output, _server.ServerShutdown);
+            _ = connection.StartWriterAsync(this, out _output, _server.ServerShutdown);
             _logger.Debug(Id, static (state, _) => $"connection {state} initialized");
         }
 

@@ -34,5 +34,5 @@ internal sealed class NullConnection : IFrameConnection
         => _input.GetAsyncEnumerator(_output, cancellationToken);
 
     Task IFrameConnection.WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+        => source.Completion;
 }
