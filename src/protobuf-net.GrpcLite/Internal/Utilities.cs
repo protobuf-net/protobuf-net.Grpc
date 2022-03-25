@@ -45,20 +45,6 @@ internal static class Utilities
         }
     }
 
-    public static string ToHex(this Memory<byte> data) => ToHex((ReadOnlyMemory<byte>)data);
-    public static string ToHex(this ReadOnlyMemory<byte> data)
-    {
-#if NET5_0_OR_GREATER
-        return Convert.ToHexString(data.Span);
-#else
-        if (MemoryMarshal.TryGetArray<byte>(data, out var segment) && segment.Array is not null)
-        {
-            return BitConverter.ToString(segment.Array, segment.Offset, segment.Count);
-        }
-        return "n/a";
-#endif
-    }
-
     public static ValueTask SafeDisposeAsync(IAsyncDisposable? first, IAsyncDisposable? second)
     {
         // handle null/same

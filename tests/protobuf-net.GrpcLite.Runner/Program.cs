@@ -12,6 +12,10 @@ using static FooService;
 RemoteCertificateValidationCallback trustAny = delegate { return true; };
 Dictionary<string, (string unary, string clientStreamingBuffered, string clientStreamingNonBuffered, string serverStreamingBuffered, string serverStreamingNonBuffered, string duplex)> timings = new();
 
+//using (var pipeServer = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044), logger: ConsoleLogger.Debug).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
+//{
+//    await Run(pipeServer);
+//}
 using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
     await Run(namedPipe);
@@ -33,6 +37,7 @@ using (var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddre
 {
     await Run(tcpTls);
 }
+
 using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls()
     .AuthenticateAsClient("mytestserver", trustAny).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
 {

@@ -419,6 +419,7 @@ public readonly partial struct Frame
                 // we've got enough \o/
                 frame = CreateFrame(bytesRead);
                 _logger.Debug(frame, static (state, _) => $"parsed {state}: {state.GetPayload().ToHex()}");
+                Debug.Assert(frame.HasValue, "invalid frame");
                 return true;
             }
 
@@ -435,15 +436,34 @@ public readonly partial struct Frame
         public bool TryRead(ref ReadOnlySequence<byte> buffer, out Frame frame)
         {
             var take = (int)Math.Min(buffer.Length, RequestBytes);
-            if (take > 0)
+            if (take <= 0)
             {
-                EnsureCapacityFor(_bytesIntoCurrentFrame + take, 0);
-                buffer.Slice(start: 0, length: take).CopyTo(GetBuffer().Span);
-                _bytesIntoCurrentFrame += take;
-                buffer = buffer.Slice(start: take);
-                if (RequestBytes == 0)
+                frame = default;
+                return false;
+            }
+
+            EnsureCapacityFor(_bytesIntoCurrentFrame + take, 0);
+            buffer.Slice(start: 0, length: take).CopyTo(GetBuffer().Span);
+            _bytesIntoCurrentFrame += take;
+            buffer = buffer.Slice(start: take);
+
+            if (_bytesIntoCurrentFrame >= FrameHeader.Size)
+            {
+                var totalLength = GetPayloadLength() + FrameHeader.Size;
+                take = (int)Math.Min(totalLength - _bytesIntoCurrentFrame, buffer.Length);
+                if (take > 0)
+                {
+                    EnsureCapacityFor(totalLength, 0);
+                    buffer.Slice(start: 0, length: take).CopyTo(GetBuffer().Span);
+                    _bytesIntoCurrentFrame += take;
+                    buffer = buffer.Slice(start: take);
+                }
+
+                if (totalLength == _bytesIntoCurrentFrame)
                 {
                     frame = CreateFrame(0);
+                    _logger.Debug(frame, static (state, _) => $"parsed {state}: {state.Memory.ToHex()}");
+                    Debug.Assert(frame.HasValue, "invalid frame");
                     return true;
                 }
             }

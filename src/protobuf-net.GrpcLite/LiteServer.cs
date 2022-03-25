@@ -99,6 +99,13 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
         { } // that's success
     }
 
+    public Task ListenAsync(IFrameConnection connection, ILogger? logger = null)
+    {
+        Logger.Information(connection, static (state, _) => $"accepting connection");
+        var server = new LiteConnection(this, connection, logger);
+        return server.ExecuteDirect();
+    }
+
     private LiteServiceBinder? _serviceBinder;
 
     /// <summary>

@@ -1,6 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ProtoBuf.Grpc.Lite;
 
@@ -144,4 +147,39 @@ public static class Logging
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.LogWithPrefix<TState>(LogLevel.Critical, state, exception, formatter);
+
+
+    /// <summary>
+    /// Gets the buffer value as hexadecimal
+    /// </summary>
+    public static string ToHex(this Memory<byte> data) => ToHex((ReadOnlyMemory<byte>)data);
+    /// <summary>
+    /// Gets the buffer value as hexadecimal
+    /// </summary>
+    public static string ToHex(this ReadOnlyMemory<byte> data)
+    {
+#if NET5_0_OR_GREATER
+        return Convert.ToHexString(data.Span);
+#else
+        if (MemoryMarshal.TryGetArray<byte>(data, out var segment) && segment.Array is not null)
+        {   // this is a debug API; not concerned about bad overheads here
+            return BitConverter.ToString(segment.Array, segment.Offset, segment.Count).Replace("-","");
+        }
+        return "n/a";
+#endif
+    }
+
+    /// <summary>
+    /// Gets the buffer value as hexadecimal
+    /// </summary>
+    public static string ToHex(this ReadOnlySequence<byte> data)
+    {
+        if (data.IsSingleSegment) return data.First.ToHex();
+        var sb = new StringBuilder(checked((int)(data.Length * 2)));
+        foreach (var segment in data)
+        {
+            sb.Append(segment.ToHex());
+        }
+        return sb.ToString();
+    }
 }

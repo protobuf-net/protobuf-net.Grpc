@@ -36,6 +36,9 @@ internal static class ListenerEngine
                 bool release = true;
                 switch (header.Kind)
                 {
+                    case FrameKind.None:
+                        logger.Debug(frame, static (state, _) => $"invalid frame {state} received");
+                        break;
                     case FrameKind.ConnectionClose:
                     case FrameKind.ConnectionPing:
                         if (header.IsClientStream != listener.IsClient)
@@ -119,7 +122,7 @@ internal static class ListenerEngine
                 }
             }
 
-            logger.Information(listener, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) exiting cleanly");
+            logger.Debug(listener, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) exiting cleanly");
             listener.Output.Complete(null);
         }
         catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)

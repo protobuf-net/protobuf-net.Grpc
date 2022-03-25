@@ -53,6 +53,11 @@ internal sealed class LiteConnection : IWorker, IConnection
         _logger.Debug("starting connection executor");
         Complete ??= this.RunAsync(_logger, _server.ServerShutdown);
     }
+    internal Task ExecuteDirect()
+    {
+        Execute();
+        return Complete ?? Task.CompletedTask;
+    }
 
     bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream)
     {

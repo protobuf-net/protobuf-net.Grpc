@@ -52,25 +52,11 @@ internal sealed class PipeFrameConnection : IFrameConnection
                     throw;
                 }
                 var buffer = result.Buffer;
-                _logger.Debug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing...");
-                bool readFrame;
-                do
+                _logger.Debug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing {state.ToHex()}");
+                while (builder.TryRead(ref buffer, out var frame))
                 {
-                    Frame frame;
-                    try
-                    {
-                        readFrame = builder.TryRead(ref buffer, out frame);
-                    }
-                    catch (Exception ex)
-                    {
-                        Close(ex);
-                        _logger.Error(ex);
-                        throw;
-                    }
-                    yield return frame; // a lot of mess above simply because we can't 'yield' inside a 'try' with a 'catch'
+                    yield return frame;
                 }
-                while (readFrame);
-
                 _pipe.Input.AdvanceTo(buffer.Start, buffer.End);
                 Debug.Assert(buffer.IsEmpty, "we expect to consume the entire buffer"); // because we can't trust the pipe's allocator :(
                 if (result.IsCompleted)
@@ -83,7 +69,7 @@ internal sealed class PipeFrameConnection : IFrameConnection
         finally
         {
             builder.Release();
-            _logger.Debug(this, static (state, _) => $"pipe reader exiting");
+            _logger.Debug("pipe reader exiting");
             Close(null);
         }
 
@@ -119,18 +105,25 @@ internal sealed class PipeFrameConnection : IFrameConnection
         {
             do
             {
+                bool needsFlush = false;
                 while (source.TryRead(out var pair))
                 {
+                    if ((pair.Flags & FrameWriteFlags.BufferHint) == 0) needsFlush = true;
                     var memory = pair.Frame.Memory;
-                    _logger.Debug(memory, static (state, _) => $"Writing {state.Length} bytes...");
+                    _logger.Debug(memory, static (state, _) => $"Writing {state.Length} bytes: {state.ToHex()}");
                     _pipe.Output.Write(memory.Span);
                     pair.Frame.Release();
                     if (AutoFlush(memory.Length))
+                    {
                         await FlushAsync(cancellationToken);
+                        needsFlush = false;
+                    }
                 }
 
-                if (AutoFlush())
+                if (needsFlush)
+                {
                     await FlushAsync(cancellationToken);
+                }
                 _logger.Debug($"Awaiting more work...");
             }
             while (await source.WaitToReadAsync(cancellationToken));
@@ -152,16 +145,6 @@ internal sealed class PipeFrameConnection : IFrameConnection
         if (_nonFlushedBytes >= FLUSH_EVERY_BYTES)
         {
             _logger.Debug(_nonFlushedBytes, static (state, _) => $"Auto-flushing {state} bytes");
-            _nonFlushedBytes = 0;
-            return true;
-        }
-        return false;
-    }
-    private bool AutoFlush()
-    {
-        if (_nonFlushedBytes != 0) // always flush when we've run out of sync work
-        {
-            _logger.Debug(_nonFlushedBytes, static (state, _) => $"Flushing {state} bytes (end of sync loop)...");
             _nonFlushedBytes = 0;
             return true;
         }
