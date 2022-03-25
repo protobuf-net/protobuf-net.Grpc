@@ -74,19 +74,27 @@ internal static class ListenerEngine
                         }
                         break;
                     default:
-                        if (listener.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null)
+                        if (listener.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null && existingStream.IsActive)
                         {
-                            logger.Debug((stream: existingStream, frame: frame), static (state, _) => $"pushing {state.frame} to {state.stream.Method} ({state.stream.MethodType})");
-                            if (existingStream.TryAcceptFrame(in frame))
+                            if (header.Kind == FrameKind.StreamCancel)
                             {
-                                release = false;
+                                // kill it
+                                existingStream.Cancel();
                             }
                             else
                             {
-                                logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
+                                logger.Debug((stream: existingStream, frame: frame), static (state, _) => $"pushing {state.frame} to {state.stream.Method} ({state.stream.MethodType})");
+                                if (existingStream.TryAcceptFrame(in frame))
+                                {
+                                    release = false;
+                                }
+                                else
+                                {
+                                    logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
+                                }
                             }
 
-                            if (header.Kind == FrameKind.StreamTrailer && header.IsFinal)
+                            if (header.Kind == FrameKind.StreamCancel || (header.Kind == FrameKind.StreamTrailer && header.IsFinal))
                             {
                                 logger.Debug(header, static (state, _) => $"removing stream {state}");
                                 listener.Streams.Remove(header.StreamId, out _);

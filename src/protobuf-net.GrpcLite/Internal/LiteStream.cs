@@ -22,6 +22,7 @@ interface IStream
     void Cancel();
     IConnection? Connection { get; }
     WriteOptions WriteOptions { get; set; }
+    bool IsActive { get; }
 }
 
 internal enum StreamState
@@ -52,7 +53,12 @@ internal enum WorkerState
 }
 internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncStreamReader<TReceive>, IValueTaskSource<bool>, IDisposable where TSend : class where TReceive : class
 {
-
+    private volatile bool _isActive = true;
+    public bool IsActive
+    {
+        get => _isActive;
+        private set => _isActive = value;
+    }
     private Maybe<TReceive> _nextItemNeedsSync;
 
     private Maybe<TReceive> GetNextItem()
@@ -138,7 +144,10 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     private CancellationToken _streamSpecificCancellation;
 
-    public virtual void Dispose() { }
+    public virtual void Dispose()
+    {
+        if (IsActive) ((IStream)this).Cancel();
+    }
 
     [Flags]
     private enum CancellationScenerio : byte
@@ -235,34 +244,48 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         return reg;
     }
 
+    protected virtual void OnCancel() { }
+
     void IStream.Cancel()
     {
         try
         {
-            try
+            var wasActive = IsActive;
+            _owner?.Remove(Id);
+            IsActive = false;
+            if (wasActive)
             {
-                // try to give the most meaningful cancellation
-                var token = _owner?.Shutdown ?? CancellationToken.None;
-                if (token.IsCancellationRequested)
+                OnCancel();
+                try
                 {
-                    throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} is being shut-down.", token);
+                    ThrowCancelled();
                 }
-                token = _streamSpecificCancellation;
-                if (token.IsCancellationRequested)
+                catch (Exception ex)
                 {
-                    throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} stream is being cancelled.", token);
+                    ReportFault(ex);
                 }
-                throw new TimeoutException(); // that leaves a deadline, then
             }
-            catch (Exception ex)
-            {
-                ReportFault(ex);
-            }
+            
         }
         catch (Exception ex)
         {
             Logger.Error(ex);
         }
+    }
+    private void ThrowCancelled()
+    {
+        // try to give the most meaningful cancellation
+        var token = _owner?.Shutdown ?? CancellationToken.None;
+        if (token.IsCancellationRequested)
+        {
+            throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} is being shut-down.", token);
+        }
+        token = _streamSpecificCancellation;
+        if (token.IsCancellationRequested)
+        {
+            throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} stream is being cancelled.", token);
+        }
+        throw new TimeoutException(); // that leaves a deadline, then
     }
 
     private object SyncLock => this;
@@ -346,6 +369,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
         while (true)
         {
+            if (!IsActive) ThrowCancelled(); // nope!
             ReadOnlyMemory<Frame> nextGroup = default;
             FrameKind kind;
             try
@@ -502,14 +526,18 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             Logger.Critical(innerEx);
         }
 
-        try
+        // if necessary, reactivate with fault - without risking blocking the listener via callbacks
+        ThreadPool.QueueUserWorkItem(static state =>
         {
-            _suspendedContinuationPoint.SetException(ex);
-        }
-        catch (Exception innerEx)
-        {
-            Logger.Critical(innerEx);
-        }
+            try
+            {
+                state.obj._suspendedContinuationPoint.SetException(state.ex);
+            }
+            catch (Exception innerEx)
+            {
+                state.obj.Logger.Critical(innerEx);
+            }
+        }, (obj: this, ex), false);
     }
     public void Execute()
     {
@@ -717,6 +745,19 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     protected ChannelWriter<Frame> Output => _output;
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
+
+    protected void TrySendCancellation()
+    {
+        var frame = Frame.CreateFrame(MemoryPool, new FrameHeader(FrameKind.StreamCancel, FrameFlags.None, Id, NextSequenceId()));
+        if (!_output.TryWrite(frame))
+        {
+            _ = Observe(_output.WriteAsync(frame, CancellationToken.None));
+        }
+        static async Task Observe(ValueTask pending)
+        {
+            try { await pending; } catch { }
+        }
+    }
 
     public ValueTask SendHeaderAsync(string? host, in CallOptions options, FrameFlags flags)
     {

@@ -18,10 +18,10 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
 {
     public override void Dispose()
     {
+        base.Dispose();
         var tmp = _ctr;
         _ctr = default;
         tmp.SafeDispose();
-        base.Dispose();
     }
 
     private CancellationTokenRegistration _ctr;
@@ -41,6 +41,7 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
 
     Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message) => SendAsync(message, WriterFlags).AsTask();
 
+    protected override void OnCancel() => TrySendCancellation();
 
     public Task<Metadata> ResponseHeadersAsync
     {

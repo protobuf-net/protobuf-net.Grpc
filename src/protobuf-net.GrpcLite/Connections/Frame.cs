@@ -123,4 +123,14 @@ public readonly partial struct Frame
     }
 
     internal FrameFlags GetFlags() => (FrameFlags)_buffer.Span[1];
+
+    internal static Frame CreateFrame(RefCountedMemoryPool<byte> pool, FrameHeader frameHeader)
+    {
+        var owner = pool.Rent(FrameHeader.Size);
+        var buffer = owner.Memory.Slice(start: 0, length: FrameHeader.Size);
+        frameHeader.UnsafeWrite(ref buffer.Span[0]);
+        var result = new Frame(buffer);
+        result.Preserve();
+        return result;
+    }
 }

@@ -264,7 +264,7 @@ public class TestServerHost : IDisposable, ILogger
     public void Dispose() => _server.Stop();
 
     void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        => Log?.Invoke(BasicLogger.Format(logLevel, eventId, state, exception, formatter, ""));
+        => Log?.Invoke(BasicLogger.Format(logLevel, eventId, state, exception, formatter, "", 0));
 
     bool ILogger.IsEnabled(LogLevel logLevel) => Log is not null;
 

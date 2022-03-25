@@ -45,9 +45,31 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
     protected sealed override bool IsClient => false;
     private LiteServerCallContext CreateServerCallContext(out CancellationTokenRegistration cancellationTokenRegistration)
     {
-        // TODO: handle OOB cancellation
-        cancellationTokenRegistration = RegisterForCancellation(default, Deadline); // this is the earliest that we might need an executor CT, and know what we need to do so
+        _externalShutdown = new CancellationTokenSource(); // TODO: only do this if headers suggest it is a possibility
+        cancellationTokenRegistration = RegisterForCancellation(_externalShutdown?.Token ?? CancellationToken.None, Deadline); // this is the earliest that we might need an executor CT, and know what we need to do so
         return LiteServerCallContext.Get(this);
+    }
+
+    private CancellationTokenSource? _externalShutdown;
+
+    protected override void OnCancel()
+    {
+        var obj = _externalShutdown;
+        if (_externalShutdown is not null)
+        {   // make sure we don't hit any cancellation callbacks on the listener thread
+            ThreadPool.QueueUserWorkItem(static state =>
+            {
+                var obj = state as ServerStream<TRequest, TResponse>;
+                try
+                {
+                    obj?._externalShutdown?.Cancel();
+                }
+                catch (Exception ex)
+                {
+                    obj?.Logger.Error(ex);
+                }
+            }, this);
+        }
     }
 
     protected override Action<TResponse, SerializationContext> Serializer => TypedMethod.ResponseMarshaller.ContextualSerializer;
