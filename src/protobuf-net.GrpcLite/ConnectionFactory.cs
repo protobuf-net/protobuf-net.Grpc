@@ -264,7 +264,7 @@ public static class ConnectionFactory
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames<T>(
         this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
-        bool mergeWrites = true, int outputBufferSize = -1) where T : Stream
+        bool mergeWrites = false, int outputBufferSize = -1) where T : Stream
         => async cancellationToken =>
         {
             var source = await factory(cancellationToken);

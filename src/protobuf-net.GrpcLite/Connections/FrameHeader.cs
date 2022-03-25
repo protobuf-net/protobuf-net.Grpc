@@ -38,7 +38,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
                 fixed (byte* dest = &destination)
                 {
                     dest[0] = (byte)Kind;
-                    dest[1] = KindFlags;
+                    dest[1] = (byte)Flags;
                     dest[2] = (byte)(StreamId & 0xFF);
                     dest[3] = (byte)((StreamId >> 8) & 0xFF);
                     dest[4] = (byte)(SequenceId & 0xFF);
@@ -57,7 +57,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     /// <summary>
     /// Create a new <see cref="FrameHeader"/> value.
     /// </summary>
-    public FrameHeader(FrameKind kind, byte kindFlags, ushort streamId, ushort sequenceId, ushort payloadLength = 0, bool isFinal = true)
+    public FrameHeader(FrameKind kind, FrameFlags flags, ushort streamId, ushort sequenceId, ushort payloadLength = 0, bool isFinal = true)
     {
 #if NET5_0_OR_GREATER
         Unsafe.SkipInit(out this);
@@ -65,7 +65,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
         RawValue = 0;
 #endif
         Kind = kind;
-        KindFlags = kindFlags;
+        Flags = flags;
         StreamId = streamId;
         SequenceId = sequenceId;
         if (payloadLength > MaxPayloadLength) Throw(); // also enforces MSB not set
@@ -94,10 +94,10 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     }
 
     /// <summary>
-    /// Gets any optional flags (specific to the <see cref="Kind"/>) associated with this value.
+    /// Gets any optional flags associated with this frame.
     /// </summary>
     [field: FieldOffset(1)]
-    public byte KindFlags { get; } // kind-specific
+    public FrameFlags Flags { get; }
 
     /// <summary>
     /// Gets the stream identifier of this value.
@@ -120,7 +120,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
                 {
                     return new FrameHeader(
                         kind: (FrameKind)ptr[0],
-                        kindFlags: ptr[1],
+                        flags: (FrameFlags)ptr[1],
                         streamId: (ushort)(ptr[2] | (ptr[3] << 8)),
                         sequenceId: (ushort)(ptr[4] | (ptr[5] << 8)),
                         payloadLength: (ushort)(ptr[6] | (ptr[7] << 8))
@@ -184,7 +184,7 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     
 
     /// <inheritdoc/>
-    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}], {PayloadLength} bytes (final: {IsFinal}, flags: {KindFlags})";
+    public override string ToString() => $"[{StreamId}/{SequenceId}:{Kind}], {PayloadLength} bytes (final: {IsFinal}, flags: {Flags})";
 
     /// <inheritdoc/>
     public override int GetHashCode() => RawValue.GetHashCode();

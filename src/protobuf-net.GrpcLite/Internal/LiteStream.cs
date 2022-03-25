@@ -21,6 +21,7 @@ interface IStream
     CancellationToken CancellationToken { get; }
     void Cancel();
     IConnection? Connection { get; }
+    WriteOptions WriteOptions { get; set; }
 }
 
 internal enum StreamState
@@ -717,9 +718,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
 
-    public ValueTask SendHeaderAsync(string? host, in CallOptions options)
+    public ValueTask SendHeaderAsync(string? host, in CallOptions options, FrameFlags flags)
     {
-        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamHeader, 0);
+        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamHeader, flags);
         try
         {
             MetadataEncoder.WriteHeader(ctx, IsClient, Method.FullName, host, options);
@@ -732,9 +733,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
         return WriteAndRecycleAsync(ctx);
     }
-    public ValueTask SendTrailerAsync(Metadata? metadata, Status? status)
+    public ValueTask SendTrailerAsync(Metadata? metadata, Status? status, FrameFlags flags)
     {
-        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamTrailer, 0);
+        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamTrailer, flags);
         try
         {
             ctx.Complete(); // always empty for now
@@ -777,9 +778,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     {
         try
         {
-            await SendHeaderAsync(host, options);
-            await SendAsync(request);
-            await SendTrailerAsync(null, null);
+            await SendHeaderAsync(host, options, FrameFlags.BufferHint);
+            await SendAsync(request, FrameFlags.BufferHint);
+            await SendTrailerAsync(null, null, FrameFlags.None);
         }
         catch (Exception ex)
         {
@@ -787,14 +788,30 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    public async ValueTask SendAsync(TSend value)
+    private WriteOptions? _writeOptions;
+    public WriteOptions WriteOptions
     {
+        get => _writeOptions ??= WriteOptions.Default;
+        set => _writeOptions = value;
+    }
+
+    protected FrameFlags WriterFlags
+    {
+        get
+        {
+            var options = _writeOptions?.Flags ?? 0; // TODO prefer buffer hint if WriteOptions not explicitly specified (need to figure out auto-flush on read-next)
+            return (options & WriteFlags.BufferHint) != 0 ? FrameFlags.BufferHint : FrameFlags.None;
+        }
+    }
+    public virtual async ValueTask SendAsync(TSend value, FrameFlags flags)
+    {
+        //this.Write
         PayloadFrameSerializationContext? serializationContext = null;
         CancellationToken.ThrowIfCancellationRequested();
         try
         {
             Logger.Debug(value, static (state, ex) => $"serializing {state}...");
-            serializationContext = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamPayload, 0);
+            serializationContext = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamPayload, flags);
             Serializer(value, serializationContext);
             Logger.Debug(serializationContext, static (state, _) => $"serialized; {state}");
             await serializationContext.WritePayloadAsync(Output, CancellationToken);

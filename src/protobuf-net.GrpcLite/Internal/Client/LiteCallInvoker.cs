@@ -102,7 +102,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
     public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var stream = AddClientStream(method, options);
-        _ = stream.SendHeaderAsync(host, options).AsTask();
+        _ = stream.SendHeaderAsync(host, options, FrameFlags.None).AsTask();
         return new AsyncClientStreamingCall<TRequest, TResponse>(stream, stream.AssertSingleAsync().AsTask(),
             s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
@@ -110,7 +110,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var stream = AddClientStream(method, options);
-        _ = stream.SendHeaderAsync(host, options).AsTask();
+        _ = stream.SendHeaderAsync(host, options, FrameFlags.None).AsTask();
         return new AsyncDuplexStreamingCall<TRequest, TResponse>(stream, stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 

@@ -1,8 +1,8 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
-using ProtoBuf.Grpc.Lite.Internal;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +14,32 @@ namespace protobuf_net.GrpcLite.Test;
 [SetLoggingSource]
 public class EndToEndTests : IClassFixture<TestServerHost>
 {
+    public enum ConnectionKind
+    {
+        Null,
+        NamedPipeVanilla,
+        NamedPipeBuffered,
+        NamedPipeMerged,
+    }
+
+    private ValueTask<LiteChannel> ConnectAsync(ConnectionKind kind, out CallOptions options, CancellationToken cancellationToken)
+    {
+        options = default(CallOptions).WithCancellationToken(cancellationToken);
+        switch (kind)
+        {
+            case ConnectionKind.Null:
+                return new(Server.ConnectLocal());
+            case ConnectionKind.NamedPipeVanilla:
+                return ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: false, outputBufferSize: 0).CreateChannelAsync(cancellationToken);
+            case ConnectionKind.NamedPipeMerged:
+                return ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: true, outputBufferSize: 0).CreateChannelAsync(cancellationToken);
+            case ConnectionKind.NamedPipeBuffered:
+                return ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: false, outputBufferSize: -1).CreateChannelAsync(cancellationToken);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+    }
+
     private readonly TestServerHost Server;
     private string Name => Server.Name;
     private ILogger Logger { get; }
@@ -39,99 +65,142 @@ public class EndToEndTests : IClassFixture<TestServerHost>
 
     private LogCapture? ServerLog() => Server.WithLog(_output);
 
-    ValueTask<LiteChannel> ConnectAsync(CancellationToken cancellationToken)
-        => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(cancellationToken);
-
-    [Fact]
-    public async Task CanCallUnarySync()
+    public static IEnumerable<object[]> StandardRuns()
     {
-        using var log = ServerLog();
-        using var timeout = After();
-        await using var client = await ConnectAsync(timeout.Token);
-        var proxy = new FooService.FooServiceClient(client);
-
-        Logger.Information($"issuing {nameof(proxy.Unary)}...");
-        var response = proxy.Unary(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
-        Logger.Information($"got response: {response}");
-
-        Assert.NotNull(response);
-        Assert.Equal(42, response.Value);
-        timeout.Cancel();
-    }
-
-    [Fact]
-    public async Task CanCallUnaryAsync()
-    {
-        using var log = ServerLog();
-        using var timeout = After();
-        await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(timeout.Token);
-
-        var proxy = new FooService.FooServiceClient(client);
-
-        Logger.Information($"issuing {nameof(proxy.UnaryAsync)}...");
-        using var call = proxy.UnaryAsync(new FooRequest { Value = 42 }, default(CallOptions).WithCancellationToken(timeout.Token));
-        Logger.Information("awaiting response...");
-        var response = await call.ResponseAsync;
-        Logger.Information($"got response: {response}");
-
-        Assert.NotNull(response);
-        Assert.Equal(42, response.Value);
-        timeout.Cancel();
-    }
-
-    [Fact]
-    public async Task CanCallNullDuplexAsync()
-    {
-        using var log = ServerLog();
-        using var timeout = After();
-        await using var client = this.Server.ConnectLocal();
-
-        await RunDuplex(client, timeout.Token);
-
-        timeout.Cancel();
+        foreach (ConnectionKind kind in Enum.GetValues<ConnectionKind>())
+        {
+            yield return new object[] { kind, 1 };
+            yield return new object[] { kind, 10 };
+            yield return new object[] { kind, 100 };
+            yield return new object[] { kind, 1000 };
+        }
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(10)]
-    [InlineData(100)]
-    [InlineData(1000)]
-    [InlineData(10000)]
-    public async Task LongNullUnaryAsync(int count, int timeoutSeconds = 10)
+    [MemberData(nameof(StandardRuns))]
+    public async Task UnarySync(ConnectionKind kind, int count)
     {
         using var log = ServerLog();
-        using var timeout = After(TimeSpan.FromSeconds(timeoutSeconds));
-        await using var client = this.Server.ConnectLocal();
-
+        using var timeout = After();
+        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
-        var options = new CallOptions(cancellationToken: timeout.Token);
+
         for (int i = 0; i < count; i++)
         {
-            var result = await proxy.UnaryAsync(new FooRequest { Value = i }, options);
-            Assert.Equal(i, result.Value);
+            Logger.Information($"issuing {nameof(proxy.Unary)}...");
+            var response = proxy.Unary(new FooRequest { Value = 42 }, options);
+            Logger.Information($"got response: {response}");
+
+            Assert.NotNull(response);
+            Assert.Equal(42, response.Value);
         }
-        await RunDuplex(client, timeout.Token);
+        timeout.Cancel();
+    }
+
+    [Theory]
+    [MemberData(nameof(StandardRuns))]
+    public async Task UnaryAsync(ConnectionKind kind, int count)
+    {
+        using var log = ServerLog();
+        using var timeout = After();
+        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        var proxy = new FooService.FooServiceClient(client);
+
+        for (int i = 0; i < count; i++)
+        {
+            Logger.Debug($"issuing {nameof(proxy.UnaryAsync)}...");
+            using var call = proxy.UnaryAsync(new FooRequest { Value = 42 }, options);
+            Logger.Debug("awaiting response...");
+            var response = await call.ResponseAsync;
+            Logger.Debug($"got response: {response}");
+
+            Assert.NotNull(response);
+            Assert.Equal(42, response.Value);
+        }
 
         timeout.Cancel();
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(10)]
-    [InlineData(100)]
-    [InlineData(1000)]
-    [InlineData(10000)]
-    public async Task LongClientStreamingAsync(int count, int timeoutSeconds = 10)
+    [MemberData(nameof(StandardRuns))]
+    public async Task Duplex(ConnectionKind kind, int count)
     {
         using var log = ServerLog();
-        using var timeout = After(TimeSpan.FromSeconds(timeoutSeconds));
-        await using var client = this.Server.ConnectLocal();
+        using var timeout = After();
+        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
 
         var proxy = new FooService.FooServiceClient(client);
-        var options = new CallOptions(cancellationToken: timeout.Token);
+
+        using var call = proxy.Duplex(options);
+        for (int i = 0; i < count; i++)
+        {
+            Logger.Information($"writing {i}...");
+            await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+        }
+        await call.RequestStream.CompleteAsync();
+        Logger.Information($"all writes complete");
+        for (int i = 0; i < count; i++)
+        {
+            Logger.Information($"reading {i}...");
+            Assert.True(await call.ResponseStream.MoveNext(timeout.Token), nameof(call.ResponseStream.MoveNext));
+            Assert.Equal(i, call.ResponseStream.Current.Value);
+        }
+        Assert.False(await call.ResponseStream.MoveNext(timeout.Token), nameof(call.ResponseStream.MoveNext));
+        Logger.Information($"all reads complete");
+
+        timeout.Cancel();
+    }
+
+    [Theory]
+    [MemberData(nameof(StandardRuns))]
+    public async Task ServerStreaming_Buffered(ConnectionKind kind, int count)
+    {
+        using var log = ServerLog();
+        using var timeout = After();
+        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+
+        var proxy = new FooService.FooServiceClient(client);
+
+        using var call = proxy.ServerStreaming(new FooRequest { Value = count }, options);
+        count = Math.Abs(count); // we use -ve value to say "don't buffer"
+        for (int i = 0; i < count; i++)
+        {
+            Logger.Information($"reading {i}...");
+            Assert.True(await call.ResponseStream.MoveNext(timeout.Token), nameof(call.ResponseStream.MoveNext));
+            Assert.Equal(i, call.ResponseStream.Current.Value);
+        }
+        Assert.False(await call.ResponseStream.MoveNext(timeout.Token), nameof(call.ResponseStream.MoveNext));
+        Logger.Information($"all reads complete");
+
+        timeout.Cancel();
+    }
+    [Theory]
+    [MemberData(nameof(StandardRuns))]
+    public Task ServerStreaming_NonBuffered(ConnectionKind kind, int count)
+        => ServerStreaming_Buffered(kind, -count);
+
+
+    [Theory]
+    [MemberData(nameof(StandardRuns))]
+    public async Task ClientStreaming_Buffered(ConnectionKind kind, int count)
+    {
+        using var log = ServerLog();
+        using var timeout = After();
+        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        var proxy = new FooService.FooServiceClient(client);
 
         using var call = proxy.ClientStreaming(options);
         int sum = 0;
+
+        if (count < 0)
+        {
+            call.RequestStream.WriteOptions = MyService.NonBuffered;
+            count = -count;
+        }
+        else
+        {
+            call.RequestStream.WriteOptions = MyService.Buffered;
+        }
         for (int i = 0; i < count; i++)
         {
             await call.RequestStream.WriteAsync(new FooRequest { Value = i });
@@ -140,41 +209,15 @@ public class EndToEndTests : IClassFixture<TestServerHost>
         await call.RequestStream.CompleteAsync();
         var resp = await call.ResponseAsync;
         Assert.Equal(sum, resp.Value);
-    }
-
-    [Fact]
-    public async Task CanCallDuplexAsync()
-    {
-        using var log = ServerLog();
-        using var timeout = After();
-        Debug.WriteLine($"[client] connecting {Name}...");
-        await using var client = await ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).CreateChannelAsync(timeout.Token);
-
-        await RunDuplex(client, timeout.Token);
 
         timeout.Cancel();
     }
+    [Theory]
+    [MemberData(nameof(StandardRuns))]
+    public Task ClientStreaming_NonBuffered(ConnectionKind kind, int count)
+        => ClientStreaming_Buffered(kind, -count);
 
-    private async Task RunDuplex(LiteChannel client, CancellationToken cancellationToken)
-    {
-        var proxy = new FooService.FooServiceClient(client);
 
-        using var call = proxy.Duplex();
-        for (int i = 0; i < 10; i++)
-        {
-            Logger.Information($"writing {i}...");
-            await call.RequestStream.WriteAsync(new FooRequest { Value = i });
-            // await pipe.RequestStream.CompleteAsync();
-        }
-        Logger.Information($"all writes complete");
-        for (int i = 0; i < 10; i++)
-        {
-            Logger.Information($"reading {i}...");
-            Assert.True(await call.ResponseStream.MoveNext(cancellationToken));
-            Assert.Equal(i, call.ResponseStream.Current.Value);
-        }
-        Logger.Information($"all reads complete");
-    }
 }
 
 public sealed class LogCapture : IDisposable
@@ -253,9 +296,22 @@ public class MyService : FooService.FooServiceBase
         OnLog("duplex returning");
     }
 
+    public static readonly WriteOptions
+        Buffered = new WriteOptions(WriteFlags.BufferHint),
+        NonBuffered = new WriteOptions(0);
+
     public override async Task ServerStreaming(FooRequest request, IServerStreamWriter<FooResponse> responseStream, ServerCallContext context)
     {
         var count = request.Value;
+        if (count < 0)
+        {
+            count = -count;
+            responseStream.WriteOptions = NonBuffered;
+        }
+        else
+        {
+            responseStream.WriteOptions = Buffered;
+        }
         for (int i = 0; i < count; i++)
         {
             await responseStream.WriteAsync(new FooResponse { Value = i });

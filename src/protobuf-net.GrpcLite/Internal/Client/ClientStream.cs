@@ -36,17 +36,10 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
     }
     protected sealed override bool IsClient => true;
 
-    private WriteOptions? _writeOptions;
-    WriteOptions IAsyncStreamWriter<TRequest>.WriteOptions
-    {
-        get => _writeOptions!;
-        set => _writeOptions = value;
-    }
-
     Task IClientStreamWriter<TRequest>.CompleteAsync()
-        => SendTrailerAsync(null, null).AsTask();
+        => SendTrailerAsync(null, null, FrameFlags.None).AsTask();
 
-    Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message) => SendAsync(message).AsTask();
+    Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message) => SendAsync(message, WriterFlags).AsTask();
 
 
     public Task<Metadata> ResponseHeadersAsync

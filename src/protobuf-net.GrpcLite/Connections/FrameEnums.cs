@@ -52,3 +52,21 @@ public enum FrameKind : byte
     StreamMethodNotFound,
     
 }
+
+/// <summary>
+/// Flags that apply to individual frames
+/// </summary>
+public enum FrameFlags : byte
+{
+    /// <summary>
+    /// No flags
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// Hint that the write may be buffered and need not go out on the wire immediately.
+    /// gRPC is free to buffer the message until the next non-buffered
+    /// write, or until write stream completion, but it need not buffer completely or at all.
+    /// </summary>
+    BufferHint = 1 << 0
+}

@@ -21,11 +21,11 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
     public override string ToString()
         => $"{_totalLength} bytes, {_frames.Count} frames (total bytes: {_totalLength + _frames.Count * FrameHeader.Size})";
 
-    internal static PayloadFrameSerializationContext Get(IStream stream, RefCountedMemoryPool<byte> pool, FrameKind kind, byte kindFlags)
+    internal static PayloadFrameSerializationContext Get(IStream stream, RefCountedMemoryPool<byte> pool, FrameKind kind, FrameFlags flags)
     {
         var obj = Pool<PayloadFrameSerializationContext>.Get();
         obj._stream = stream;
-        obj._template = new FrameHeader(kind, kindFlags, stream.Id, 0, payloadLength: 0, isFinal: false);
+        obj._template = new FrameHeader(kind, flags, stream.Id, 0, payloadLength: 0, isFinal: false);
         obj._declaredPayloadLength = -1;
         obj._totalLength = 0;
         obj._builder = Frame.CreateBuilder(pool);

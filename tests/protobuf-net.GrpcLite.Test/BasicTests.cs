@@ -93,7 +93,7 @@ public class BasicTests
             frame = new Frame(frame.Memory);
             var header = frame.GetHeader();
             Assert.Equal(FrameKind.StreamHeader, header.Kind);
-            Assert.Equal(0, header.KindFlags);
+            Assert.Equal(FrameFlags.None, header.Flags);
             Assert.Equal(42, header.StreamId);
             Assert.Equal(0, header.SequenceId);
             Assert.Equal(19, header.PayloadLength);
@@ -154,9 +154,9 @@ public class BasicTests
         await pipe.SafeDisposeAsync();
         var hex = await GetHexAsync(server);
         Assert.Equal(
-            "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
+            "02-01-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "03-00-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
+            + "03-01-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21-"
             + "04-00-00-00-02-00-00-80", hex); // trailer, 0/2, empty (final)
     }
@@ -189,9 +189,9 @@ public class BasicTests
 
         var hex = await GetHexAsync(server);
         Assert.Equal(
-            "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
+            "02-01-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
             + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
-            + "03-00-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
+            + "03-01-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21-"
             + "04-00-00-00-02-00-00-80", hex); // trailer, 0/2, empty (final)
     }

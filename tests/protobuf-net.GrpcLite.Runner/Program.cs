@@ -10,42 +10,20 @@ using System.Runtime.CompilerServices;
 using static FooService;
 
 RemoteCertificateValidationCallback trustAny = delegate { return true; };
-Dictionary<string, (string unary, string clientStreaming, string serverStreaming, string duplex)> timings = new();
+Dictionary<string, (string unary, string clientStreamingBuffered, string clientStreamingNonBuffered, string serverStreamingBuffered, string serverStreamingNonBuffered, string duplex)> timings = new();
 
-using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
+using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(managedHttp);
+    await Run(namedPipe);
 }
-using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
-{
-    await Run(managedHttps);
-}
-{
-    var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
-    await Run(unmanagedHttp);
-}
-
-{
-    using var localServer = new LiteServer();
-    localServer.Bind<MyService>();
-    using (var local = localServer.CreateLocalClient())
-    {
-        await Run(local);
-    }
-}
-
-using (var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
-{
-    await Run(namedPipeMerge);
-}
-using (var namedPipeBuffer = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
-{
-    await Run(namedPipeBuffer);
-}
-using (var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)))
-{
-    await Run(namedPipePassThru);
-}
+//using (var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+//{
+//    await Run(namedPipePassThru);
+//}
+//using (var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)))
+//{
+//    await Run(namedPipeMerge);
+//}
 using (var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
     await Run(tcp);
@@ -60,13 +38,36 @@ using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls
 {
     await Run(namedPipeTls);
 }
+using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
+{
+    await Run(managedHttp);
+}
+using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
+{
+    await Run(managedHttps);
+}
+
+{
+    var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
+    await Run(unmanagedHttp);
+}
+
+{
+    using var localServer = new LiteServer();
+    localServer.Bind<MyService>();
+    using (var local = localServer.CreateLocalClient())
+    {
+        await Run(local);
+    }
+}
+
 
 Console.WriteLine();
-Console.WriteLine("| Scenario | Unary | Client-Streaming | Server-Streaming | Duplex |");
-Console.WriteLine("| -------- | ----- | ---------------- | ---------------- | ------ |");
+Console.WriteLine("| Scenario | Unary | Client-Streaming (b) | Client-Streaming (n) | Server-Streaming (b) | Server-Streaming (n) | Duplex |");
+Console.WriteLine("| -------- | ----- | -------------------- | -------------------- | -------------------- | -------------------- | ------ |");
 foreach (var (scenario, data) in timings.OrderBy(x => x.Key))
 {
-    Console.WriteLine($"| {scenario} | {data.unary} | {data.clientStreaming} | {data.serverStreaming} | {data.duplex} |");
+    Console.WriteLine($"| {scenario} | {data.unary} | {data.clientStreamingBuffered} | {data.clientStreamingNonBuffered} | {data.serverStreamingBuffered} | {data.serverStreamingNonBuffered} | {data.duplex} |");
 }
 
 
@@ -105,13 +106,14 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
         }
         Console.WriteLine();
 
-        long clientStreaming = 0;
+        long clientStreamingBuffered = 0;
         for (int j = 0; j < repeatCount; j++)
         {
             var watch = Stopwatch.StartNew();
             using var call = client.ClientStreaming(options);
             const int OPCOUNT = 50000;
             int sum = 0;
+            call.RequestStream.WriteOptions = MyService.Buffered;
             for (int i = 0; i < OPCOUNT; i++)
             {
                 await call.RequestStream.WriteAsync(new FooRequest { Value = i });
@@ -120,11 +122,31 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
             await call.RequestStream.CompleteAsync();
             var result = await call.ResponseAsync;
             if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
-            clientStreaming += ShowTiming(nameof(client.ClientStreaming), watch, OPCOUNT);
+            clientStreamingBuffered += ShowTiming(nameof(client.ClientStreaming) + " b", watch, OPCOUNT);
         }
         Console.WriteLine();
 
-        long serverStreaming = 0;
+        long clientStreamingNonBuffered = 0;
+        for (int j = 0; j < repeatCount; j++)
+        {
+            var watch = Stopwatch.StartNew();
+            using var call = client.ClientStreaming(options);
+            const int OPCOUNT = 50000;
+            int sum = 0;
+            call.RequestStream.WriteOptions = MyService.NonBuffered;
+            for (int i = 0; i < OPCOUNT; i++)
+            {
+                await call.RequestStream.WriteAsync(new FooRequest { Value = i });
+                sum += i;
+            }
+            await call.RequestStream.CompleteAsync();
+            var result = await call.ResponseAsync;
+            if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
+            clientStreamingNonBuffered += ShowTiming(nameof(client.ClientStreaming) + " nb", watch, OPCOUNT);
+        }
+        Console.WriteLine();
+
+        long serverStreamingBuffered = 0;
         for (int j = 0; j < repeatCount; j++)
         {
             var watch = Stopwatch.StartNew();
@@ -138,7 +160,24 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
                 count++;
             }
             if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
-            serverStreaming += ShowTiming(nameof(client.ServerStreaming), watch, OPCOUNT);
+            serverStreamingBuffered += ShowTiming(nameof(client.ServerStreaming) + " b", watch, OPCOUNT);
+        }
+
+        long serverStreamingNonBuffered = 0;
+        for (int j = 0; j < repeatCount; j++)
+        {
+            var watch = Stopwatch.StartNew();
+            const int OPCOUNT = 50000;
+            using var call = client.ServerStreaming(new FooRequest { Value = -OPCOUNT }, options);
+            int count = 0;
+            while (await call.ResponseStream.MoveNext())
+            {
+                var result = call.ResponseStream.Current;
+                if (result?.Value != count) throw new InvalidOperationException("Incorrect response received: " + result);
+                count++;
+            }
+            if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
+            serverStreamingNonBuffered += ShowTiming(nameof(client.ServerStreaming) + " nb", watch, OPCOUNT);
         }
         Console.WriteLine();
 
@@ -164,8 +203,10 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
         // store the average nanos-per-op
         timings.Add(caller, (
             AutoScale(unary / repeatCount, true),
-            AutoScale(clientStreaming / repeatCount, true),
-            AutoScale(serverStreaming / repeatCount, true),
+            AutoScale(clientStreamingBuffered / repeatCount, true),
+            AutoScale(clientStreamingNonBuffered / repeatCount, true),
+            AutoScale(serverStreamingBuffered / repeatCount, true),
+            AutoScale(serverStreamingNonBuffered / repeatCount, true),
             AutoScale(duplex / repeatCount, true)
         ));
     }

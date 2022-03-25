@@ -67,7 +67,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
         }
     }
 
-    public Task WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+    Task IFrameConnection.WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
         => _mergeWrites ? WriteWithMergeAsync(source, cancellationToken) :
            // WriteDirectAsync(source, cancellationToken);
     _outputBufferSize > 0 ? WriteWithOutputBufferAsync(source, cancellationToken) :
@@ -79,7 +79,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
         {
             do
             {
-                bool haveWritten = false;
+                bool needsFlush = false;
                 while (true)
                 {
                     if (!source.TryRead(out var frame))
@@ -98,12 +98,12 @@ internal sealed class StreamFrameConnection : IFrameConnection
                     else
                     {
                         await WriteAsync(memory, "frame", cancellationToken);
-                        haveWritten = true;
+                        if ((frame.GetFlags() & FrameFlags.BufferHint) == 0) needsFlush = true;
                         frame.Release();
                     }
                 }
 
-                if (haveWritten)
+                if (needsFlush)
                 {
                     _logger.Debug("Flushing...");
                     await _duplex.FlushAsync(cancellationToken);
@@ -129,10 +129,10 @@ internal sealed class StreamFrameConnection : IFrameConnection
         Memory<byte> bufferMem = default;
         try
         {
+            int buffered = 0, capacity = _outputBufferSize;
             do
             {
-                bool haveWritten = false;
-                int buffered = 0, capacity = _outputBufferSize; // buffers don't persist between loops
+                bool needFlush = false;
                 while (true) // try to read synchronously
                 {
                     if (!source.TryRead(out var frame))
@@ -159,12 +159,13 @@ internal sealed class StreamFrameConnection : IFrameConnection
                         Debug.Assert(false, "empty frame!");
                         continue;
                     }
+
+                    if ((frame.GetFlags() & FrameFlags.BufferHint) == 0) needFlush = true;
+
                     if (buffered == 0 && inboundLength >= capacity)
                     {
                         // scenario A
-                        _logger.Debug("scenario A");
-                        await WriteAsync(inbound, "frame", cancellationToken);
-                        haveWritten = true;
+                        await WriteAsync(inbound, "frame (A)", cancellationToken);
                     }
                     else
                     {
@@ -176,17 +177,15 @@ internal sealed class StreamFrameConnection : IFrameConnection
                         if (inboundLength <= capacity)
                         {
                             // scenario B
-                            _logger.Debug("scenario B");
                             Debug.Assert(buffered + capacity == bufferMem.Length, "tracking mismatch!");
-                            _logger.Debug(inboundLength, static (state, _) => $"Buffering {state} bytes...");
                             inbound.CopyTo(bufferMem.Slice(start: buffered));
                             capacity -= inboundLength;
                             buffered += inboundLength;
+                            _logger.Debug((capacity, buffered), static (state, _) => $"scenario B; buffered: {state.buffered}, capacity: {state.capacity}");
                             if (capacity == 0) // all full up
                             {
-                                _logger.Debug(buffered, static (state, _) => $"Writing {state} bytes from buffer...");
+                                _logger.Debug(bufferMem, static (state, _) => $"(B2) Writing {state.Length} bytes from buffer: {state.ToHex()}");
                                 await WriteAsync(bufferMem, "buffer", cancellationToken);
-                                haveWritten = true;
                                 capacity = buffered;
                                 buffered = 0;
                             }
@@ -194,16 +193,13 @@ internal sealed class StreamFrameConnection : IFrameConnection
                         else
                         {
                             // scenario C
-                            _logger.Debug("scenario C");
                             Debug.Assert(buffered > 0, "we expect a partial buffer");
-                            _logger.Debug(capacity, static (state, _) => $"Buffering {state} bytes...");
+                            _logger.Debug("scenario C");
                             inbound.Slice(start: 0, length: capacity).CopyTo(bufferMem.Slice(start: buffered));
                             var remaining = inbound.Slice(start: capacity);
                             buffered += capacity;
                             Debug.Assert(buffered == bufferMem.Length, "we expect to have filled the buffer");
-
-                            await WriteAsync(bufferMem, "buffer", cancellationToken);
-                            haveWritten = true;
+                            await WriteAsync(bufferMem, "buffer (C)", cancellationToken);
                             capacity = buffered;
                             buffered = 0;
 
@@ -211,7 +207,6 @@ internal sealed class StreamFrameConnection : IFrameConnection
                             {
                                 // scenario D
                                 _logger.Debug("scenario D");
-                                _logger.Debug(remaining, static (state, _) => $"Buffering {state.Length} remaining bytes from inbound...");
                                 remaining.CopyTo(bufferMem);
                                 buffered = remaining.Length;
                                 capacity -= buffered;
@@ -219,10 +214,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
                             else
                             {
                                 // scenario E
-                                _logger.Debug("scenario E");
-                                _logger.Debug(remaining, static (state, _) => $"Writing {state.Length} remaining bytes from inbound...");
-                                await WriteAsync(remaining, "remaining inbound", cancellationToken);
-                                haveWritten = true;
+                                await WriteAsync(remaining, "remaining inbound (E)", cancellationToken);
                             }
                         }
                     }
@@ -232,21 +224,20 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 // no remaining synchronous work
 
                 // write any remaining buffered data
-                if (buffered != 0)
+                if (needFlush) // note that bufferMem is preserved between writes if not flushing
                 {
-                    await WriteAsync(bufferMem.Slice(start: 0, length: buffered), "buffer", cancellationToken);
-                    haveWritten = true;
-                    capacity += buffered;
-                    buffered = 0;
-                }
-                if (!bufferMem.IsEmpty) // note that we need to do this even if buffered == 0, if last op was scenario E
-                {
-                    Return(ref bufferMem, _logger);
-                    capacity = _outputBufferSize;
-                }
+                    if (buffered != 0)
+                    {
+                        await WriteAsync(bufferMem.Slice(start: 0, length: buffered), "buffer (F)", cancellationToken);
+                        capacity += buffered;
+                        buffered = 0;
+                    }
+                    if (!bufferMem.IsEmpty) // note that we need to do this even if buffered == 0, if last op was scenario E
+                    {
+                        Return(ref bufferMem, _logger);
+                        capacity = _outputBufferSize;
+                    }
 
-                if (haveWritten)
-                {
                     _logger.Debug("Flushing...");
                     await _duplex.FlushAsync(cancellationToken);
                 }
@@ -295,7 +286,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
         {
             do
             {
-                bool haveWritten = false;
+                bool needFlush = false;
                 while (true)
                 {
                     if (!source.TryRead(out var frame))
@@ -304,6 +295,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
                         //await Task.Yield(); // blink; see if things improved
                         //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
                     }
+                    if ((frame.GetFlags() & FrameFlags.BufferHint) == 0) needFlush = true;
 
                     _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
                     var current = frame.Memory;
@@ -349,10 +341,9 @@ internal sealed class StreamFrameConnection : IFrameConnection
                     _logger.Debug((currentStart, currentLength), static (state, _) => $"Writing [{state.currentStart},{state.currentStart + state.currentLength})...");
                     await _duplex.WriteAsync(current, cancellationToken);
                     currentManager.Dispose();
-                    haveWritten = true; // don't need to track this everywhere, since we always get here
                 }
 
-                if (haveWritten)
+                if (needFlush)
                 {
                     _logger.Debug("Flushing...");
                     await _duplex.FlushAsync(cancellationToken);

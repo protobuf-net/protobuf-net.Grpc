@@ -121,4 +121,6 @@ public readonly partial struct Frame
         var payload = GetPayload();
         return payload.IsEmpty ? "" : (encoding ?? Encoding.UTF8).GetString(payload.Span);
     }
+
+    internal FrameFlags GetFlags() => (FrameFlags)_buffer.Span[1];
 }
