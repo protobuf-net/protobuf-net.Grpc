@@ -122,8 +122,6 @@ public readonly partial struct Frame
         return payload.IsEmpty ? "" : (encoding ?? Encoding.UTF8).GetString(payload.Span);
     }
 
-    internal FrameFlags GetFlags() => (FrameFlags)_buffer.Span[1];
-
     internal static Frame CreateFrame(RefCountedMemoryPool<byte> pool, FrameHeader frameHeader)
     {
         var owner = pool.Rent(FrameHeader.Size);

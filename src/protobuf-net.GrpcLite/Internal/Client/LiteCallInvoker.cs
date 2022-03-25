@@ -11,7 +11,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 {
     private readonly ILogger? _logger;
     private readonly IFrameConnection _connection;
-    private readonly ChannelWriter<Frame> _output;
+    private readonly ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> _output;
     private readonly string _target;
     private readonly CancellationTokenSource _clientShutdown = new();
     private readonly ConcurrentDictionary<ushort, IStream> _streams = new();
@@ -66,7 +66,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
         _ = connection.StartWriterAsync(this, out _output, _clientShutdown.Token);
     }
 
-    ChannelWriter<Frame> IConnection.Output => _output;
+    ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> IConnection.Output => _output;
 
     public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options, TRequest request)
         => SimpleUnary(method, host, options, request).GetAwaiter().GetResult();
@@ -102,7 +102,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
     public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var stream = AddClientStream(method, options);
-        _ = stream.SendHeaderAsync(host, options, FrameFlags.None).AsTask();
+        _ = stream.SendHeaderAsync(host, options, FrameWriteFlags.None).AsTask();
         return new AsyncClientStreamingCall<TRequest, TResponse>(stream, stream.AssertSingleAsync().AsTask(),
             s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
@@ -110,7 +110,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
     public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host, CallOptions options)
     {
         var stream = AddClientStream(method, options);
-        _ = stream.SendHeaderAsync(host, options, FrameFlags.None).AsTask();
+        _ = stream.SendHeaderAsync(host, options, FrameWriteFlags.None).AsTask();
         return new AsyncDuplexStreamingCall<TRequest, TResponse>(stream, stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 

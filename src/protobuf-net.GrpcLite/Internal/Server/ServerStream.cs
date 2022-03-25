@@ -17,7 +17,7 @@ internal interface IServerStream : IStream
     AuthContext AuthContext { get; }
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
-    void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner);
+    void Initialize(ushort id, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, ILogger? logger, IConnection? owner);
 }
 internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, TRequest>, IServerStream,
         IServerStreamWriter<TResponse>
@@ -34,7 +34,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         RequestHeaders = Metadata.Empty;
         WriteOptions = WriteOptions.Default;
     }
-    public void Initialize(ushort id, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner)
+    public void Initialize(ushort id, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, ILogger? logger, IConnection? owner)
     {
         Id = id;
         Logger = logger;
@@ -94,7 +94,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
                     var result = await unary(request, ctx);
                     await AssertNoMoreAsync();
                     Logger.Debug(result, static (state, _) => $"sending result {state}...");
-                    await SendAsync(result, FrameFlags.BufferHint);
+                    await SendAsync(result, FrameWriteFlags.BufferHint);
                     break;
                 case ServerStreamingServerMethod<TRequest, TResponse> serverStreaming:
                     Logger.Debug("reading single request...");
@@ -107,7 +107,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
                     Logger.Debug(clientStreaming, static (state, _) => $"executing {state.Method.Name}...");
                     result = await clientStreaming(this, ctx);
                     Logger.Debug(result, static (state, _) => $"sending result {state}...");
-                    await SendAsync(result, FrameFlags.BufferHint);
+                    await SendAsync(result, FrameWriteFlags.BufferHint);
                     break;
                 case DuplexStreamingServerMethod<TRequest, TResponse> duplexStreaming:
                     Logger.Debug(duplexStreaming, static (state, _) => $"executing {state.Method.Name}...");
@@ -139,10 +139,11 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         }
         finally
         {
+            OnComplete();
             ctr.SafeDispose();
             ctx.Recycle();
         }
-        await SendTrailerAsync(trailers, Status, FrameFlags.None);
+        await SendTrailerAsync(trailers, Status, FrameWriteFlags.None);
     }
 
     private Metadata? _responseTrailers;
@@ -168,19 +169,19 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         _headersSent = true;
         if (responseHeaders is null || responseHeaders.Count == 0)
         {
-            return SendHeaderAsync(null, EmptyCallOptions, FrameFlags.None).AsTask();
+            return SendHeaderAsync(null, EmptyCallOptions, FrameWriteFlags.None).AsTask();
         }
-        return SendHeaderAsync(null, new CallOptions(headers: responseHeaders), FrameFlags.None).AsTask();
+        return SendHeaderAsync(null, new CallOptions(headers: responseHeaders), FrameWriteFlags.None).AsTask();
 
         static void ThrowAlreadySent() => throw new InvalidOperationException("Headers have already been sent");
     }
 
-    public override ValueTask SendAsync(TResponse value, FrameFlags flags)
+    public override ValueTask SendAsync(TResponse value, FrameWriteFlags flags)
     {
         if (!_headersSent)
         {
             _headersSent = true;
-            var pending = SendHeaderAsync(null, EmptyCallOptions, FrameFlags.BufferHint);
+            var pending = SendHeaderAsync(null, EmptyCallOptions, FrameWriteFlags.BufferHint);
             if (pending.IsCompleted)
             {
                 pending.GetAwaiter().GetResult(); // for IVTS+error reasons
@@ -192,7 +193,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         }
         return base.SendAsync(value, flags);
 
-        static async ValueTask Awaited(ServerStream<TRequest, TResponse> server, ValueTask pending, TResponse value, FrameFlags flags)
+        static async ValueTask Awaited(ServerStream<TRequest, TResponse> server, ValueTask pending, TResponse value, FrameWriteFlags flags)
         {
             await pending;
             await server.SendAsync(value, flags);

@@ -44,8 +44,8 @@ internal sealed class LiteConnection : IWorker, IConnection
         _logger.Debug(Id, static (state, _) => $"connection {state} initialized");
     }
 
-    private readonly ChannelWriter<Frame> _output;
-    ChannelWriter<Frame> IConnection.Output => _output;
+    private readonly ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> _output;
+    ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> IConnection.Output => _output;
 
     public void Execute()
     {

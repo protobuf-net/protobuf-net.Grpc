@@ -67,13 +67,13 @@ internal sealed class StreamFrameConnection : IFrameConnection
         }
     }
 
-    Task IFrameConnection.WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+    Task IFrameConnection.WriteAsync(ChannelReader<(Frame Frame, FrameWriteFlags Flags)> source, CancellationToken cancellationToken)
         => _mergeWrites ? WriteWithMergeAsync(source, cancellationToken) :
            // WriteDirectAsync(source, cancellationToken);
     _outputBufferSize > 0 ? WriteWithOutputBufferAsync(source, cancellationToken) :
            WriteDirectAsync(source, cancellationToken);
 
-    private async Task WriteDirectAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+    private async Task WriteDirectAsync(ChannelReader<(Frame Frame, FrameWriteFlags Flags)> source, CancellationToken cancellationToken)
     {
         try
         {
@@ -82,15 +82,15 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 bool needsFlush = false;
                 while (true)
                 {
-                    if (!source.TryRead(out var frame))
+                    if (!source.TryRead(out var pair))
                     {
                         break;
                         //await Task.Yield(); // blink; see if things improved
                         //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
                     }
 
-                    _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
-                    var memory = frame.Memory;
+                    _logger.Debug(pair.Frame, static (state, _) => $"Dequeued {state} for writing");
+                    var memory = pair.Frame.Memory;
                     if (memory.IsEmpty)
                     {
                         Debug.Assert(false, "empty frame!");
@@ -98,8 +98,8 @@ internal sealed class StreamFrameConnection : IFrameConnection
                     else
                     {
                         await WriteAsync(memory, "frame", cancellationToken);
-                        if ((frame.GetFlags() & FrameFlags.BufferHint) == 0) needsFlush = true;
-                        frame.Release();
+                        if ((pair.Flags & FrameWriteFlags.BufferHint) == 0) needsFlush = true;
+                        pair.Frame.Release();
                     }
                 }
 
@@ -124,7 +124,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
         }
     }
 
-    private async Task WriteWithOutputBufferAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+    private async Task WriteWithOutputBufferAsync(ChannelReader<(Frame Frame, FrameWriteFlags Flags)> source, CancellationToken cancellationToken)
     {
         Memory<byte> bufferMem = default;
         try
@@ -135,15 +135,15 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 bool needFlush = false;
                 while (true) // try to read synchronously
                 {
-                    if (!source.TryRead(out var frame))
+                    if (!source.TryRead(out var pair))
                     {
                         break;
                         //await Task.Yield(); // blink; see if things improved
                         //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
                     }
 
-                    _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
-                    var inbound = frame.Memory;
+                    _logger.Debug(pair.Frame, static (state, _) => $"Dequeued {state} for writing");
+                    var inbound = pair.Frame.Memory;
                     int inboundLength = inbound.Length;
                     
                     // scenarios:
@@ -160,7 +160,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
                         continue;
                     }
 
-                    if ((frame.GetFlags() & FrameFlags.BufferHint) == 0) needFlush = true;
+                    if ((pair.Flags & FrameWriteFlags.BufferHint) == 0) needFlush = true;
 
                     if (buffered == 0 && inboundLength >= capacity)
                     {
@@ -218,7 +218,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
                             }
                         }
                     }
-                    frame.Release();
+                    pair.Frame.Release();
                 }
 
                 // no remaining synchronous work
@@ -277,7 +277,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
         return _duplex.WriteAsync(value, cancellationToken);
     }
 
-    private async Task WriteWithMergeAsync(ChannelReader<Frame> source, CancellationToken cancellationToken)
+    private async Task WriteWithMergeAsync(ChannelReader<(Frame Frame, FrameWriteFlags Flags)> source, CancellationToken cancellationToken)
     {
         [DoesNotReturn]
         static void ThrowMemoryManager() => throw new InvalidOperationException("Unable to get ref-counted memory manager");
@@ -289,16 +289,16 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 bool needFlush = false;
                 while (true)
                 {
-                    if (!source.TryRead(out var frame))
+                    if (!source.TryRead(out var pair))
                     {
                         break;
                         //await Task.Yield(); // blink; see if things improved
                         //if (!source.TryRead(out frame)) break; // nope, definitely nothing there
                     }
-                    if ((frame.GetFlags() & FrameFlags.BufferHint) == 0) needFlush = true;
+                    if ((pair.Flags & FrameWriteFlags.BufferHint) == 0) needFlush = true;
 
-                    _logger.Debug(frame, static (state, _) => $"Dequeued {state} for writing");
-                    var current = frame.Memory;
+                    _logger.Debug(pair.Frame, static (state, _) => $"Dequeued {state} for writing");
+                    var current = pair.Frame.Memory;
                     if (current.IsEmpty)
                     {
                         Debug.Assert(false, "empty frame!");
@@ -307,9 +307,11 @@ internal sealed class StreamFrameConnection : IFrameConnection
                     if (!MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(current, out var currentManager, out var currentStart, out var currentLength))
                         ThrowMemoryManager();
 
-                    while (source.TryRead(out frame))
+                    while (source.TryRead(out pair))
                     {
-                        var next = frame.Memory;
+                        if ((pair.Flags & FrameWriteFlags.BufferHint) == 0) needFlush = true;
+                        var next = pair.Frame.Memory;
+                        
                         if (!MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(next, out var nextManager, out var nextStart, out var nextLength))
                             ThrowMemoryManager();
 

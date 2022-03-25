@@ -113,18 +113,18 @@ internal sealed class PipeFrameConnection : IFrameConnection
     static void ThrowCancelled(string name, CancellationToken cancellationToken) => throw new OperationCanceledException($"Pipe: '{name}' operation was cancelled", cancellationToken);
 
 
-    public async Task WriteAsync(ChannelReader<Frame> source, CancellationToken cancellationToken = default)
+    public async Task WriteAsync(ChannelReader<(Frame Frame, FrameWriteFlags Flags)> source, CancellationToken cancellationToken = default)
     {
         try
         {
             do
             {
-                while (source.TryRead(out var frame))
+                while (source.TryRead(out var pair))
                 {
-                    var memory = frame.Memory;
+                    var memory = pair.Frame.Memory;
                     _logger.Debug(memory, static (state, _) => $"Writing {state.Length} bytes...");
                     _pipe.Output.Write(memory.Span);
-                    frame.Release();
+                    pair.Frame.Release();
                     if (AutoFlush(memory.Length))
                         await FlushAsync(cancellationToken);
                 }

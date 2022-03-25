@@ -9,7 +9,7 @@ namespace ProtoBuf.Grpc.Lite.Internal;
 internal interface IConnection
 {
     bool IsClient { get; }
-    ChannelWriter<Frame> Output { get; }
+    ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> Output { get; }
     IAsyncEnumerable<Frame> Input { get; }
     bool TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream);
 
@@ -74,11 +74,17 @@ internal static class ListenerEngine
                         }
                         break;
                     default:
-                        if (listener.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null && existingStream.IsActive)
+                        if (listener.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null)
                         {
+                            if (!existingStream.IsActive)
+                            {
+                                // shouldn't still be here, but; fix that
+                                listener.Streams.Remove(header.StreamId, out _);
+                            }
                             if (header.Kind == FrameKind.StreamCancel)
                             {
                                 // kill it
+                                listener.Streams.Remove(header.StreamId, out _);
                                 existingStream.Cancel();
                             }
                             else
@@ -92,12 +98,12 @@ internal static class ListenerEngine
                                 {
                                     logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
                                 }
-                            }
 
-                            if (header.Kind == FrameKind.StreamCancel || (header.Kind == FrameKind.StreamTrailer && header.IsFinal))
-                            {
-                                logger.Debug(header, static (state, _) => $"removing stream {state}");
-                                listener.Streams.Remove(header.StreamId, out _);
+                                if ((header.Kind == FrameKind.StreamTrailer && header.IsFinal))
+                                {
+                                    logger.Debug(header, static (state, _) => $"removing stream {state}");
+                                    listener.Streams.Remove(header.StreamId, out _);
+                                }
                             }
                         }
                         else

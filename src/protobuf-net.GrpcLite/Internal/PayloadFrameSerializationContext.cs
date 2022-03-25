@@ -21,11 +21,11 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
     public override string ToString()
         => $"{_totalLength} bytes, {_frames.Count} frames (total bytes: {_totalLength + _frames.Count * FrameHeader.Size})";
 
-    internal static PayloadFrameSerializationContext Get(IStream stream, RefCountedMemoryPool<byte> pool, FrameKind kind, FrameFlags flags)
+    internal static PayloadFrameSerializationContext Get(IStream stream, RefCountedMemoryPool<byte> pool, FrameKind kind)
     {
         var obj = Pool<PayloadFrameSerializationContext>.Get();
         obj._stream = stream;
-        obj._template = new FrameHeader(kind, flags, stream.Id, 0, payloadLength: 0, isFinal: false);
+        obj._template = new FrameHeader(kind, 0, stream.Id, 0, payloadLength: 0, isFinal: false);
         obj._declaredPayloadLength = -1;
         obj._totalLength = 0;
         obj._builder = Frame.CreateBuilder(pool);
@@ -124,7 +124,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
 
     Span<byte> IBufferWriter<byte>.GetSpan(int sizeHint) => GetMemory(sizeHint).Span;
 
-    internal ValueTask WritePayloadAsync(ChannelWriter<Frame> output, CancellationToken cancellationToken)
+    internal ValueTask WritePayloadAsync(ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, FrameWriteFlags flags, CancellationToken cancellationToken)
     {
         switch (_frames.Count)
         {
@@ -133,28 +133,29 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
             case 1:
                 var frame = _frames[0];
                 _frames.Clear();
-                return output.TryWrite(frame) ? default : output.WriteAsync(frame, cancellationToken);
+                var val = (frame, flags);
+                return output.TryWrite(val) ? default : output.WriteAsync(val, cancellationToken);
             default:
-                return WriteAllTrySync(_frames, output, cancellationToken);
+                return WriteAllTrySync(_frames, output, flags, cancellationToken);
         }
 
-        static ValueTask WriteAllTrySync(List<Frame> frames, ChannelWriter<Frame> output, CancellationToken cancellationToken)
+        static ValueTask WriteAllTrySync(List<Frame> frames, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, FrameWriteFlags flags, CancellationToken cancellationToken)
         {
             var iter = frames.GetEnumerator();
             while (iter.MoveNext())
             {
-                if (!output.TryWrite(iter.Current))
-                    return WriteAllAsync(frames, iter, output, cancellationToken);
+                if (!output.TryWrite((iter.Current, flags)))
+                    return WriteAllAsync(frames, iter, output, flags, cancellationToken);
             }
             frames.Clear();
             iter.Dispose(); // no-op, but: let's follow the rules!
             return default; // woohoo, we wrote them all synchronously; no state machines for us!
         }
-        static async ValueTask WriteAllAsync(List<Frame> frames, List<Frame>.Enumerator iter, ChannelWriter<Frame> output, CancellationToken cancellationToken)
+        static async ValueTask WriteAllAsync(List<Frame> frames, List<Frame>.Enumerator iter, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, FrameWriteFlags flags, CancellationToken cancellationToken)
         {
             do
             {   // we've already had to go sync; let's not try to be clever - just WriteAsync
-                await output.WriteAsync(iter.Current, cancellationToken);
+                await output.WriteAsync((iter.Current, flags), cancellationToken);
             } while (iter.MoveNext());
             frames.Clear();
             iter.Dispose(); // no-op, but: let's follow the rules!

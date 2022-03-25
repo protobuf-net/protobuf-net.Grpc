@@ -104,7 +104,7 @@ internal static class Utilities
         return duplex;
     }
 
-    public static Task StartWriterAsync(this IFrameConnection connection, IConnection owner, out ChannelWriter<Frame> writer, CancellationToken cancellationToken)
+    public static Task StartWriterAsync(this IFrameConnection connection, IConnection owner, out ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> writer, CancellationToken cancellationToken)
     {
         if (connection is NullConnection nil)
         {
@@ -112,11 +112,11 @@ internal static class Utilities
             return Task.CompletedTask;
         }
 
-        var channel = Channel.CreateUnbounded<Frame>(UnboundedChannelOptions_SingleReadMultiWriterNoSync);
+        var channel = Channel.CreateUnbounded<(Frame Frame, FrameWriteFlags Flags)>(UnboundedChannelOptions_SingleReadMultiWriterNoSync);
         writer = channel.Writer;
         return WithCapture(connection, owner, channel.Reader, cancellationToken);
 
-        static Task WithCapture(IFrameConnection connection, IConnection owner, ChannelReader<Frame> reader, CancellationToken cancellationToken)
+        static Task WithCapture(IFrameConnection connection, IConnection owner, ChannelReader<(Frame Frame, FrameWriteFlags Flags)> reader, CancellationToken cancellationToken)
             => Task.Run(async () =>
             {
                 try
@@ -159,22 +159,23 @@ internal static class Utilities
 
     public static Task IncompleteTask { get; } = AsyncTaskMethodBuilder.Create().Task;
 
-    public static IAsyncEnumerator<T> GetAsyncEnumerator<T>(this ChannelReader<T> input, ChannelWriter<T>? closeOutput = null, CancellationToken cancellationToken = default)
+    public static IAsyncEnumerator<TValue> GetAsyncEnumerator<T, TValue>(this ChannelReader<T> input, ChannelWriter<T>? closeOutput,
+        Func<T, TValue> selector, CancellationToken cancellationToken)
     {
-        return closeOutput is not null ? FullyChecked(input, closeOutput, cancellationToken)
-            : Simple(input, cancellationToken);
+        return closeOutput is not null ? FullyChecked(input, closeOutput, selector, cancellationToken)
+            : Simple(input, selector, cancellationToken);
 
-        static async IAsyncEnumerator<T> Simple(ChannelReader<T> input, CancellationToken cancellationToken)
+        static async IAsyncEnumerator<TValue> Simple(ChannelReader<T> input, Func<T, TValue> selector, CancellationToken cancellationToken)
         {
             do
             {
                 while (input.TryRead(out var item))
-                    yield return item;
+                    yield return selector(item);
             }
             while (await input.WaitToReadAsync(cancellationToken));
         }
 
-        static async IAsyncEnumerator<T> FullyChecked(ChannelReader<T> input, ChannelWriter<T>? closeOutput, CancellationToken cancellationToken)
+        static async IAsyncEnumerator<TValue> FullyChecked(ChannelReader<T> input, ChannelWriter<T>? closeOutput, Func<T, TValue> selector, CancellationToken cancellationToken)
         {
             // we need to do some code gymnastics to ensure that we close the connection (with an exception
             // as necessary) in all cases
@@ -193,7 +194,7 @@ internal static class Utilities
                         closeOutput?.TryComplete(ex);
                         throw;
                     }
-                    if (haveItem) yield return item!;
+                    if (haveItem) yield return selector(item!);
                 }
                 while (haveItem);
 

@@ -162,6 +162,7 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
             if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
             serverStreamingBuffered += ShowTiming(nameof(client.ServerStreaming) + " b", watch, OPCOUNT);
         }
+        Console.WriteLine();
 
         long serverStreamingNonBuffered = 0;
         for (int j = 0; j < repeatCount; j++)

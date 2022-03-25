@@ -28,16 +28,15 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
     internal override CancellationTokenRegistration RegisterForCancellation(CancellationToken streamSpecificCancellation, DateTime? deadline)
         => _ctr = base.RegisterForCancellation(streamSpecificCancellation, deadline);
 
-    public ClientStream(IMethod method, ChannelWriter<Frame> output, ILogger? logger, IConnection? owner)
+    public ClientStream(IMethod method, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, ILogger? logger, IConnection? owner)
         : base(method, output, owner)
     {
         Logger = logger;
-
     }
     protected sealed override bool IsClient => true;
 
     Task IClientStreamWriter<TRequest>.CompleteAsync()
-        => SendTrailerAsync(null, null, FrameFlags.None).AsTask();
+        => SendTrailerAsync(null, null, FrameWriteFlags.None).AsTask();
 
     Task IAsyncStreamWriter<TRequest>.WriteAsync(TRequest message) => SendAsync(message, WriterFlags).AsTask();
 

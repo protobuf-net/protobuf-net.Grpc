@@ -56,7 +56,7 @@ public enum FrameKind : byte
 /// <summary>
 /// Flags that apply to individual frames
 /// </summary>
-public enum FrameFlags : byte
+public enum FrameWriteFlags : byte
 {
     /// <summary>
     /// No flags
