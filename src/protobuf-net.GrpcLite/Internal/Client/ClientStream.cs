@@ -1,8 +1,11 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 

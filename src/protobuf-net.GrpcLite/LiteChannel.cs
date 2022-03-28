@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Client;
+using System;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite;
 

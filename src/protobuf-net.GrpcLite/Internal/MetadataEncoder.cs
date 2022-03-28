@@ -1,4 +1,5 @@
 ﻿using Grpc.Core;
+using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
@@ -13,10 +14,10 @@ internal static class MetadataEncoder
     {
         if (string.IsNullOrEmpty(fullName)) ThrowMissingMethod();
 
-        WriteClob(writer, KnownField.Route, fullName);
+        WriteClob(writer, KnownField.Route, fullName.AsSpan());
         AssertSingleFrame(writer, KnownField.Route);
 
-        if (!string.IsNullOrWhiteSpace(host)) WriteClob(writer, KnownField.Host, host);
+        if (!string.IsNullOrWhiteSpace(host)) WriteClob(writer, KnownField.Host, host.AsSpan());
         var headers = options.Headers;
         if (headers is not null && headers.Count != 0) WriteMetadata(writer, headers);
 
@@ -31,7 +32,7 @@ internal static class MetadataEncoder
     }
 
     internal static void WriteStatus(PayloadFrameSerializationContext writer, Status status)
-        => WriteStatus(writer, status.StatusCode, status.Detail);
+        => WriteStatus(writer, status.StatusCode, status.Detail.AsSpan());
 
     internal static void WriteStatus(PayloadFrameSerializationContext writer, StatusCode statusCode, ReadOnlySpan<char> detail)
     {
@@ -215,14 +216,14 @@ internal static class MetadataEncoder
     {
         foreach (var pair in metadata)
         {
-            WriteClob(writer, KnownField.HeaderName, pair.Key);
+            WriteClob(writer, KnownField.HeaderName, pair.Key.AsSpan());
             if (pair.IsBinary)
             {
                 WriteBlob(writer, KnownField.HeaderBinaryValue, pair.ValueBytes);
             }
             else
             {
-                WriteClob(writer, KnownField.HeaderTextValue, pair.Value);
+                WriteClob(writer, KnownField.HeaderTextValue, pair.Value.AsSpan());
             }
         }
     }
@@ -247,7 +248,7 @@ internal static class MetadataEncoder
         if (!value.IsSingleSegment) ThrowMultiSegment();
 
         Metadata? result = null;
-        var span = value.FirstSpan;
+        var span = value.First.Span;
         string? lastHeaderName = null;
         while (!span.IsEmpty)
         {
@@ -315,7 +316,7 @@ internal static class MetadataEncoder
         static bool IsMatch(Span<byte> buffer, ReadOnlySpan<byte> value, string? lastKnownValue)
         {
             Debug.Assert(value.Length == buffer.Length);
-            int actual = Encoding.UTF8.GetBytes(lastKnownValue, buffer);
+            int actual = Encoding.UTF8.GetBytes(lastKnownValue.AsSpan(), buffer);
             Debug.Assert(actual == buffer.Length);
             return buffer.SequenceEqual(value);
         }
@@ -326,7 +327,7 @@ internal static class MetadataEncoder
     internal static Status GetStatus(ReadOnlySequence<byte> value)
     {
         if (!value.IsSingleSegment) ThrowMultiSegment();
-        var span = value.FirstSpan;
+        var span = value.First.Span;
         StatusCode statusCode = StatusCode.OK;
         string detail = "";
         while (!span.IsEmpty)

@@ -1,11 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
+using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
@@ -279,7 +281,7 @@ internal sealed class ArrayRefCountedMemoryPool<T> : RefCountedMemoryPool<T>
         public override Span<T> GetSpan() => Array;
         protected override bool TryGetArray(out ArraySegment<T> segment)
         {
-            segment = Array;
+            segment = new ArraySegment<T>(Array);
             return true;
         }
         protected override MemoryHandle Pin()

@@ -13,3 +13,27 @@ namespace System.Runtime.CompilerServices
     internal sealed class SkipLocalsInitAttribute : Attribute { }
 }
 #endif
+
+#if NET472
+namespace System.Diagnostics.CodeAnalysis
+{
+    [AttributeUsage(AttributeTargets.Method, Inherited = false)]
+    internal sealed class DoesNotReturnAttribute : Attribute { }
+
+    [AttributeUsage(AttributeTargets.Parameter, Inherited = false)]
+    internal sealed class MaybeNullWhenAttribute : Attribute
+    {
+        public bool ReturnValue { get; }
+
+        public MaybeNullWhenAttribute(bool returnValue) => ReturnValue = returnValue;
+    }
+
+    [AttributeUsage(AttributeTargets.Parameter, Inherited = false)]
+    internal sealed class NotNullWhenAttribute : Attribute
+    {
+ 
+        public bool ReturnValue { get; }
+        public NotNullWhenAttribute(bool returnValue) => ReturnValue = returnValue;
+    }
+}
+#endif

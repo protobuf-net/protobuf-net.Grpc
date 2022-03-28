@@ -1,9 +1,13 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
 using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Client;
 
@@ -28,7 +32,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 
     private int _nextId = ushort.MaxValue; // so that our first id is zero
 
-    void IConnection.Remove(ushort id) => _streams.Remove(id, out _);
+    void IConnection.Remove(ushort id) => _streams.TryRemove(id, out _);
 
     CancellationToken IConnection.Shutdown => _clientShutdown.Token;
 

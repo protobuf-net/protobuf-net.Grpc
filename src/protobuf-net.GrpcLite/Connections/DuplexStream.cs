@@ -1,4 +1,8 @@
 ﻿using ProtoBuf.Grpc.Lite.Internal;
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 
@@ -59,12 +63,16 @@ public sealed class DuplexStream : Stream
     public override void SetLength(long value) => throw new NotSupportedException();
     /// <inheritdoc/>
     public override string ToString() => $"{nameof(DuplexStream)}:{_read}/{_write}";
+
+#if !NET472
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
         return Utilities.SafeDisposeAsync(_read, _write);
     }
+#endif
+
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
@@ -88,20 +96,27 @@ public sealed class DuplexStream : Stream
     public override int Read(byte[] buffer, int offset, int count) => _read.Read(buffer, offset, count);
     /// <inheritdoc/>
     public override int ReadByte() => _read.ReadByte();
+
+
+    
     /// <inheritdoc/>
-    public override int Read(Span<byte> buffer) => _read.Read(buffer);
+    public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) => _read.BeginRead(buffer, offset, count, callback!, state);
+    /// <inheritdoc/>
+    public override int EndRead(IAsyncResult asyncResult) => _read.EndRead(asyncResult);
+
+    /// <inheritdoc/>
+    public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) => _read.CopyToAsync(destination, bufferSize, cancellationToken);
+
+#if !NET472
     /// <inheritdoc/>
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _read.ReadAsync(buffer, offset, count, cancellationToken);
     /// <inheritdoc/>
     public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => _read.ReadAsync(buffer, cancellationToken);
     /// <inheritdoc/>
-    public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) => _read.BeginRead(buffer, offset, count, callback!, state);
-    /// <inheritdoc/>
-    public override int EndRead(IAsyncResult asyncResult) => _read.EndRead(asyncResult);
-    /// <inheritdoc/>
     public override void CopyTo(Stream destination, int bufferSize) => _read.CopyTo(destination, bufferSize);
     /// <inheritdoc/>
-    public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) => _read.CopyToAsync(destination, bufferSize, cancellationToken);
+    public override int Read(Span<byte> buffer) => _read.Read(buffer);
+#endif
 
     // write ops
     /// <inheritdoc/>
@@ -112,8 +127,7 @@ public sealed class DuplexStream : Stream
     public override Task FlushAsync(CancellationToken cancellationToken) => _write.FlushAsync(cancellationToken);
     /// <inheritdoc/>
     public override void Write(byte[] buffer, int offset, int count) => _write.Write(buffer, offset, count);
-    /// <inheritdoc/>
-    public override void Write(ReadOnlySpan<byte> buffer) => _write.Write(buffer);
+
     /// <inheritdoc/>
     public override void WriteByte(byte value) => _write.WriteByte(value);
     /// <inheritdoc/>
@@ -122,7 +136,11 @@ public sealed class DuplexStream : Stream
     public override void EndWrite(IAsyncResult asyncResult) => _write.EndWrite(asyncResult);
     /// <inheritdoc/>
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _write.WriteAsync(buffer, offset, count, cancellationToken);
+#if !NET472
     /// <inheritdoc/>
     public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) => _write.WriteAsync(buffer, cancellationToken);
+    /// <inheritdoc/>
+    public override void Write(ReadOnlySpan<byte> buffer) => _write.Write(buffer);
+#endif
 
 }

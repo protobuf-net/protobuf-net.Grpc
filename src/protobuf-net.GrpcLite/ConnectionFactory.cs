@@ -3,12 +3,16 @@ using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
+using System;
+using System.IO;
 using System.IO.Compression;
 using System.IO.Pipes;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite;
 
@@ -190,6 +194,7 @@ public static class ConnectionFactory
             }
         };
 
+#if !NET472
     /// <summary>
     /// Authenticates the connection as a server.
     /// </summary>
@@ -258,6 +263,7 @@ public static class ConnectionFactory
             throw;
         }
     };
+#endif
 
     /// <summary>
     /// Creates a <see cref="Frame"/> processor over a <see cref="Stream"/>.

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -71,7 +72,7 @@ public static class Logging
         => logger.LogWithPrefix<string>(level, message, null, static (state, _) => state);
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Debug"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Debug"/> event.
     /// </summary>
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -82,7 +83,7 @@ public static class Logging
     }
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Debug"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Debug"/> event.
     /// </summary>
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -93,7 +94,7 @@ public static class Logging
     }
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Information"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Information"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Information<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
@@ -107,42 +108,42 @@ public static class Logging
     }
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Information"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Information"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Information(this ILogger? logger, string message)
         => logger?.LogWithPrefix(LogLevel.Information, message);
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Error"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Error"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Error<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
         => logger?.LogWithPrefix<TState>(LogLevel.Error, state, exception, formatter);
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Error"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Error"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Error(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
         => logger?.LogWithPrefix<string>(LogLevel.Error, caller, exception, static (state, ex) => $"[{state}]: {ex!.Message}");
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Critical"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Critical"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical(this ILogger? logger, Exception exception, [CallerMemberName] string caller = "")
         => logger?.LogWithPrefix<string>(LogLevel.Critical, caller, exception, static (state, ex) => $"[{state}]: {ex!.Message}");
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Critical"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Critical"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical(this ILogger? logger, string message)
             => logger?.LogWithPrefix(LogLevel.Information, message);
 
     /// <summary>
-    /// Log a <see cref="LogLevel.Critical"/> event.
+    /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Critical"/> event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Critical<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)

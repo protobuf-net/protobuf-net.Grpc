@@ -1,10 +1,14 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
+using System;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
 using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
 
@@ -78,15 +82,15 @@ internal static class ListenerEngine
                                     {
                                         if (newStream.TryAcceptFrame(frame))
                                         {
-                                            logger.Debug(route, static (state, _) => $"method accepted: {new string(state)}");
+                                            logger.Debug(route, static (state, _) => $"method accepted: {state.CreateString()}");
                                             release = false;
                                         }
                                         else
                                         {
-                                            logger.Debug(route, static (state, _) => $"method resolved, but initial frame rejected: {new string(state)}");
+                                            logger.Debug(route, static (state, _) => $"method resolved, but initial frame rejected: {state.CreateString()}");
                                             connection.Remove(header.StreamId);
                                             ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
-                                            MetadataEncoder.WriteStatus(ctx, StatusCode.Internal, "Initial frame rejected");
+                                            MetadataEncoder.WriteStatus(ctx, StatusCode.Internal, "Initial frame rejected".AsSpan());
                                             ctx.Complete();
                                             await ctx.WritePayloadAsync(connection.Output, FrameWriteFlags.None, cancellationToken);
                                         }
@@ -95,14 +99,14 @@ internal static class ListenerEngine
                                     {
                                         logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
                                         ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
-                                        MetadataEncoder.WriteStatus(ctx, StatusCode.AlreadyExists, "Specified stream already exists");
+                                        MetadataEncoder.WriteStatus(ctx, StatusCode.AlreadyExists, "Specified stream already exists".AsSpan());
                                         ctx.Complete();
                                         await ctx.WritePayloadAsync(connection.Output, FrameWriteFlags.None, cancellationToken);
                                     }
                                 }
                                 else
                                 {
-                                    logger.Debug(route, static (state, _) => $"method not found: {new string(state)}");
+                                    logger.Debug(route, static (state, _) => $"method not found: {state.CreateString()}");
                                     ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
                                     MetadataEncoder.WriteStatus(ctx, StatusCode.NotFound, route.AsSpan());
                                     ctx.Complete();
@@ -123,12 +127,12 @@ internal static class ListenerEngine
                             if (!existingStream.IsActive)
                             {
                                 // shouldn't still be here, but; fix that
-                                connection.Streams.Remove(header.StreamId, out _);
+                                connection.Streams.TryRemove(header.StreamId, out _);
                             }
                             if (header.Kind == FrameKind.StreamCancel)
                             {
                                 // kill it
-                                connection.Streams.Remove(header.StreamId, out _);
+                                connection.Streams.TryRemove(header.StreamId, out _);
                                 existingStream.Cancel();
                             }
                             else
@@ -146,7 +150,7 @@ internal static class ListenerEngine
                                 if ((header.Kind == FrameKind.StreamTrailer && header.IsFinal))
                                 {
                                     logger.Debug(header, static (state, _) => $"removing stream {state}");
-                                    connection.Streams.Remove(header.StreamId, out _);
+                                    connection.Streams.TryRemove(header.StreamId, out _);
                                 }
                             }
                         }

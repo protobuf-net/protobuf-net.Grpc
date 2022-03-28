@@ -1,4 +1,6 @@
-﻿namespace ProtoBuf.Grpc.Lite.Connections;
+﻿using System;
+
+namespace ProtoBuf.Grpc.Lite.Connections;
 
 /// <summary>
 /// The types of <see cref="Frame"/> being communicated.
@@ -45,12 +47,6 @@ public enum FrameKind : byte
     /// Indicates that the specified suspended stream may resume transmit.
     /// </summary>
     StreamResume,
-    /// <summary>
-    /// Invalid; do not use.
-    /// </summary>
-    [Obsolete("remove this later; should be a structured response status")]
-    StreamMethodNotFound,
-    
 }
 
 /// <summary>

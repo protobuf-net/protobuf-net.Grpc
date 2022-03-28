@@ -4,9 +4,15 @@ using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
 using ProtoBuf.Grpc.Lite.Internal.Server;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite;
 
@@ -50,7 +56,7 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(name)) name = "(local)";
         NullConnection.CreateLinkedPair(out var x, out var y);
         var server = new LiteConnection(this, x, Logger);
-        var client = new LiteChannel(y, name, Logger);
+        var client = new LiteChannel(y, name!, Logger);
         server.StartWorker();
         return client;
     }
@@ -170,7 +176,7 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
         bool IEqualityComparer<ReadOnlyMemory<char>>.Equals(ReadOnlyMemory<char> x, ReadOnlyMemory<char> y)
             => x.Span.SequenceEqual(y.Span);
 
-#if NETSTANDARD2_1
+#if NETSTANDARD2_1 || NET472
         int IEqualityComparer<ReadOnlyMemory<char>>.GetHashCode(ReadOnlyMemory<char> obj)
         {
             // pretty random

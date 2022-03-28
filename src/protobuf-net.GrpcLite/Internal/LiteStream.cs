@@ -2,11 +2,15 @@
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
+using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Channels;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal;
@@ -505,10 +509,17 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         _backlogFrame = default;
         if (_backlogFrames is not null)
         {
+#if NET472
+            while (_backlogFrames.Count != 0)
+            {
+                _backlogFrames.Dequeue().Release();
+            }
+#else
             while (_backlogFrames.TryDequeue(out var frame))
             {
                 frame.Release();
             }
+#endif
         }
     }
 
@@ -531,6 +542,20 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
 
         // if necessary, reactivate with fault - without risking blocking the listener via callbacks
+#if NET472
+        ThreadPool.QueueUserWorkItem(static state =>
+        {
+            var tuple = (Tuple<LiteStream<TSend, TReceive>, Exception>)state;
+            try
+            {
+                tuple.Item1._suspendedContinuationPoint.SetException(tuple.Item2);
+            }
+            catch (Exception innerEx)
+            {
+                tuple.Item1.Logger.Critical(innerEx);
+            }
+        }, Tuple.Create(this, ex));
+#else
         ThreadPool.QueueUserWorkItem(static state =>
         {
             try
@@ -542,6 +567,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                 state.obj.Logger.Critical(innerEx);
             }
         }, (obj: this, ex), false);
+#endif
     }
     public void Execute()
     {
