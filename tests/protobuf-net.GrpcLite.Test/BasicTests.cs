@@ -54,7 +54,7 @@ public class BasicTests
             public string FullName { get; }
         }
         public DummyStream(string fullName, ushort id)
-            : base(new SimpleMethod(fullName), null!, null)
+            : base(new SimpleMethod(fullName), null!)
         {
             Id = id;
         }

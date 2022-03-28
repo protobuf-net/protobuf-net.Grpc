@@ -74,7 +74,7 @@ public static class ConnectionFactory
         {
             await socket.ConnectAsync(endpoint);
             var ns = new NetworkStream(socket, true);
-            return new ConnectionState<Stream>(ns, endpoint.ToString())
+            return new ConnectionState<Stream>(ns, endpoint.ToString() ?? "")
             {
                 Logger = logger,
             };
@@ -100,7 +100,7 @@ public static class ConnectionFactory
             logger.Information(endpoint, static (state, _) => $"waiting for connection... {state}");
             var socket = await listener.AcceptAsync();
             if (socket is null) return null!;
-            var name = socket.LocalEndPoint.ToString();
+            var name = socket.LocalEndPoint?.ToString() ?? "";
             socket.NoDelay = true;
             logger.Information(name, static (state, _) => $"client connected to {state}");
             var ns = new NetworkStream(socket, true);

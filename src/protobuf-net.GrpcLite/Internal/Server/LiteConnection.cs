@@ -14,6 +14,7 @@ internal sealed class LiteConnection : IWorker, IConnection
 
     private readonly ConcurrentDictionary<ushort, IStream> _streams = new ConcurrentDictionary<ushort, IStream>();
 
+    RefCountedMemoryPool<byte> IConnection.Pool => RefCountedMemoryPool<byte>.Shared;
     public int Id { get; }
 
     void IConnection.Remove(ushort id) => _streams.Remove(id, out _);
@@ -63,7 +64,7 @@ internal sealed class LiteConnection : IWorker, IConnection
     {
         if (_server.TryCreateStream(initialize.GetPayloadString(), out var serverStream) && serverStream is not null)
         {
-            serverStream.Initialize(initialize.GetHeader().StreamId, _output, _logger, this);
+            serverStream.Initialize(initialize.GetHeader().StreamId, this, _logger);
             stream = serverStream;
             return true;
         }

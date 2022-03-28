@@ -28,8 +28,8 @@ internal sealed class ClientStream<TRequest, TResponse> : LiteStream<TRequest, T
     internal override CancellationTokenRegistration RegisterForCancellation(CancellationToken streamSpecificCancellation, DateTime? deadline)
         => _ctr = base.RegisterForCancellation(streamSpecificCancellation, deadline);
 
-    public ClientStream(IMethod method, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, ILogger? logger, IConnection? owner)
-        : base(method, output, owner)
+    public ClientStream(IMethod method, IConnection owner, ILogger? logger)
+        : base(method, owner)
     {
         Logger = logger;
     }

@@ -18,12 +18,15 @@ internal interface IConnection
     CancellationToken Shutdown { get; }
 
     void Close(Exception? fault);
+    RefCountedMemoryPool<byte> Pool { get; }
 }
 internal static class ListenerEngine
 {
-
     public async static Task RunAsync(this IConnection listener, ILogger? logger, CancellationToken cancellationToken)
     {
+        static ValueTask WriteAsync(IConnection connection, FrameKind kind, ushort streamId, ushort sequenceId, CancellationToken cancellationToken)
+            => connection.Output.WriteAsync((Frame.CreateFrame(connection.Pool, new FrameHeader(kind, 0, streamId, sequenceId)), FrameWriteFlags.None), cancellationToken);
+
         try
         {
             logger.Debug(listener, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) processing streams...");
@@ -44,7 +47,7 @@ internal static class ListenerEngine
                         if (header.IsClientStream != listener.IsClient)
                         {
                             // the other end is initiating; acknowledge with an empty but similar frame
-                            await listener.Output.WriteAsync(new FrameHeader(header.Kind, 0, header.StreamId, header.SequenceId), cancellationToken);
+                            await WriteAsync(listener, header.Kind, header.StreamId, header.SequenceId, cancellationToken);
                         }
                         // shutdown if requested
                         if (header.Kind == FrameKind.ConnectionClose)
@@ -56,7 +59,7 @@ internal static class ListenerEngine
                         if (listener.Streams.ContainsKey(header.StreamId))
                         {
                             logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.StreamCancel, 0, header.StreamId, 0), cancellationToken);
+                            await WriteAsync(listener, FrameKind.StreamCancel, header.StreamId, 0, cancellationToken);
                         }
                         else if (listener.TryCreateStream(in frame, out var newStream) && newStream is not null)
                         {
@@ -67,13 +70,13 @@ internal static class ListenerEngine
                             else
                             {
                                 logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                                await listener.Output.WriteAsync(new FrameHeader(FrameKind.StreamCancel, 0, header.StreamId, 0), cancellationToken);
+                                await WriteAsync(listener, FrameKind.StreamCancel, header.StreamId, 0, cancellationToken);
                             }
                         }
                         else
                         {
                             logger.Debug(frame, static (state, _) => $"method not found: {state.GetPayloadString()}");
-                            await listener.Output.WriteAsync(new FrameHeader(FrameKind.StreamMethodNotFound, 0, header.StreamId, 0), cancellationToken);
+                            await WriteAsync(listener, FrameKind.StreamMethodNotFound, header.StreamId, 0, cancellationToken);
                         }
                         break;
                     default:

@@ -17,7 +17,7 @@ internal interface IServerStream : IStream
     AuthContext AuthContext { get; }
     ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options);
     Task WriteResponseHeadersAsyncCore(Metadata responseHeaders);
-    void Initialize(ushort id, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, ILogger? logger, IConnection? owner);
+    void Initialize(ushort id, IConnection owner, ILogger? logger);
 }
 internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, TRequest>, IServerStream,
         IServerStreamWriter<TResponse>
@@ -25,7 +25,7 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
     where TResponse : class where TRequest : class
 {
     public ServerStream(IMethod method, object executor)
-        : base(method, null!, null)
+        : base(method, null!)
     {
         _executor = executor;
         Status = Status.DefaultSuccess;
@@ -34,12 +34,11 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         RequestHeaders = Metadata.Empty;
         WriteOptions = WriteOptions.Default;
     }
-    public void Initialize(ushort id, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, ILogger? logger, IConnection? owner)
+    public void Initialize(ushort id, IConnection owner, ILogger? logger)
     {
         Id = id;
-        Logger = logger;
-        SetOutput(output);
         SetOwner(owner);
+        Logger = logger;
     }
 
     protected sealed override bool IsClient => false;

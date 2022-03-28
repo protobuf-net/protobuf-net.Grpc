@@ -16,6 +16,8 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
     private readonly CancellationTokenSource _clientShutdown = new();
     private readonly ConcurrentDictionary<ushort, IStream> _streams = new();
 
+    RefCountedMemoryPool<byte> IConnection.Pool => RefCountedMemoryPool<byte>.Shared;
+
     public override string ToString() => _target;
 
     private int _nextId = ushort.MaxValue; // so that our first id is zero
@@ -27,7 +29,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
     private ClientStream<TRequest, TResponse> AddClientStream<TRequest, TResponse>(Method<TRequest, TResponse> method, in CallOptions options)
         where TRequest : class where TResponse : class
     {
-        var stream = new ClientStream<TRequest, TResponse>(method, _output, _logger, this);
+        var stream = new ClientStream<TRequest, TResponse>(method, this, _logger);
         for (int i = 0; i < 1024; i++) // try *reasonably* hard to get a new stream id, without going mad
         {
             // MSB bit is always off for clients (and call-invoker is always a client)

@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -50,7 +52,32 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
     protected override void Dispose(bool disposing) { }
 
     /// <inheritdoc/>
-    public sealed override IMemoryOwner<T> Rent(int minBufferSize = -1)
+    public Memory<T> RentMemory(int minBufferSize = -1)
+    {
+        if (minBufferSize <= 0) minBufferSize = 512; // modest default
+
+        for (int slot = GetCacheSlot(minBufferSize); slot < CACHE_SLOTS; slot++)
+        {
+            var cache = TryGet(slot);
+            if (cache is not null && cache.TryDequeue(out var existing))
+            {
+                return existing;
+            }
+        }
+
+        return RentNew(minBufferSize).Memory;
+    }
+
+    [Obsolete(nameof(RentMemory) + " should be used instead")]
+#pragma warning disable CS0809 // Obsolete member overrides non-obsolete member; this is very intentional - want to push people away from this API, since it can't use fragments
+    public override IMemoryOwner<T> Rent(int minBufferSize = -1)
+#pragma warning restore CS0809 // Obsolete member overrides non-obsolete member
+    {
+        if (minBufferSize <= 0) minBufferSize = 512; // modest default
+        return RentNew(minBufferSize);
+    }
+
+    private IMemoryOwner<T> RentNew(int minBufferSize)
     {
         var manager = RentRefCounted(minBufferSize);
         Debug.Assert(MemoryMarshal.TryGetMemoryManager<T, RefCountedMemoryManager<T>>(manager.Memory, out var viaMemory) && ReferenceEquals(viaMemory, manager),
@@ -61,7 +88,75 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
     /// <summary>
     /// Identical to <see cref="MemoryPool{T}.Rent(int)"/>, but with support for reference-counting.
     /// </summary>
-    protected abstract RefCountedMemoryManager<T> RentRefCounted(int minBufferSize = -1);
+    protected abstract RefCountedMemoryManager<T> RentRefCounted(int minBufferSize);
+
+    const int MIN_USEFUL_LENGTH = 32, CACHE_SLOTS = 13;
+    private static int GetCacheSlot(int length)
+    {
+        if (length <= MIN_USEFUL_LENGTH) return 0;
+
+#if NETSTANDARD2_1
+        // could we borrow the BCL fallback? maybe, but...
+        int bits = 0;
+        uint x = (uint)length;
+        while (x != 0)
+        {
+            bits++;
+            x >>= 1;
+        }
+        var lzcnt = 32 - bits;
+#else
+        int lzcnt = BitOperations.LeadingZeroCount((uint)length);
+#endif
+        return (26 - lzcnt) / 2;
+    }
+
+    internal void Return(Memory<T> unused)
+    {
+        const int MIN_USEFUL_SIZE = 32, MAX_STORED_PER_KEY = 8;
+        if (!MemoryMarshal.TryGetMemoryManager<T, RefCountedMemoryManager<T>>(unused, out var manager, out var start, out var length))
+            return; // not ref-counted; just ignore
+
+        Debug.Assert(start + unused.Length == manager.Memory.Length, "expect to be the tail end of the buffer");
+
+        if (unused.Length < MIN_USEFUL_SIZE || (start + unused.Length != manager.Memory.Length))
+        {   // not much left, or we're inexplicably not looking at the end of the buffer
+            manager.Dispose();
+            return;
+        }
+        var slot = GetCacheSlot(unused.Length);
+        while (slot >= 0)
+        {
+            var store = Get(slot);
+            if (store.Count < MAX_STORED_PER_KEY)
+            {
+                store.Enqueue(unused);
+                return;
+            }
+            slot--; // try again, but storing an oversized buffer in a smaller pot
+        }
+
+        // we can't store everything
+        manager.Dispose();
+    }
+
+    private ConcurrentQueue<Memory<T>>? TryGet(int scale)
+        => _fragments[scale];
+    private ConcurrentQueue<Memory<T>> Get(int scale)
+        => _fragments[scale] ?? GetSlow(scale);
+
+    private ConcurrentQueue<Memory<T>> GetSlow(int scale)
+    {
+        var value = Volatile.Read(ref _fragments[scale]);
+        if (value is null)
+        {
+            value = new ConcurrentQueue<Memory<T>>();
+            value = Interlocked.CompareExchange(ref _fragments[scale], value, null) ?? value;
+        }
+        return value;
+    }
+
+    private ConcurrentQueue<Memory<T>>?[] _fragments = new ConcurrentQueue<Memory<T>>?[CACHE_SLOTS];
 }
 
 /// <summary>
@@ -163,19 +258,16 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
 internal sealed class ArrayRefCountedMemoryPool<T> : RefCountedMemoryPool<T>
 {
     private readonly ArrayPool<T> _pool;
-    private readonly int _defaultBufferSize;
 
     // advertise BCL limits (oddly, ArrayMemoryPool just uses int.MaxValue here, but that's... wrong)
     public override int MaxBufferSize => Unsafe.SizeOf<T>() == 1 ? 0x7FFFFFC7 : 0X7FEFFFFF;
-    public ArrayRefCountedMemoryPool(ArrayPool<T> pool, int defaultBufferSize = 8 * 1024)
+    public ArrayRefCountedMemoryPool(ArrayPool<T> pool)
     {
         if (pool is null) throw new ArgumentNullException(nameof(pool));
-        if (defaultBufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(defaultBufferSize));
-        _defaultBufferSize = defaultBufferSize;
         _pool = pool;
     }
-    protected override RefCountedMemoryManager<T> RentRefCounted(int minBufferSize = -1)
-        => new ArrayRefCountedMemoryManager(_pool, minBufferSize <= 0 ? _defaultBufferSize : minBufferSize);
+    protected override RefCountedMemoryManager<T> RentRefCounted(int minBufferSize)
+        => new ArrayRefCountedMemoryManager(_pool, minBufferSize);
 
     sealed class ArrayRefCountedMemoryManager : RefCountedMemoryManager<T>
     {
@@ -231,7 +323,7 @@ internal sealed class WrappedRefCountedMemoryPool<T> : RefCountedMemoryPool<T>
     {
         if (disposing) _pool.Dispose(); // we'll assume we have ownership
     }
-    protected override RefCountedMemoryManager<T> RentRefCounted(int minBufferSize = -1)
+    protected override RefCountedMemoryManager<T> RentRefCounted(int minBufferSize)
         => new WrappedRefCountedMemoryManager(_pool.Rent(minBufferSize));
 
     sealed class WrappedRefCountedMemoryManager : RefCountedMemoryManager<T>
@@ -354,7 +446,7 @@ public readonly partial struct Frame
                     _oversizedCurrentFrame.Slice(start: 0, length: usedBytes)
                         .CopyTo(newBuffer);
                 }
-                Return(_oversizedCurrentFrame);
+                _pool.Return(_oversizedCurrentFrame);
                 _oversizedCurrentFrame = newBuffer;
             }
         }
@@ -365,22 +457,12 @@ public readonly partial struct Frame
         /// <remarks><see cref="IDisposable.Dispose"/> is not used because this is a mutable value-type, and would not work well with "using" etc.</remarks>
         public void Release()
         {
-            var buffer = _oversizedCurrentFrame;
+            _pool?.Return(_oversizedCurrentFrame);
             this = default;
-            Return(buffer);
-        }
-
-        private static void Return(Memory<byte> memory)
-        {
-            if (MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(memory, out var manager))
-                manager.Dispose();
         }
 
         private Memory<byte> RentNewBuffer()
-        {
-            var lease = _pool.Rent(FrameHeader.MaxPayloadLength + FrameHeader.Size);
-            return lease.Memory;
-        }
+            => _pool.RentMemory(FrameHeader.MaxPayloadLength + FrameHeader.Size);
 
         /// <summary>
         /// Try to construct a <see cref="Frame"/> from data already written to the buffer; a buffer could contain multiple un-processed frames.

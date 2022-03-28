@@ -106,28 +106,24 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    protected LiteStream(IMethod method, ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output, IConnection? owner)
+    protected LiteStream(IMethod method, IConnection owner)
     {
         Method = method;
-        _output = output;
         _streamId = ushort.MaxValue; // will be updated after construction
         _sequenceId = ushort.MaxValue; // so first is zero
         StreamState = StreamState.ExpectHeaders;
         _owner = owner;
         _workerStateNeedsSync = IsClient ? WorkerState.Active : WorkerState.NotStarted; // for clients, the caller is the initial executor
     }
-    IConnection? _owner;
-    IConnection? IStream.Connection => _owner;
-    protected void SetOwner(IConnection? owner) => _owner = owner;
+    IConnection _owner;
+    IConnection IStream.Connection => _owner;
+    protected void SetOwner(IConnection owner) => _owner = owner;
 
     string IStream.Method => Method!.FullName;
-    protected RefCountedMemoryPool<byte> MemoryPool => RefCountedMemoryPool<byte>.Shared;
+    protected RefCountedMemoryPool<byte> MemoryPool => _owner.Pool;
 
     private ushort _streamId;
     public ILogger? Logger { get; set; }
-    protected void SetOutput(ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> output)
-        => _output = output;
-    ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> _output;
 
     // IMPORTANT: state and backlog changes should be synchronized
     private Queue<Frame>? _backlogFrames;
@@ -742,7 +738,11 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     protected IMethod Method { get; }
 
-    protected ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> Output => _output;
+    protected ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> Output
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _owner.Output;
+    }
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
 
@@ -750,9 +750,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     {
         var frame = Frame.CreateFrame(MemoryPool, new FrameHeader(FrameKind.StreamCancel, 0, Id, NextSequenceId()));
         var val = (frame, FrameWriteFlags.None);
-        if (!_output.TryWrite(val))
+        if (!Output.TryWrite(val))
         {
-            _ = Observe(_output.WriteAsync(val, CancellationToken.None));
+            _ = Observe(Output.WriteAsync(val, CancellationToken.None));
         }
         static async Task Observe(ValueTask pending)
         {
