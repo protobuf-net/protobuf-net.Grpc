@@ -16,9 +16,9 @@ Dictionary<string, (string unary, string clientStreamingBuffered, string clientS
 //{
 //    await Run(pipeServer);
 //}
-using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
+using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(namedPipe);
+await Run(namedPipe);
 }
 //using (var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)))
 //{
@@ -30,26 +30,26 @@ using (var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer
 //}
 using (var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(tcp);
+await Run(tcp);
 }
 using (var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043))
     .WithTls().AuthenticateAsClient("mytestserver", trustAny).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
-    await Run(tcpTls);
+await Run(tcpTls);
 }
 
 using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls()
     .AuthenticateAsClient("mytestserver", trustAny).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)))
 {
-    await Run(namedPipeTls);
+await Run(namedPipeTls);
 }
 using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
 {
-    await Run(managedHttp);
+await Run(managedHttp);
 }
 using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
 {
-    await Run(managedHttps);
+await Run(managedHttps);
 }
 
 {

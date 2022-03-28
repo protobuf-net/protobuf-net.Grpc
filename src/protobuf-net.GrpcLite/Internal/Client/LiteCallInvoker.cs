@@ -20,6 +20,12 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 
     public override string ToString() => _target;
 
+    string IConnection.LastKnownUserAgent
+    {   // not expecting this to get used on client connections
+        get => "";
+        set { } 
+    }
+
     private int _nextId = ushort.MaxValue; // so that our first id is zero
 
     void IConnection.Remove(ushort id) => _streams.Remove(id, out _);
@@ -123,7 +129,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
         return new AsyncServerStreamingCall<TResponse>(stream, s_responseHeadersAsync, s_getStatus, s_getTrailers, s_dispose, stream);
     }
 
-    bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream)
+    bool IConnection.TryCreateStream(in Frame initialize, ReadOnlyMemory<char> route, [MaybeNullWhen(false)] out IStream stream)
     {
         // not accepting server-initialized streams
         stream = null;

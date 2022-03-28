@@ -31,13 +31,12 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
         Status = Status.DefaultSuccess;
         Deadline = DateTime.MaxValue;
         Host = Peer = "";
-        RequestHeaders = Metadata.Empty;
         WriteOptions = WriteOptions.Default;
     }
     public void Initialize(ushort id, IConnection owner, ILogger? logger)
     {
         Id = id;
-        SetOwner(owner);
+        SetConnection(owner);
         Logger = logger;
     }
 
@@ -153,7 +152,10 @@ internal sealed class ServerStream<TRequest, TResponse> : LiteStream<TResponse, 
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     // therse will all be set in Initialize
-    public Metadata RequestHeaders { get; private set; }
+    public Metadata RequestHeaders => _requestHeaders ??= MetadataEncoder.GetMetadata(RawHeaders, Connection);
+
+    private Metadata? _requestHeaders;
+
     public string Host { get; private set; }
     public string Peer { get; private set; }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.

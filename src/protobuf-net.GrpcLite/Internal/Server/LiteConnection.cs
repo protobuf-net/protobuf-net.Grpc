@@ -11,7 +11,7 @@ internal sealed class LiteConnection : IWorker, IConnection
     private readonly LiteServer _server;
     private readonly IFrameConnection _connection;
     private readonly ILogger? _logger;
-
+    private string _lastKnownUserAgent = "";
     private readonly ConcurrentDictionary<ushort, IStream> _streams = new ConcurrentDictionary<ushort, IStream>();
 
     RefCountedMemoryPool<byte> IConnection.Pool => RefCountedMemoryPool<byte>.Shared;
@@ -20,6 +20,12 @@ internal sealed class LiteConnection : IWorker, IConnection
     void IConnection.Remove(ushort id) => _streams.Remove(id, out _);
 
     CancellationToken IConnection.Shutdown => _server.ServerShutdown;
+
+    string IConnection.LastKnownUserAgent
+    {
+        get => _lastKnownUserAgent;
+        set => _lastKnownUserAgent = value;
+    }
 
     void IConnection.Close(Exception? fault)
     {
@@ -60,9 +66,9 @@ internal sealed class LiteConnection : IWorker, IConnection
         return Complete ?? Task.CompletedTask;
     }
 
-    bool IConnection.TryCreateStream(in Frame initialize, [MaybeNullWhen(false)] out IStream stream)
+    bool IConnection.TryCreateStream(in Frame initialize, ReadOnlyMemory<char> route, [MaybeNullWhen(false)] out IStream stream)
     {
-        if (_server.TryCreateStream(initialize.GetPayloadString(), out var serverStream) && serverStream is not null)
+        if (_server.TryCreateStream(route, out var serverStream) && serverStream is not null)
         {
             serverStream.Initialize(initialize.GetHeader().StreamId, this, _logger);
             stream = serverStream;

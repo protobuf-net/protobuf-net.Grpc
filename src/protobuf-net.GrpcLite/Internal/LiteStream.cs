@@ -112,15 +112,15 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         _streamId = ushort.MaxValue; // will be updated after construction
         _sequenceId = ushort.MaxValue; // so first is zero
         StreamState = StreamState.ExpectHeaders;
-        _owner = owner;
+        _connection = owner;
         _workerStateNeedsSync = IsClient ? WorkerState.Active : WorkerState.NotStarted; // for clients, the caller is the initial executor
     }
-    IConnection _owner;
-    IConnection IStream.Connection => _owner;
-    protected void SetOwner(IConnection owner) => _owner = owner;
+    IConnection _connection;
+    public IConnection Connection => _connection;
+    protected void SetConnection(IConnection connection) => _connection = connection;
 
     string IStream.Method => Method!.FullName;
-    protected RefCountedMemoryPool<byte> MemoryPool => _owner.Pool;
+    protected RefCountedMemoryPool<byte> Pool => _connection.Pool;
 
     private ushort _streamId;
     public ILogger? Logger { get; set; }
@@ -162,7 +162,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
             throw new InvalidOperationException("Cancellation already registered");
         }
         CancellationScenerio scenario = CancellationScenerio.None;
-        var ownerShutdown = _owner?.Shutdown ?? CancellationToken.None;
+        var ownerShutdown = _connection?.Shutdown ?? CancellationToken.None;
         if (ownerShutdown.CanBeCanceled)
         {
             ownerShutdown.ThrowIfCancellationRequested();
@@ -270,7 +270,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     private void ThrowCancelled()
     {
         // try to give the most meaningful cancellation
-        var token = _owner?.Shutdown ?? CancellationToken.None;
+        var token = _connection?.Shutdown ?? CancellationToken.None;
         if (token.IsCancellationRequested)
         {
             throw new OperationCanceledException($"The {(IsClient ? "client" : "server")} is being shut-down.", token);
@@ -406,10 +406,12 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
                         }
                     case FrameKind.StreamHeader:
                         _unprocessedHeaders = FrameSequenceSegment.Create(nextGroup.Span);
+                        OnHeaders();
                         Release(ref nextGroup, releasePayload: false);
                         continue;
                     case FrameKind.StreamTrailer:
                         _unprocessedTrailers = FrameSequenceSegment.Create(nextGroup.Span);
+                        OnTrailers();
                         Release(ref nextGroup, releasePayload: false);
                         lock (SyncLock)
                         {   // there will never be another value, so...
@@ -436,7 +438,13 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
+    protected virtual void OnHeaders() { }
+
+    protected virtual void OnTrailers() { }
+
     private ReadOnlySequence<byte> _unprocessedHeaders, _unprocessedTrailers;
+    protected ReadOnlySequence<byte> RawHeaders => _unprocessedHeaders;
+    protected ReadOnlySequence<byte> RawTrailers => _unprocessedTrailers;
 
     ValueTask<bool> SuspendWorkerAndAwaitNextGroupAsync() // IMPORTANT; this is how the stream goes to sleep and waits to be activated by a new invocation
     {
@@ -504,7 +512,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
     }
 
-    private void ReportFault(Exception ex, [CallerMemberName] string caller = "")
+    protected virtual void ReportFault(Exception ex, [CallerMemberName] string caller = "")
     {
         try
         {
@@ -607,7 +615,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         finally
         {
             Logger.Debug(Id, static (state, _) => $"removing stream {state}");
-            _owner?.Remove(Id);
+            _connection?.Remove(Id);
         }
     }
 
@@ -741,14 +749,14 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     protected ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> Output
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _owner.Output;
+        get => _connection.Output;
     }
     protected abstract Action<TSend, SerializationContext> Serializer { get; }
     protected abstract Func<DeserializationContext, TReceive> Deserializer { get; }
 
     protected void TrySendCancellation()
     {
-        var frame = Frame.CreateFrame(MemoryPool, new FrameHeader(FrameKind.StreamCancel, 0, Id, NextSequenceId()));
+        var frame = Frame.CreateFrame(Pool, new FrameHeader(FrameKind.StreamCancel, 0, Id, NextSequenceId()));
         var val = (frame, FrameWriteFlags.None);
         if (!Output.TryWrite(val))
         {
@@ -762,7 +770,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
 
     public ValueTask SendHeaderAsync(string? host, in CallOptions options, FrameWriteFlags flags)
     {
-        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamHeader);
+        var ctx = PayloadFrameSerializationContext.Get(this, Pool, FrameKind.StreamHeader);
         try
         {
             MetadataEncoder.WriteHeader(ctx, IsClient, Method.FullName, host, options);
@@ -779,14 +787,17 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     protected void OnComplete()
     {
         IsActive = false;
-        _owner?.Remove(Id);
+        _connection?.Remove(Id);
     }
+
     public ValueTask SendTrailerAsync(Metadata? metadata, Status? status, FrameWriteFlags flags)
     {
-        var ctx = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamTrailer);
+        var ctx = PayloadFrameSerializationContext.Get(this, Pool, FrameKind.StreamTrailer);
         try
         {
-            ctx.Complete(); // always empty for now
+            if (status.HasValue) MetadataEncoder.WriteStatus(ctx, status.GetValueOrDefault());
+            if (metadata is not null && metadata.Count != 0) MetadataEncoder.WriteMetadata(ctx, metadata);
+            ctx.Complete();
         }
         catch
         {
@@ -795,6 +806,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
         return WriteAndRecycleAsync(ctx, flags);
     }
+
     private ValueTask WriteAndRecycleAsync(PayloadFrameSerializationContext ctx, FrameWriteFlags flags)
     {
         var pending = ctx.WritePayloadAsync(Output, flags, CancellationToken);
@@ -859,7 +871,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         try
         {
             Logger.Debug(value, static (state, ex) => $"serializing {state}...");
-            serializationContext = PayloadFrameSerializationContext.Get(this, MemoryPool, FrameKind.StreamPayload);
+            serializationContext = PayloadFrameSerializationContext.Get(this, Pool, FrameKind.StreamPayload);
             Serializer(value, serializationContext);
             Logger.Debug(serializationContext, static (state, _) => $"serialized; {state}");
             await serializationContext.WritePayloadAsync(Output, flags, CancellationToken);

@@ -87,8 +87,8 @@ public class BasicTests
             var frame = ctx.PendingFrames.Single();
             var hex = GetHex(frame.Memory);
             Assert.Equal(
-        "02-00-2A-00-00-00-13-80-" // unary, id 42, length 19, final
-        + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // "/myservice/mymethod"
+        "02-00-2A-00-00-00-15-80-" // unary, id 42, length 19, final
+        + "04-13-2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64", hex); // route: "/myservice/mymethod"
 
             frame = new Frame(frame.Memory);
             var header = frame.GetHeader();
@@ -96,8 +96,8 @@ public class BasicTests
             Assert.Equal(0, header.Reserved);
             Assert.Equal(42, header.StreamId);
             Assert.Equal(0, header.SequenceId);
-            Assert.Equal(19, header.PayloadLength);
-            Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.GetPayload().Span));
+            Assert.Equal(21, header.PayloadLength);
+            Assert.Equal("/myservice/mymethod", Encoding.UTF8.GetString(frame.GetPayload().Span.Slice(2)));
 
             frame.Release();
         }
@@ -154,8 +154,8 @@ public class BasicTests
         await pipe.SafeDisposeAsync();
         var hex = await GetHexAsync(server);
         Assert.Equal(
-            "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
-            + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
+            "02-00-00-00-00-00-15-80-" // unary, id 0/0, length 19 (final)
+            + "04-13-2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // route: "/myservice/mymethod"
             + "03-00-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21-"
             + "04-00-00-00-02-00-00-80-" // trailer, 0/2, empty (final)
@@ -193,8 +193,8 @@ public class BasicTests
 
         var hex = await GetHexAsync(server);
         Assert.Equal(
-            "02-00-00-00-00-00-13-80-" // unary, id 0/0, length 19 (final)
-            + "2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // "/myservice/mymethod"
+            "02-00-00-00-00-00-15-80-" // unary, id 0/0, length 19 (final)
+            + "04-13-2F-6D-79-73-65-72-76-69-63-65-2F-6D-79-6D-65-74-68-6F-64-" // route: "/myservice/mymethod"
             + "03-00-00-00-01-00-0D-80-" // payload, id 0/1, length 13 (final)
             + "68-65-6C-6C-6F-2C-20-77-6F-72-6C-64-21-"
             + "04-00-00-00-02-00-00-80-" // trailer, 0/2, empty (final)

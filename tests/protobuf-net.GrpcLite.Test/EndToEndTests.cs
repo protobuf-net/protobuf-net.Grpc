@@ -123,6 +123,46 @@ public class EndToEndTests : IClassFixture<TestServerHost>
 
     [Theory]
     [MemberData(nameof(StandardRuns))]
+    public async Task SendReceiveMetadata(ConnectionKind kind, int count)
+    {
+        using var log = ServerLog();
+        using var timeout = After();
+        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        var proxy = new FooService.FooServiceClient(client);
+
+        for (int i = 0; i < count; i++)
+        {
+            var s = i.ToString();
+            options = options.WithHeaders(new Metadata
+            {
+                new Metadata.Entry("i", s)
+            });
+            Logger.Debug($"issuing {nameof(proxy.UnaryAsync)}...");
+            using var call = proxy.UnaryAsync(new FooRequest { Value = 42 }, options);
+            Logger.Debug("awaiting response...");
+
+            var metadata = await call.ResponseHeadersAsync;
+            var entry = Assert.Single(metadata);
+            Assert.Equal("header-i", entry.Key);
+            Assert.Equal(s, entry.Value);
+
+            var response = await call.ResponseAsync;
+            Logger.Debug($"got response: {response}");
+
+            Assert.NotNull(response);
+            Assert.Equal(42, response.Value);
+
+            metadata = call.GetTrailers();
+            entry = Assert.Single(metadata);
+            Assert.Equal("trailer-i", entry.Key);
+            Assert.Equal(s, entry.Value);
+        }
+
+        timeout.Cancel();
+    }
+
+    [Theory]
+    [MemberData(nameof(StandardRuns))]
     public async Task Duplex(ConnectionKind kind, int count)
     {
         using var log = ServerLog();
@@ -281,6 +321,21 @@ public class MyService : FooService.FooServiceBase
         OnLog($"unary starting; received {request.Value}");
         await Task.Yield();
         OnLog("unary returning");
+        var headers = context.RequestHeaders;
+        if (headers is not null && headers.Count != 0)
+        {
+            var respHeaders = new Metadata();
+            foreach (var e in headers)
+            {
+                respHeaders.Add(new Metadata.Entry("header-" + e.Key, e.Value));
+            }
+            await context.WriteResponseHeadersAsync(respHeaders);
+
+            foreach (var e in headers)
+            {
+                context.ResponseTrailers.Add(new Metadata.Entry("trailer-" + e.Key, e.Value));
+            }
+        }
         return new FooResponse { Value = request.Value };
     }
 

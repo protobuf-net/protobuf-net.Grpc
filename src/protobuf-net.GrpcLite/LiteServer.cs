@@ -99,6 +99,9 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
         { } // that's success
     }
 
+    /// <summary>
+    /// Listen to a pre-established connection.
+    /// </summary>
     public Task ListenAsync(IFrameConnection connection, ILogger? logger = null)
     {
         Logger.Information(connection, static (state, _) => $"accepting connection");
@@ -146,15 +149,45 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
     /// </summary>
     public int MethodCount => _methods.Count;
 
-    private readonly ConcurrentDictionary<string, Func<IServerStream>> _methods = new ConcurrentDictionary<string, Func<IServerStream>>();
-    internal void AddStream(string fullName, Func<IServerStream> streamFactory)
+    private readonly ConcurrentDictionary<ReadOnlyMemory<char>, Func<IServerStream>> _methods = new ConcurrentDictionary<ReadOnlyMemory<char>, Func<IServerStream>>(CharMemoryComparer.Instance);
+
+    internal void AddStreamFactory(string fullName, Func<IServerStream> streamFactory)
     {
-        if (!_methods.TryAdd(fullName, streamFactory)) ThrowDuplicate(fullName);
+        if (!_methods.TryAdd(fullName.AsMemory(), streamFactory)) ThrowDuplicate(fullName);
         static void ThrowDuplicate(string fullName) => throw new ArgumentException($"The method '{fullName}' already exists", nameof(fullName));
     }
-    internal bool TryCreateStream(string fullName, [MaybeNullWhen(false)] out IServerStream stream)
+    internal bool TryCreateStream(ReadOnlyMemory<char> fullName, [MaybeNullWhen(false)] out IServerStream stream)
     {
         stream = _methods.TryGetValue(fullName, out var factory) ? factory?.Invoke() : null;
         return stream is not null;
+    }
+
+    private sealed class CharMemoryComparer : IEqualityComparer<ReadOnlyMemory<char>>
+    {
+        private CharMemoryComparer() { }
+        public static CharMemoryComparer Instance { get; } = new CharMemoryComparer();
+
+        bool IEqualityComparer<ReadOnlyMemory<char>>.Equals(ReadOnlyMemory<char> x, ReadOnlyMemory<char> y)
+            => x.Span.SequenceEqual(y.Span);
+
+#if NETSTANDARD2_1
+        int IEqualityComparer<ReadOnlyMemory<char>>.GetHashCode(ReadOnlyMemory<char> obj)
+        {
+            // pretty random
+            if (obj.IsEmpty) return 0;
+
+            var span = obj.Span;
+            var hash = (-37 * span.Length) + span[0];
+            while (span.Length > 16)
+            {
+                span = span.Slice(16);
+                hash = (-37 * hash) + span[0];
+            }
+            return hash;
+        }
+#else
+        int IEqualityComparer<ReadOnlyMemory<char>>.GetHashCode(ReadOnlyMemory<char> obj)
+            => string.GetHashCode(obj.Span);
+#endif
     }
 }

@@ -117,12 +117,6 @@ public readonly partial struct Frame
             manager.Preserve();
     }
 
-    internal string GetPayloadString(Encoding? encoding = null)
-    {
-        var payload = GetPayload();
-        return payload.IsEmpty ? "" : (encoding ?? Encoding.UTF8).GetString(payload.Span);
-    }
-
     internal static Frame CreateFrame(RefCountedMemoryPool<byte> pool, FrameHeader frameHeader)
     {
         var memory = pool.RentMemory(FrameHeader.Size);
@@ -130,7 +124,7 @@ public readonly partial struct Frame
         frameHeader.UnsafeWrite(ref buffer.Span[0]);
         var result = new Frame(buffer);
         result.Preserve();
-        pool.Return(buffer.Slice(start: FrameHeader.Size));
+        pool.Return(memory.Slice(start: FrameHeader.Size));
         return result;
     }
 }

@@ -51,7 +51,9 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
     /// <inheritdoc/>
     protected override void Dispose(bool disposing) { }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns a memory block capable of holding at least minBufferSize elements of <typeparamref name="T"/>.
+    /// </summary>
     public Memory<T> RentMemory(int minBufferSize = -1)
     {
         if (minBufferSize <= 0) minBufferSize = 512; // modest default
@@ -68,6 +70,7 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         return RentNew(minBufferSize).Memory;
     }
 
+    /// <inheritdoc/>
     [Obsolete(nameof(RentMemory) + " should be used instead")]
 #pragma warning disable CS0809 // Obsolete member overrides non-obsolete member; this is very intentional - want to push people away from this API, since it can't use fragments
     public override IMemoryOwner<T> Rent(int minBufferSize = -1)
@@ -94,21 +97,7 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
     private static int GetCacheSlot(int length)
     {
         if (length <= MIN_USEFUL_LENGTH) return 0;
-
-#if NETSTANDARD2_1
-        // could we borrow the BCL fallback? maybe, but...
-        int bits = 0;
-        uint x = (uint)length;
-        while (x != 0)
-        {
-            bits++;
-            x >>= 1;
-        }
-        var lzcnt = 32 - bits;
-#else
-        int lzcnt = BitOperations.LeadingZeroCount((uint)length);
-#endif
-        return (26 - lzcnt) / 2;
+        return (26 - Utilities.LeadingZeroCount((uint)length)) / 2;
     }
 
     internal void Return(Memory<T> unused)

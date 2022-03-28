@@ -118,6 +118,58 @@ internal static class Utilities
             });
     }
 
+
+
+#if NETSTANDARD2_1
+    // note: here we use the sofware fallback implementation from the BCL
+    // source: https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/Numerics/BitOperations.cs
+    // "The .NET Foundation licenses this file to you under the MIT license." (so: we're fine for licensing)
+    // With full credit to the donet runtime
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int LeadingZeroCount(uint value)
+        => 31 ^ Log2SoftwareFallback(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int LeadingZeroCount(int value)
+        => 31 ^ Log2SoftwareFallback(unchecked((uint)value));
+
+    private static int Log2SoftwareFallback(uint value)
+    {
+        // No AggressiveInlining due to large method size
+        // Has conventional contract 0->0 (Log(0) is undefined)
+
+        // Fill trailing zeros with ones, eg 00010010 becomes 00011111
+        value |= value >> 01;
+        value |= value >> 02;
+        value |= value >> 04;
+        value |= value >> 08;
+        value |= value >> 16;
+
+        // uint.MaxValue >> 27 is always in range [0 - 31] so we use Unsafe.AddByteOffset to avoid bounds check
+        return Unsafe.AddByteOffset(
+            // Using deBruijn sequence, k=2, n=5 (2^5=32) : 0b_0000_0111_1100_0100_1010_1100_1101_1101u
+            ref MemoryMarshal.GetReference(Log2DeBruijn),
+            // uint|long -> IntPtr cast on 32-bit platforms does expensive overflow checks not needed here
+            (IntPtr)(int)((value * 0x07C4ACDDu) >> 27));
+    }
+    private static ReadOnlySpan<byte> Log2DeBruijn => new byte[32]
+    {
+        00, 09, 01, 10, 13, 21, 02, 29,
+        11, 14, 16, 18, 22, 25, 03, 30,
+        08, 12, 20, 28, 15, 17, 24, 07,
+        19, 27, 23, 06, 26, 05, 04, 31
+    };
+#else
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int LeadingZeroCount(uint value)
+        => System.Numerics.BitOperations.LeadingZeroCount(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int LeadingZeroCount(int value)
+        => System.Numerics.BitOperations.LeadingZeroCount(unchecked((uint)value));
+#endif
+
     public static readonly UnboundedChannelOptions UnboundedChannelOptions_SingleReadMultiWriterNoSync = new UnboundedChannelOptions
     {
         AllowSynchronousContinuations = false,

@@ -139,6 +139,8 @@ public readonly struct FrameHeader : IEquatable<FrameHeader>
     [field: FieldOffset(6)]
     private readonly ushort _payloadLengthAndFinal;
 
+    internal FrameHeader WithNextSequenceId() => new FrameHeader(in this, (ushort)(SequenceId + 1));
+
     /// <summary>
     /// Gets the length of the payload data in this frame.
     /// </summary>

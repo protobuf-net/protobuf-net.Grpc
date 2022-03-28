@@ -21,6 +21,16 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
     public override string ToString()
         => $"{_totalLength} bytes, {_frames.Count} frames (total bytes: {_totalLength + _frames.Count * FrameHeader.Size})";
 
+    internal static PayloadFrameSerializationContext Get(ushort streamId, RefCountedMemoryPool<byte> pool, FrameKind kind)
+    {
+        var obj = Pool<PayloadFrameSerializationContext>.Get();
+        obj._stream = null;
+        obj._template = new FrameHeader(kind, 0, streamId, 0, payloadLength: 0, isFinal: false);
+        obj._declaredPayloadLength = -1;
+        obj._totalLength = 0;
+        obj._builder = Frame.CreateBuilder(pool);
+        return obj;
+    }
     internal static PayloadFrameSerializationContext Get(IStream stream, RefCountedMemoryPool<byte> pool, FrameKind kind)
     {
         var obj = Pool<PayloadFrameSerializationContext>.Get();
@@ -109,7 +119,16 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
         }
 
         Debug.Assert(!_builder.InProgress, "not expecting an in-progress state");
-        return _builder.NewFrame(_template, _stream!.NextSequenceId(), sizeHint: (ushort)sizeHint);
+        if (_stream is not null)
+        {
+            return _builder.NewFrame(_template, _stream!.NextSequenceId(), sizeHint: (ushort)sizeHint);
+        }
+        else
+        {
+            var result = _builder.NewFrame(_template, _template.SequenceId, sizeHint: (ushort)sizeHint);
+            _template = _template.WithNextSequenceId();
+            return result;
+        }
     }
 
     void Flush(bool isFinal)

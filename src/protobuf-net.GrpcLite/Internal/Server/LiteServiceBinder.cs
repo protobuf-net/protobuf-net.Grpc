@@ -10,7 +10,7 @@ internal class LiteServiceBinder : ServiceBinderBase
 
     private void Add<TRequest, TResponse>(Method<TRequest, TResponse> method, object executor)
         where TRequest : class where TResponse : class
-        => _server.AddStream(method.FullName, () => new ServerStream<TRequest, TResponse>(method, executor));
+        => _server.AddStreamFactory(method.FullName, () => new ServerStream<TRequest, TResponse>(method, executor));
     public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
         => Add(method, handler);
 
