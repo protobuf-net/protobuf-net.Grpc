@@ -172,7 +172,7 @@ public abstract partial class RefCountedMemoryManager<T> : MemoryManager<T>, IDi
         _refCount = 1;
     }
 
-    public bool IsAlive => Volatile.Read(ref _refCount) > 0;
+    internal bool IsAlive => Volatile.Read(ref _refCount) > 0;
 
     /// <inheritdoc/>
     protected sealed override void Dispose(bool disposing)
