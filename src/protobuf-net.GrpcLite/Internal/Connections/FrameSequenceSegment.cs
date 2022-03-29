@@ -3,7 +3,6 @@ using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
@@ -43,37 +42,15 @@ internal sealed class FrameSequenceSegment : ReadOnlySequenceSegment<byte>
         }
 
         if (first is null) return default;
-#if !NET472 // can't optimize this in netfx due to ROS bug; need to use full version
-        if (ReferenceEquals(first, last)) return new ReadOnlySequence<byte>(first.Memory);
+#if !NET472 // avoid this optimization on netfx; due to the ROS bug, this might end up allocating a second ReadOnlySequenceSegment (if no array support)
+        if (ReferenceEquals(first, last)) return first.Memory.AsReadOnlySequence();
 #endif
         return new ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
     }
 
-
-#if NET472
-    // a bug in NETFX means ROS doesn't work well with custom memory managers and non-zero offsets; so:
-    // we'll store the *original* memory (for recycling purposes) here, and expose just the array for ROS
-    // to touch
-    public ReadOnlyMemory<byte> OriginalMemory { get; }
-
-#else
-    public ReadOnlyMemory<byte> OriginalMemory
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Memory;
-    }
-#endif
     private FrameSequenceSegment(FrameSequenceSegment? previous, ReadOnlyMemory<byte> memory) : base()
     {
-#if NET472 // a bug in NETFX means ROS doesn't work well with custom memory managers and non-zero offsets
-        OriginalMemory = memory;
-        // fortunately, our custom memory manager is happy to expose the underlying array, so we can use
-        // that in the ROS
-        Memory = MemoryMarshal.TryGetArray(memory, out var segment)
-            ? new ReadOnlyMemory<byte>(segment.Array, segment.Offset, segment.Count) : memory;
-#else
         Memory = memory;
-#endif
         Next = null;
         if (previous is not null)
         {

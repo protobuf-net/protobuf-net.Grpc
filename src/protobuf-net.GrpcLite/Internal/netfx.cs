@@ -102,37 +102,27 @@ namespace ProtoBuf.Grpc.Lite.Internal
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this ReadOnlyMemory<T> memory)
         {
-            if (MemoryMarshal.TryGetMemoryManager<T, MemoryManager<T>>(memory, out var manager, out var start, out var length)
-                && start != 0)
+            // netfx has a nasty bug if you use `new ROS(memory)` with a custom manager with non-zero start; the bug
+            // doesn't apply to sequence segments, though - so if we have a custom manager that doesn't support arrays: use that
+            if (memory.IsEmpty) return default;
+            if (MemoryMarshal.TryGetArray(memory, out var segment))
+                return new ReadOnlySequence<T>(segment.Array, segment.Offset, segment.Count);
+            return ViaManager(memory);
+
+            static ReadOnlySequence<T> ViaManager(ReadOnlyMemory<T> memory)
             {
-                // netfx has a nasty bug if you use `new ROS(memory)` with a custom manager with non-zero start; the bug
-                // doesn't apply to sequence segments, though - so we can side-step via that; on our *expected* custom
-                // memory-manager, we'll re-use a lazy segment to avoid lots of allocs
-                var seqSegment = manager is RefCountedMemoryManager<T> basic ? basic.SharedSegment : new IsolatedSequenceSegment<T>(manager.Memory);
-                return new ReadOnlySequence<T>(seqSegment, start, seqSegment, start + length);
+                if (MemoryMarshal.TryGetMemoryManager<T, MemoryManager<T>>(memory, out var manager, out var start, out var length)
+                    && start != 0)
+                {
+                    var seqSegment = manager is RefCountedMemoryManager<T> basic ? basic.SharedSegment : new IsolatedSequenceSegment<T>(manager.Memory);
+                    return new ReadOnlySequence<T>(seqSegment, start, seqSegment, start + length);
+                }
+                return new ReadOnlySequence<T>(memory);
             }
-            return new ReadOnlySequence<T>(memory);
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this Memory<T> memory)
-        {
-            if (MemoryMarshal.TryGetMemoryManager<T, MemoryManager<T>>(memory, out var manager, out var start, out var length)
-                && start != 0)
-            {
-                // netfx has a nasty bug if you use `new ROS(memory)` with a custom manager with non-zero start; the bug
-                // doesn't apply to sequence segments, though - so we can side-step via that; on our *expected* custom
-                // memory-manager, we'll re-use a lazy segment to avoid lots of allocs
-                var seqSegment = manager is RefCountedMemoryManager<T> basic ? basic.SharedSegment : new IsolatedSequenceSegment<T>(manager.Memory);
-                return new ReadOnlySequence<T>(seqSegment, start, seqSegment, start + length);
-            }
-            return new ReadOnlySequence<T>(memory);
         }
 #else
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this ReadOnlyMemory<T> memory) => new ReadOnlySequence<T>(memory);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this Memory<T> memory) => new ReadOnlySequence<T>(memory);
 #endif
     }
 }

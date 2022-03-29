@@ -39,7 +39,7 @@ public class MemoryTests
         var slice = mgr.Memory.Slice(offset, length);
         Assert.Equal(length, slice.Length);
 
-        var ros = slice.AsReadOnlySequence();
+        var ros = Utilities.AsReadOnlySequence<byte>(slice);
         Assert.Equal(length, ros.Length);
     }
 
@@ -58,14 +58,21 @@ public class MemoryTests
         Assert.True(MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(slice, out var mMgr, out var mStart, out var mLength));
         Assert.Equal(length, mLength);
 
-        var ros = slice.AsReadOnlySequence();
+        var ros = Utilities.AsReadOnlySequence<byte>(slice);
         Assert.Equal(length, ros.Length);
 
         Assert.True(ros.IsSingleSegment);
+
+        Assert.True(MemoryMarshal.TryGetArray(ros.First, out var segment));
+        Assert.Equal(mStart, segment.Offset);
+        Assert.Equal(mLength, segment.Count);
+
+#if !NET472
         Assert.True(MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(ros.First, out var sMgr, out var sStart, out var sLength));
         Assert.Equal(length, sLength);
         Assert.Equal(mStart, sStart);
         Assert.Same(mMgr, sMgr);
+#endif
 
         RefCountedMemoryPool<byte>.Shared.Return(oversized.Slice(start: length + offset));
     }
