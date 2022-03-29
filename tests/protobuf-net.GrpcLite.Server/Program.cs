@@ -1,7 +1,6 @@
 #if !NET472
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using System.Security.Cryptography.X509Certificates;
 #endif
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
@@ -9,6 +8,9 @@ using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
+
+var cert = new X509Certificate2("mytestserver.pfx", "password");
 
 #if NET472
 var svc = new MyService();
@@ -28,8 +30,8 @@ _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logg
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
 _ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10042), logger: logger).AsFrames());
-//lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
-//lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
 
 Console.WriteLine($"Servers running ({lServer.MethodCount} methods)... press any key");
 Console.ReadKey();
@@ -43,7 +45,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-var cert = new X509Certificate2("mytestserver.pfx", "password");
 builder.Services.AddGrpc();
 builder.Services.AddSingleton<MyService>();
 builder.Services.AddSingleton<LiteServer>(services =>

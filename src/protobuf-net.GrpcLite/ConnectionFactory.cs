@@ -194,7 +194,55 @@ public static class ConnectionFactory
             }
         };
 
-#if !NET472
+#if NET472
+    /// <summary>
+    /// Authenticates the connection as a server.
+    /// </summary>
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsServer(
+        this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
+        X509Certificate serverCertificate) => async cancellationToken =>
+        {
+            var source = await factory(cancellationToken);
+            try
+            {
+                // TODO: support cancellation
+                source.Logger.Debug("Authenticating as server...");
+                await source.Value.AuthenticateAsServerAsync(serverCertificate);
+                source.Logger.Debug("Authenticated");
+                return source;
+            }
+            catch
+            {
+                await source.Value.SafeDisposeAsync();
+                throw;
+            }
+        };
+
+    /// <summary>
+    /// Authenticates the connection as a client.
+    /// </summary>
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsClient(
+        this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
+        string targetHost)
+        => async cancellationToken =>
+        {
+            var source = await factory(cancellationToken);
+            try
+            {
+                // TODO: support cancellation
+                source.Logger.Debug("Authenticating as client...");
+                await source.Value.AuthenticateAsClientAsync(targetHost);
+                source.Logger.Debug("Authenticated");
+                return source;
+            }
+            catch
+            {
+                await source.Value.SafeDisposeAsync();
+                throw;
+            }
+        };
+
+#else
     /// <summary>
     /// Authenticates the connection as a server.
     /// </summary>
@@ -230,7 +278,7 @@ public static class ConnectionFactory
     };
 
     /// <summary>
-    /// Authenticates the connection as a server.
+    /// Authenticates the connection as a client.
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsClient(
         this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
@@ -242,7 +290,7 @@ public static class ConnectionFactory
         });
 
     /// <summary>
-    /// Authenticates the connection as a server.
+    /// Authenticates the connection as a client.
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsClient(
         this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
