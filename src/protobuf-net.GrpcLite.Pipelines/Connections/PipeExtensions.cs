@@ -1,6 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
+using System;
 using System.IO.Pipelines;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Lite.Connections;
 

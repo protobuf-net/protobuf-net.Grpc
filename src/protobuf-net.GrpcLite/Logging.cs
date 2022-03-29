@@ -30,11 +30,11 @@ public static class Logging
             LogKind.Client => ClientPrefix,
             LogKind.Server => ServerPrefix,
             _ => "",
-        } + source.Trim());
+        } + source!.Trim());
 #endif
     }
 #if DEBUG
-    private static AsyncLocal<string> s_source = new();
+    private static System.Threading.AsyncLocal<string> s_source = new();
     private static string? Source => s_source.Value;
 
     private const string ClientPrefix = "C:", ServerPrefix = "S:";

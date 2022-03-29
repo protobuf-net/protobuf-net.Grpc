@@ -5,6 +5,7 @@ using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
 using ProtoBuf.Grpc.Lite.Internal.Connections;
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipelines;
@@ -18,6 +19,9 @@ using Xunit;
 using Xunit.Abstractions;
 
 namespace protobuf_net.GrpcLite.Test;
+
+
+
 
 [SetLoggingSource]
 public class BasicTests
@@ -69,7 +73,7 @@ public class BasicTests
     {
         if (!MemoryMarshal.TryGetArray(buffer, out var segment))
         {
-            segment = buffer.ToArray();
+            segment = new ArraySegment<byte>(buffer.ToArray());
         }
         return BitConverter.ToString(segment.Array!, segment.Offset, segment.Count);
     }
@@ -84,7 +88,7 @@ public class BasicTests
         {
             MetadataEncoder.WriteHeader(ctx, true, ((IStream)stream).Method, null, default);
             ctx.Complete();
-            var frame = ctx.PendingFrames.Single();
+            var frame = ctx.DetachPendingFrames().Single();
             var hex = GetHex(frame.Memory);
             Assert.Equal(
         "02-00-2A-00-00-00-15-80-" // unary, id 42, length 19, final
@@ -112,7 +116,7 @@ public class BasicTests
 
     static string GetHex(MemoryStream stream)
     {
-        if (!stream.TryGetBuffer(out var buffer)) buffer = stream.ToArray();
+        if (!stream.TryGetBuffer(out var buffer)) buffer = new ArraySegment<byte>(stream.ToArray());
         return BitConverter.ToString(buffer.Array!, buffer.Offset, buffer.Count);
     }
 
@@ -216,12 +220,23 @@ public class BasicTests
         using var obj = new TestServerHost();
     }
 
+    static byte[] FromHexString(string hex)
+    {
+        hex = hex.Replace("-", "");
+        var result = new byte[hex.Length / 2];
+        for(int i = 0; i < result.Length; i++)
+        {
+            result[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+        }
+        return result;
+    }
+
     [Fact]
     public void CanParseMultiFrame()
     {
         const string hex = "02-00-EB-02-00-00-11-80-2F-46-6F-6F-53-65-72-76-69-63-65-2F-55-6E-61-72-79-03-00-EB-02-01-00-03-80-08-EA-05-04-00-EB-02-02-00-00-80";
         var builder = Frame.CreateBuilder();
-        var data = Convert.FromHexString(hex.Replace("-", ""));
+        var data = FromHexString(hex);
         data.CopyTo(builder.GetBuffer()); // we'll just assume that this has capacity!
         int bytesRead = data.Length;
         Assert.Equal(44, bytesRead);

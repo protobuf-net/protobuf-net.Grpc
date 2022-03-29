@@ -26,7 +26,7 @@ internal static class MetadataEncoder
 
     static void AssertSingleFrame(PayloadFrameSerializationContext writer, KnownField field)
     {
-        if (writer.PendingFrames.Count > 0) ThrowTooLong(field);
+        if (writer.PendingFrameCount > 0) ThrowTooLong(field);
         // we can remove this; we'd just need to tweak GetRouteBuffer and GetStatus
         static void ThrowTooLong(KnownField field) => throw new ArgumentOutOfRangeException(nameof(field), $"The {field} is too long; a single frame is expected");
     }
@@ -330,6 +330,7 @@ internal static class MetadataEncoder
         var span = value.First.Span;
         StatusCode statusCode = StatusCode.OK;
         string detail = "";
+        Logging.DebugWriteLine($"Parsing status from: " + value.ToHex());
         while (!span.IsEmpty)
         {
             var len = GetPayloadLength(ref span, out var field);
@@ -349,6 +350,7 @@ internal static class MetadataEncoder
 
     private static string ReadString(ReadOnlySpan<byte> span, int length)
     {
+        Debug.Assert(span.Length >= length, "undersized span");
         if (length == 0) return "";
         if (length == 10 && span.SequenceEqual(UserAgent)) return "user-agent"; // well-known header
         return Encoding.UTF8.GetString(span.Slice(0, length));

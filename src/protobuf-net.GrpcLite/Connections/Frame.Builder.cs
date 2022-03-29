@@ -4,7 +4,6 @@ using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -65,7 +64,8 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
             var cache = TryGet(slot);
             if (cache is not null && cache.TryDequeue(out var existing))
             {
-                return existing;
+                Debug.Assert(existing.IsAlive(), "renting dead memory from cache");
+                return existing; // note: no change of counter - just transfer of ownership
             }
         }
 
@@ -87,6 +87,7 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         var manager = RentRefCounted(minBufferSize);
         Debug.Assert(MemoryMarshal.TryGetMemoryManager<T, RefCountedMemoryManager<T>>(manager.Memory, out var viaMemory) && ReferenceEquals(viaMemory, manager),
             "incorrect memory manager detected");
+        Debug.Assert(manager.IsAlive, "new memory is dead!");
         return manager;
     }
 
@@ -108,23 +109,22 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
         if (!MemoryMarshal.TryGetMemoryManager<T, RefCountedMemoryManager<T>>(unused, out var manager, out var start, out var length))
             return; // not ref-counted; just ignore
 
+        Debug.Assert(manager.IsAlive, "returning dead memory");
         Debug.Assert(start + unused.Length == manager.Memory.Length, "expect to be the tail end of the buffer");
 
-        if (unused.Length < MIN_USEFUL_SIZE || (start + unused.Length != manager.Memory.Length))
-        {   // not much left, or we're inexplicably not looking at the end of the buffer
-            manager.Dispose();
-            return;
-        }
-        var slot = GetCacheSlot(unused.Length);
-        while (slot >= 0)
-        {
-            var store = Get(slot);
-            if (store.Count < MAX_STORED_PER_KEY)
+        if (unused.Length >= MIN_USEFUL_SIZE && (start + unused.Length != manager.Memory.Length))
+        {   // only recycle if we have a sensible amount of space left, and we're returning the entire tail of the buffer
+            var slot = GetCacheSlot(unused.Length);
+            while (slot >= 0)
             {
-                store.Enqueue(unused);
-                return;
+                var store = Get(slot);
+                if (store.Count < MAX_STORED_PER_KEY)
+                {
+                    store.Enqueue(unused);
+                    return; // note: we don't decrement the counter in this case - just transfer ownership
+                }
+                slot--; // try again, but storing an oversized buffer in a smaller pot
             }
-            slot--; // try again, but storing an oversized buffer in a smaller pot
         }
 
         // we can't store everything
@@ -153,7 +153,7 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
 /// <summary>
 /// A <see cref="MemoryManager{T}"/> implementation that incorporates reference-counted tracking.
 /// </summary>
-public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable // re-implement
+public abstract partial class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable // re-implement
 {
     /// <inheritdoc/>
     public sealed override Memory<T> Memory
@@ -172,6 +172,8 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
         _refCount = 1;
     }
 
+    public bool IsAlive => Volatile.Read(ref _refCount) > 0;
+
     /// <inheritdoc/>
     protected sealed override void Dispose(bool disposing)
     {   // shouldn't get here since re-implemented, but!
@@ -183,11 +185,17 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (Interlocked.Decrement(ref _refCount) == 0)
+        switch(Interlocked.Decrement(ref _refCount))
         {
-            Release();
-            GC.SuppressFinalize(this);
+            case 0: // all done
+                Release();
+                GC.SuppressFinalize(this);
+                break;
+            case -1:
+                Throw();
+                break;
         }
+        static void Throw() => throw new InvalidOperationException("Ref-counted memory was disposed too many times; all bets are off");
     }
 
     /// <summary>
@@ -198,7 +206,11 @@ public abstract class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable
     /// <summary>
     /// Increment the reference count associated with this instance.
     /// </summary>
-    public void Preserve() => Interlocked.Increment(ref _refCount);
+    public void Preserve()
+    {
+        if (Interlocked.Increment(ref _refCount) < 0) Throw();
+        static void Throw() => throw new InvalidOperationException("Ref-counted memory was preserved too many times; all bets are off");
+    }
 
     /// <summary>
     /// Pin this data so that it does not move during garbage collection.

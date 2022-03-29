@@ -1,8 +1,41 @@
+#if !NET472
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography.X509Certificates;
+#endif
+using Grpc.Core;
+using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
+using System;
 using System.Net;
-using System.Security.Cryptography.X509Certificates;
 
+#if NET472
+var svc = new MyService();
+ILogger logger = ConsoleLogger.Information;
+Server gServer = new Server
+{
+    Ports = { new ServerPort("localhost", 5074, ServerCredentials.Insecure) },
+    Services = {
+        FooService.BindService(svc),
+    }
+};
+gServer.Start();
+
+var lServer = new LiteServer(logger);
+lServer.Bind(svc);
+_ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
+_ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
+_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10042), logger: logger).AsFrames());
+//lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
+//lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
+
+Console.WriteLine($"Servers running ({lServer.MethodCount} methods)... press any key");
+Console.ReadKey();
+await gServer.ShutdownAsync();
+
+#else
 var builder = WebApplication.CreateBuilder(args);
 
 // Additional configuration is required to successfully run gRPC on macOS.
@@ -38,7 +71,7 @@ app.MapGet("/", () => "Communication with gRPC endpoints must be made through a 
 
 
 app.Run();
-
+#endif
 /* non-working attempt to get gRPC and TCP endpoint working together
  * outcome: no gRPC bound (I'm guessing I need to add moar endpoints?)
  * what I want is: regular aspnet like above, but with a raw pipeline

@@ -3,10 +3,15 @@ using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using static FooService;
 
 RemoteCertificateValidationCallback trustAny = delegate { return true; };
@@ -32,6 +37,7 @@ using (var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.
 {
 await Run(tcp);
 }
+#if !NET472
 using (var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043))
     .WithTls().AuthenticateAsClient("mytestserver", trustAny).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)))
 {
@@ -43,6 +49,8 @@ using (var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls
 {
 await Run(namedPipeTls);
 }
+
+
 using (var managedHttp = GrpcChannel.ForAddress("http://localhost:5074"))
 {
 await Run(managedHttp);
@@ -51,6 +59,7 @@ using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
 {
 await Run(managedHttps);
 }
+#endif
 
 {
     var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
@@ -70,8 +79,10 @@ await Run(managedHttps);
 Console.WriteLine();
 Console.WriteLine("| Scenario | Unary | Client-Streaming (b) | Client-Streaming (n) | Server-Streaming (b) | Server-Streaming (n) | Duplex |");
 Console.WriteLine("| -------- | ----- | -------------------- | -------------------- | -------------------- | -------------------- | ------ |");
-foreach (var (scenario, data) in timings.OrderBy(x => x.Key))
+foreach (var pair in timings.OrderBy(x => x.Key))
 {
+    var scenario = pair.Key;
+    var data = pair.Value;
     Console.WriteLine($"| {scenario} | {data.unary} | {data.clientStreamingBuffered} | {data.clientStreamingNonBuffered} | {data.serverStreamingBuffered} | {data.serverStreamingNonBuffered} | {data.duplex} |");
 }
 
@@ -247,26 +258,3 @@ async Task Run(ChannelBase channel, [CallerArgumentExpression("channel")] string
     }
 }
 
-sealed class ConsoleLogger : ILogger, IDisposable
-{
-    private static ILogger? s_Information, s_Debug, s_Error;
-    public static ILogger Information => s_Information ??= new ConsoleLogger(LogLevel.Information);
-    public static ILogger Debug => s_Debug ??= new ConsoleLogger(LogLevel.Debug);
-    public static ILogger Error => s_Error ??= new ConsoleLogger(LogLevel.Error);
-
-    private readonly LogLevel _level;
-    private ConsoleLogger(LogLevel level) => _level = level;
-    IDisposable ILogger.BeginScope<TState>(TState state) => this;
-
-    void IDisposable.Dispose() { }
-
-    bool ILogger.IsEnabled(LogLevel logLevel) => logLevel >= _level;
-
-    void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-    {
-        if (logLevel >= _level)
-        {
-            (logLevel < LogLevel.Error ? Console.Out : Console.Error).WriteLine(formatter(state, exception));
-        }
-    }
-}

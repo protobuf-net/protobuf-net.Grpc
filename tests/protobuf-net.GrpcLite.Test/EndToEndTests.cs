@@ -67,7 +67,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
 
     public static IEnumerable<object[]> StandardRuns()
     {
-        foreach (ConnectionKind kind in Enum.GetValues<ConnectionKind>())
+        foreach (ConnectionKind kind in Enum.GetValues(typeof(ConnectionKind)))
         {
             yield return new object[] { kind, 1 };
             yield return new object[] { kind, 10 };
@@ -384,5 +384,29 @@ public class MyService : FooService.FooServiceBase
         }
         OnLog("client-streaming returning");
         return new FooResponse { Value = sum };
+    }
+}
+
+public sealed class ConsoleLogger : ILogger, IDisposable
+{
+    private static ILogger? s_Information, s_Debug, s_Error;
+    public static ILogger Information => s_Information ??= new ConsoleLogger(LogLevel.Information);
+    public static ILogger Debug => s_Debug ??= new ConsoleLogger(LogLevel.Debug);
+    public static ILogger Error => s_Error ??= new ConsoleLogger(LogLevel.Error);
+
+    private readonly LogLevel _level;
+    private ConsoleLogger(LogLevel level) => _level = level;
+    IDisposable ILogger.BeginScope<TState>(TState state) => this;
+
+    void IDisposable.Dispose() { }
+
+    bool ILogger.IsEnabled(LogLevel logLevel) => logLevel >= _level;
+
+    void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        if (logLevel >= _level)
+        {
+            (logLevel < LogLevel.Error ? Console.Out : Console.Error).WriteLine(formatter(state, exception));
+        }
     }
 }

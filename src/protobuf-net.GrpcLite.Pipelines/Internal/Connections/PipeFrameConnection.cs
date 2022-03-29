@@ -4,6 +4,11 @@ using System.IO.Pipelines;
 using System.Buffers;
 using System.Diagnostics;
 using System.Threading.Channels;
+using System.Threading.Tasks;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.IO;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 

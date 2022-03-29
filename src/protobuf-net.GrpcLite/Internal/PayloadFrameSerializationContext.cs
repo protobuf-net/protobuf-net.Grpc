@@ -20,7 +20,7 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
     private int _declaredPayloadLength, _totalLength;
     private Frame.Builder _builder;
 
-    internal List<Frame> PendingFrames => _frames;
+    internal int PendingFrameCount => _frames.Count;
 
     public override string ToString()
         => $"{_totalLength} bytes, {_frames.Count} frames (total bytes: {_totalLength + _frames.Count * FrameHeader.Size})";
@@ -71,6 +71,12 @@ internal sealed class PayloadFrameSerializationContext : SerializationContext, I
             $"The length declared via {nameof(SetPayloadLength)} ({declared}) does not match the actual length written ({actual})");
     }
 
+    internal Frame[] DetachPendingFrames()
+    {
+        var result = _frames.ToArray();
+        _frames.Clear(); // we're transferring ownership out, to avoid double-dispose
+        return result;
+    }
 
     public void Recycle()
     {
