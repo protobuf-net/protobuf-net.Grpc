@@ -73,31 +73,32 @@ static class Program
         bool ShouldRun(Tests test)
             => (tests & test) != 0;
 
+        const int REPEAT = 5;
         if (ShouldRun(Tests.TcpKestrel))
         {
             using var pipeServer = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(pipeServer, Tests.TcpKestrel);
+            await Run(pipeServer, Tests.TcpKestrel, REPEAT);
         }
         if (ShouldRun(Tests.NamedPipe))
         {
             using var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(namedPipe, Tests.NamedPipe);
+            await Run(namedPipe, Tests.NamedPipe, REPEAT);
         }
         if (ShouldRun(Tests.NamedPipePassThru))
         {
             using var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(namedPipePassThru, Tests.NamedPipePassThru);
+            await Run(namedPipePassThru, Tests.NamedPipePassThru, REPEAT);
         }
 
         if (ShouldRun(Tests.NamedPipeMerge))
         {
             using var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(namedPipeMerge, Tests.NamedPipeMerge);
+            await Run(namedPipeMerge, Tests.NamedPipeMerge, REPEAT);
         }
         if (ShouldRun(Tests.Tcp))
         {
             using var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(tcp, Tests.Tcp);
+            await Run(tcp, Tests.Tcp, REPEAT);
         }
 #if NET472
         ServicePointManager.ServerCertificateValidationCallback = trustAny;
@@ -110,7 +111,7 @@ static class Program
                     , trustAny
 #endif
                     ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(tcpTls, Tests.TcpTls);
+            await Run(tcpTls, Tests.TcpTls, REPEAT);
         }
 
         if (ShouldRun(Tests.NamedPipeTls))
@@ -121,27 +122,31 @@ static class Program
                     , trustAny
 #endif
                     ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50));
-            await Run(namedPipeTls, Tests.NamedPipeTls);
+            await Run(namedPipeTls, Tests.NamedPipeTls, REPEAT);
         }
 
         if (ShouldRun(Tests.Managed))
         {
             using var managedHttp = GrpcChannel.ForAddress("http://localhost:5074");
-            await Run(managedHttp, Tests.Managed);
+            await Run(managedHttp, Tests.Managed, REPEAT);
         }
         if (ShouldRun(Tests.ManagedTls))
         {
             using (var managedHttps = GrpcChannel.ForAddress("https://localhost:7074"))
             {
-                await Run(managedHttps, Tests.ManagedTls);
+                await Run(managedHttps, Tests.ManagedTls, REPEAT);
             }
         }
 
         if (ShouldRun(Tests.Unmanaged))
         {
             var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
-            await Run(unmanagedHttp, Tests.Unmanaged);
-            await unmanagedHttp.ShutdownAsync();
+            await Run(unmanagedHttp, Tests.Unmanaged, REPEAT);
+            try
+            {
+                await unmanagedHttp.ShutdownAsync();
+            }
+            catch { }
         }
 
         if (ShouldRun(Tests.Local))
@@ -149,7 +154,7 @@ static class Program
             using var localServer = new LiteServer();
             localServer.Bind<MyService>();
             using var local = localServer.CreateLocalClient();
-            await Run(local, Tests.Local);
+            await Run(local, Tests.Local, REPEAT);
         }
 
 
@@ -173,7 +178,7 @@ static class Program
             tasks[i] = operation();
         return Task.WhenAll(tasks);
     }
-    async static Task Run(ChannelBase channel, Tests test, int repeatCount = 10)
+    async static Task Run(ChannelBase channel, Tests test, int repeatCount)
     {
         try
         {
