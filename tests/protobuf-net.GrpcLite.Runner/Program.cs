@@ -16,7 +16,7 @@ using static FooService;
 
 static class Program
 {
-    static readonly Dictionary<string, (string unary, string clientStreamingBuffered, string clientStreamingNonBuffered, string serverStreamingBuffered, string serverStreamingNonBuffered, string duplex)> timings = new();
+    static readonly Dictionary<string, (string unarySequential, string unaryConcurrent, string clientStreamingBuffered, string clientStreamingNonBuffered, string serverStreamingBuffered, string serverStreamingNonBuffered, string duplex)> timings = new();
 
     [Flags]
     public enum Tests
@@ -56,6 +56,18 @@ static class Program
                     tests |= tmp;
             }
         }
+        if (tests == Tests.None)
+        {
+            Console.WriteLine("No tests selected");
+            foreach (Tests test in Enum.GetValues(typeof(Tests)))
+            {
+                if (test != Tests.None)
+                {
+                    Console.WriteLine($"\t{test}");
+                }
+            }
+            return;
+        }
         Console.WriteLine($"Running tests: {tests}");
 
         bool ShouldRun(Tests test)
@@ -66,10 +78,10 @@ static class Program
             using var pipeServer = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
             await Run(pipeServer, Tests.TcpKestrel);
         }
-        if (ShouldRun(Tests.NamedPipeMerge))
+        if (ShouldRun(Tests.NamedPipe))
         {
             using var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-            await Run(namedPipe, Tests.NamedPipeMerge);
+            await Run(namedPipe, Tests.NamedPipe);
         }
         if (ShouldRun(Tests.NamedPipePassThru))
         {
@@ -142,15 +154,24 @@ static class Program
 
 
         Console.WriteLine();
-        Console.WriteLine("| Scenario | Unary | Client-Streaming (b) | Client-Streaming (n) | Server-Streaming (b) | Server-Streaming (n) | Duplex |");
-        Console.WriteLine("| -------- | ----- | -------------------- | -------------------- | -------------------- | -------------------- | ------ |");
+        Console.WriteLine("| Scenario | Unary (seq) | Unary (con) | Client-Streaming (b) | Client-Streaming (n) | Server-Streaming (b) | Server-Streaming (n) | Duplex |");
+        Console.WriteLine("| -------- | ----------- | ------------| -------------------- | -------------------- | -------------------- | -------------------- | ------ |");
         foreach (var pair in timings.OrderBy(x => x.Key))
         {
             var scenario = pair.Key;
             var data = pair.Value;
-            Console.WriteLine($"| {scenario} | {data.unary} | {data.clientStreamingBuffered} | {data.clientStreamingNonBuffered} | {data.serverStreamingBuffered} | {data.serverStreamingNonBuffered} | {data.duplex} |");
+            Console.WriteLine($"| {scenario} | {data.unarySequential} | {data.unaryConcurrent} | {data.clientStreamingBuffered} | {data.clientStreamingNonBuffered} | {data.serverStreamingBuffered} | {data.serverStreamingNonBuffered} | {data.duplex} |");
         }
 
+    }
+    static Task RunParallel(Func<Task> operation, int times = 1)
+    {
+        if (times == 0) return Task.CompletedTask;
+        if (times == 1) return operation();
+        var tasks = new Task[times];
+        for (int i = 0; i < tasks.Length; i++)
+            tasks[i] = operation();
+        return Task.WhenAll(tasks);
     }
     async static Task Run(ChannelBase channel, Tests test, int repeatCount = 10)
     {
@@ -171,7 +192,7 @@ static class Program
                 Console.WriteLine();
             }
 
-            long unary = 0;
+            long unarySequential = 0;
             for (int j = 0; j < repeatCount; j++)
             {
                 var watch = Stopwatch.StartNew();
@@ -183,7 +204,26 @@ static class Program
 
                     if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
                 }
-                unary += ShowTiming(nameof(client.UnaryAsync), watch, OPCOUNT);
+                unarySequential += ShowTiming(nameof(client.UnaryAsync) + " (sequential)", watch, OPCOUNT);
+            }
+            Console.WriteLine();
+
+            long unaryConcurrent = 0;
+            for (int j = 0; j < repeatCount; j++)
+            {
+                var watch = Stopwatch.StartNew();
+                const int OPCOUNT = 1000, CONCURRENCY = 10;
+                await RunParallel(async () =>
+                {
+                    for (int i = 0; i < OPCOUNT; i++)
+                    {
+                        using var call = client.UnaryAsync(new FooRequest { Value = i }, options);
+                        var result = await call.ResponseAsync;
+
+                        if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+                    }
+                }, CONCURRENCY);
+                unaryConcurrent += ShowTiming(nameof(client.UnaryAsync) + " (concurrent)", watch, OPCOUNT * CONCURRENCY);
             }
             Console.WriteLine();
 
@@ -284,7 +324,8 @@ static class Program
             Console.WriteLine();
             // store the average nanos-per-op
             timings.Add(test.ToString(), (
-                AutoScale(unary / repeatCount, true),
+                AutoScale(unarySequential / repeatCount, true),
+                AutoScale(unaryConcurrent / repeatCount, true),
                 AutoScale(clientStreamingBuffered / repeatCount, true),
                 AutoScale(clientStreamingNonBuffered / repeatCount, true),
                 AutoScale(serverStreamingBuffered / repeatCount, true),

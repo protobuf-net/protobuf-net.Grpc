@@ -144,7 +144,7 @@ namespace ProtoBuf.Grpc.Lite.Connections
     partial class RefCountedMemoryManager<T>
     {
         private ReadOnlySequenceSegment<T>? _singleSegment;
-        public ReadOnlySequenceSegment<T> SharedSegment => _singleSegment ??= new IsolatedSequenceSegment<T>(Memory);
+        internal ReadOnlySequenceSegment<T> SharedSegment => _singleSegment ??= new IsolatedSequenceSegment<T>(Memory);
     }
 }
 #endif
