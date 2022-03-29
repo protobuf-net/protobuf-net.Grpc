@@ -29,12 +29,12 @@ lServer.Bind(svc);
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
-_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10042), logger: logger).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10042), logger: logger).AsStream().AsFrames());
 _ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).AsStream().WithTls().AuthenticateAsServer(cert).AsFrames());
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
-
 Console.WriteLine($"Servers running ({lServer.MethodCount} methods)... press any key");
 Console.ReadKey();
+lServer.Stop();
 await gServer.ShutdownAsync();
 
 #else
