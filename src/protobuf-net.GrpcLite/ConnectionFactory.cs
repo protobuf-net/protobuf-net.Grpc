@@ -70,15 +70,14 @@ public static class ConnectionFactory
     /// <summary>
     /// Connect (as a client) to a socket server.
     /// </summary>
-    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ConnectSocket(EndPoint endpoint, ILogger? logger = null) => async cancellationToken =>
+    public static Func<CancellationToken, ValueTask<ConnectionState<Socket>>> ConnectSocket(EndPoint endpoint, ILogger? logger = null) => async cancellationToken =>
     {
         var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
         socket.NoDelay = true;
         try
         {
             await socket.ConnectAsync(endpoint);
-            var ns = new NetworkStream(socket, true);
-            return new ConnectionState<Stream>(ns, endpoint.ToString() ?? "")
+            return new ConnectionState<Socket>(socket, endpoint.ToString() ?? "")
             {
                 Logger = logger,
             };
@@ -93,7 +92,7 @@ public static class ConnectionFactory
     /// <summary>
     /// Listen (as a server) to a socket.
     /// </summary>
-    public static Func<CancellationToken, ValueTask<ConnectionState<Stream>>> ListenSocket(EndPoint endpoint, ILogger? logger = null)
+    public static Func<CancellationToken, ValueTask<ConnectionState<Socket>>> ListenSocket(EndPoint endpoint, ILogger? logger = null)
     {
         var listener = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
         listener.Bind(endpoint);
@@ -107,8 +106,7 @@ public static class ConnectionFactory
             var name = socket.LocalEndPoint?.ToString() ?? "";
             socket.NoDelay = true;
             logger.Information(name, static (state, _) => $"client connected to {state}");
-            var ns = new NetworkStream(socket, true);
-            return new ConnectionState<Stream>(ns, name)
+            return new ConnectionState<Socket>(socket, name)
             {
                 Logger = logger,
             };
@@ -173,11 +171,11 @@ public static class ConnectionFactory
     /// <summary>
     /// Creates a TLS wrapper over the connection.
     /// </summary>
-    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> WithTls(
-        this Func<CancellationToken, ValueTask<ConnectionState<Stream>>> factory,
+    public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> WithTls<T>(
+        this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
         RemoteCertificateValidationCallback? userCertificateValidationCallback = null,
         LocalCertificateSelectionCallback? userCertificateSelectionCallback = null,
-        EncryptionPolicy encryptionPolicy = default)
+        EncryptionPolicy encryptionPolicy = default) where T: Stream
         => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
@@ -329,6 +327,44 @@ public static class ConnectionFactory
             catch
             {
                 await source.Value.SafeDisposeAsync();
+                throw;
+            }
+        };
+
+    /// <summary>
+    /// Creates a <see cref="Frame"/> processor over a <see cref="Stream"/>.
+    /// </summary>
+    public static Func<CancellationToken, ValueTask<ConnectionState<NetworkStream>>> AsStream(
+        this Func<CancellationToken, ValueTask<ConnectionState<Socket>>> factory)
+        => async cancellationToken =>
+        {
+            var source = await factory(cancellationToken);
+            try
+            {
+                return source.ChangeType(new NetworkStream(source.Value));
+            }
+            catch
+            {
+                source.Value.SafeDispose();
+                throw;
+            }
+        };
+
+    /// <summary>
+    /// Creates a <see cref="Frame"/> processor over a <see cref="Stream"/>.
+    /// </summary>
+    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames(
+        this Func<CancellationToken, ValueTask<ConnectionState<Socket>>> factory)
+        => async cancellationToken =>
+        {
+            var source = await factory(cancellationToken);
+            try
+            {
+                return source.ChangeType<IFrameConnection>(new SocketFrameConnection(source.Value, -1, source.Logger));
+            }
+            catch
+            {
+                source.Value.SafeDispose();
                 throw;
             }
         };

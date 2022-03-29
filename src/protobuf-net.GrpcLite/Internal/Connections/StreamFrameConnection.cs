@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -21,6 +20,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
     private readonly Stream _duplex;
     private readonly bool _mergeWrites;
     private readonly int _outputBufferSize;
+    internal const int DefaultOutputBuffer = 1024;
     public StreamFrameConnection(Stream duplex, bool mergeWrites = false, int outputBufferSize = -1, ILogger? logger = null)
     {
         if (mergeWrites & outputBufferSize > 0) throw new ArgumentException($"When using {nameof(mergeWrites)}, {outputBufferSize} must not be specified.", nameof(outputBufferSize));
@@ -28,7 +28,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
         _logger = logger;
         _mergeWrites = mergeWrites;
 
-        const int DefaultOutputBuffer = 1024;
+        
         _outputBufferSize = outputBufferSize < 0 ? DefaultOutputBuffer : outputBufferSize; //-ve means "let chef decide"
     }
 
