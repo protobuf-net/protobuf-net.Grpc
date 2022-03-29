@@ -50,9 +50,9 @@ static class Program
             if (args.Length == 0)
             {
                 // reasonable defaults
-                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpSAEA;
+                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpSAEA | Tests.TcpTls | Tests.NamedPipeTls;
 #if !NET472
-            tests |= Tests.Managed | Tests.ManagedTls |  Tests.TcpTls | Tests.NamedPipeTls;
+                tests |= Tests.Managed | Tests.ManagedTls;
 #endif
             }
             else
@@ -113,13 +113,11 @@ static class Program
                 using var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
                 await Run(tcp, Tests.TcpSAEA, REPEAT);
             }
-#if NET472
-            ServicePointManager.ServerCertificateValidationCallback = trustAny;
-#endif
+
             if (ShouldRun(Tests.TcpTls))
             {
                 using var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043))
-        .AsStream().WithTls().AuthenticateAsClient("mytestserver"
+        .AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver"
 #if !NET472
                     , trustAny
 #endif
@@ -129,7 +127,7 @@ static class Program
 
             if (ShouldRun(Tests.NamedPipeTls))
             {
-                using var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls()
+                using var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls(trustAny)
         .AuthenticateAsClient("mytestserver"
 #if !NET472
                     , trustAny
