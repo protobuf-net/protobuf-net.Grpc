@@ -49,10 +49,12 @@ static class Program
             if (args.Length == 0)
             {
                 // reasonable defaults
-                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpSAEA | Tests.TcpTls | Tests.NamedPipeTls
+                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.NamedPipeTls
                     | Tests.ManagedTls;
-#if !NET472
-                tests |= Tests.Managed;
+#if NET472
+                tests |= Tests.TcpSAEA; // something glitching here on net6; probably fixable
+#else
+                tests |= Tests.Managed; // net472 doesn't like non-TLS gRPC, even with the feature-flag set
 #endif
             }
             else
