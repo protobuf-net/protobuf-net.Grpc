@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Grpc" Version="$(GrpcVersion)" />
     <PackageReference Include="Grpc.Net.Client" Version="$(GrpcVersion)" />
+    <PackageReference Include="System.Net.Http.WinHttpHandler" Version="6.0.0" Condition="'$(TargetFramework)'=='net472'"/>
   </ItemGroup>
 
   <ItemGroup>
