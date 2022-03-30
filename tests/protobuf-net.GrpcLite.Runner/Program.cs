@@ -88,62 +88,42 @@ static class Program
             }
             Console.WriteLine($"Running tests: {tests}");
 
-            bool ShouldRun(Tests test)
-                => (tests & test) != 0;
-
-            const int REPEAT = 5;
-            if (ShouldRun(Tests.TcpKestrel))
+            async Task Execute<T>(Tests test, Func<ValueTask<T>> channelCreator, int repeatCount = 5, bool runClientStreaming = true, Func<T, ValueTask>? after = null) where T : ChannelBase
             {
-                using var pipeServer = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(pipeServer, Tests.TcpKestrel, REPEAT);
+                T? channel = null;
+                try
+                {
+                    if ((tests & test) != 0)
+                    {
+                        channel = await channelCreator();
+                        await Run(channel, test, repeatCount, runClientStreaming);
+                        if (after is not null)
+                        {
+                            try { await after(channel); } catch { }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex.Message);
+                }
+                finally
+                {
+                    try
+                    {
+                        switch (channel)
+                        {
+                            case IAsyncDisposable ad:
+                                await ad.DisposeAsync();
+                                break;
+                            case IDisposable d:
+                                d.Dispose();
+                                break;
+                        }
+                    }
+                    catch { }
+                }
             }
-            if (ShouldRun(Tests.NamedPipe))
-            {
-                using var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(namedPipe, Tests.NamedPipe, REPEAT);
-            }
-            if (ShouldRun(Tests.NamedPipePassThru))
-            {
-                using var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru").AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(namedPipePassThru, Tests.NamedPipePassThru, REPEAT);
-            }
-
-            if (ShouldRun(Tests.NamedPipeMerge))
-            {
-                using var namedPipeMerge = await ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(namedPipeMerge, Tests.NamedPipeMerge, REPEAT);
-            }
-            if (ShouldRun(Tests.Tcp))
-            {
-                using var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(tcp, Tests.Tcp, REPEAT);
-            }
-            if (ShouldRun(Tests.TcpSAEA))
-            {
-                using var tcp = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(tcp, Tests.TcpSAEA, REPEAT);
-            }
-
-            if (ShouldRun(Tests.TcpTls))
-            {
-                using var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043))
-        .AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(tcpTls, Tests.TcpTls, REPEAT);
-            }
-            if (ShouldRun(Tests.TcpTlsClientCert))
-            {
-                using var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10045))
-        .AsStream().WithTls(trustAny, selectCert).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
-                await Run(tcpTls, Tests.TcpTlsClientCert, REPEAT);
-            }
-
-            if (ShouldRun(Tests.NamedPipeTls))
-            {
-                using var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls(trustAny)
-        .AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50));
-                await Run(namedPipeTls, Tests.NamedPipeTls, REPEAT);
-            }
-
             GrpcChannelOptions grpcChannelOptions = new();
 #if NET472
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
@@ -154,35 +134,32 @@ static class Program
 #endif
             const bool ManagedClientStreaming = true; // always try, even if we think it is doomed
 
-            if (ShouldRun(Tests.Managed))
-            {
-                using var managedHttp = GrpcChannel.ForAddress("http://localhost:5074", grpcChannelOptions);
-                await Run(managedHttp, Tests.Managed, REPEAT, ManagedClientStreaming);
-            }
-            if (ShouldRun(Tests.ManagedTls))
-            {
-                using var managedHttps = GrpcChannel.ForAddress("https://localhost:7074", grpcChannelOptions);
-                await Run(managedHttps, Tests.ManagedTls, REPEAT, ManagedClientStreaming);
-            }
+            await Execute(Tests.TcpKestrel, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.NamedPipe, () => ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.NamedPipePassThru, () => ConnectionFactory.ConnectNamedPipe("grpctest_passthru").AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.NamedPipeMerge, () => ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.Tcp, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.TcpSAEA, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.TcpTls, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043)).AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.TcpTlsClientCert, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10045)).AsStream().WithTls(trustAny, selectCert).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await Execute(Tests.NamedPipeTls, () => ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)));
+            await Execute(Tests.Managed, () => new ValueTask<GrpcChannel>(GrpcChannel.ForAddress("http://localhost:5074", grpcChannelOptions)), runClientStreaming: ManagedClientStreaming);
+            await Execute(Tests.ManagedTls, () => new ValueTask<GrpcChannel>(GrpcChannel.ForAddress("https://localhost:7074", grpcChannelOptions)), runClientStreaming: ManagedClientStreaming);
+            await Execute(Tests.Unmanaged, () => new ValueTask<Channel>(new Channel("localhost", 5074, ChannelCredentials.Insecure)), after: channel => new ValueTask(channel.ShutdownAsync()));
 
-            if (ShouldRun(Tests.Unmanaged))
+            LiteServer? localServer = null;
+            await Execute(Tests.Local, () =>
             {
-                var unmanagedHttp = new Channel("localhost", 5074, ChannelCredentials.Insecure);
-                await Run(unmanagedHttp, Tests.Unmanaged, REPEAT);
-                try
-                {
-                    await unmanagedHttp.ShutdownAsync();
-                }
-                catch { }
-            }
-
-            if (ShouldRun(Tests.Local))
-            {
-                using var localServer = new LiteServer();
+                localServer = new LiteServer();
                 localServer.Bind<MyService>();
-                using var local = localServer.CreateLocalClient();
-                await Run(local, Tests.Local, REPEAT);
-            }
+                return new ValueTask<LiteChannel>(localServer.CreateLocalClient());
+            }, after: _ =>
+            {
+                localServer?.Stop();
+                localServer = null;
+                return default;
+            });
+         
 
 
             Console.WriteLine();

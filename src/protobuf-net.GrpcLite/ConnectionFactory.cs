@@ -72,8 +72,10 @@ public static class ConnectionFactory
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<Socket>>> ConnectSocket(EndPoint endpoint, ILogger? logger = null) => async cancellationToken =>
     {
-        var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-        socket.NoDelay = true;
+        var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = true
+        };
         try
         {
             await socket.ConnectAsync(endpoint);
