@@ -34,22 +34,30 @@ static class Program
         Managed = 1 << 9,
         ManagedTls = 1 << 10,
         TcpSAEA = 1 << 11,
+        TcpTlsClientCert = 1 << 12,
     }
     static async Task<int> Main(string[] args)
     {
         try
         {
+            var userCert = new X509Certificate2("fred.pfx", "password");
             RemoteCertificateValidationCallback trustAny = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
                 =>
             {
-                Console.WriteLine($"Received cert '{certificate?.Subject}'; {sslPolicyErrors}; trusting...");
+                Console.WriteLine($"Received cert from server '{certificate?.Subject}'; {sslPolicyErrors}; trusting...");
                 return true;
+            };
+            LocalCertificateSelectionCallback selectCert = (object sender, string targetHost, X509CertificateCollection localCertificates, X509Certificate? remoteCertificate, string[] acceptableIssuers)
+                =>
+            {
+                Console.WriteLine($"Being challenged for cert from server '{remoteCertificate?.Subject}' for {targetHost}; providing {userCert?.Subject}...");
+                return userCert!;
             };
             Tests tests;
             if (args.Length == 0)
             {
                 // reasonable defaults
-                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.NamedPipeTls
+                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.TcpTlsClientCert | Tests.NamedPipeTls
                     | Tests.ManagedTls;
 #if NET472
                 tests |= Tests.TcpSAEA; // something glitching here on net6; probably fixable
@@ -91,12 +99,12 @@ static class Program
             }
             if (ShouldRun(Tests.NamedPipe))
             {
-                using var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer", logger: ConsoleLogger.Debug).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
+                using var namedPipe = await ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
                 await Run(namedPipe, Tests.NamedPipe, REPEAT);
             }
             if (ShouldRun(Tests.NamedPipePassThru))
             {
-                using var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru", logger: ConsoleLogger.Debug).AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5));
+                using var namedPipePassThru = await ConnectionFactory.ConnectNamedPipe("grpctest_passthru").AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5));
                 await Run(namedPipePassThru, Tests.NamedPipePassThru, REPEAT);
             }
 
@@ -119,22 +127,20 @@ static class Program
             if (ShouldRun(Tests.TcpTls))
             {
                 using var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043))
-        .AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver"
-#if !NET472
-                    , trustAny
-#endif
-                        ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
+        .AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
                 await Run(tcpTls, Tests.TcpTls, REPEAT);
+            }
+            if (ShouldRun(Tests.TcpTlsClientCert))
+            {
+                using var tcpTls = await ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10045))
+        .AsStream().WithTls(trustAny, selectCert).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5));
+                await Run(tcpTls, Tests.TcpTlsClientCert, REPEAT);
             }
 
             if (ShouldRun(Tests.NamedPipeTls))
             {
                 using var namedPipeTls = await ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls(trustAny)
-        .AuthenticateAsClient("mytestserver"
-#if !NET472
-                    , trustAny
-#endif
-                        ).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50));
+        .AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50));
                 await Run(namedPipeTls, Tests.NamedPipeTls, REPEAT);
             }
 
@@ -215,15 +221,22 @@ static class Program
             cts.CancelAfter(TimeSpan.FromSeconds(60));
             var options = new CallOptions(cancellationToken: cts.Token);
 
-            var invoker = channel.CreateCallInvoker();
-            Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
-            var client = new FooServiceClient(invoker);
-
-            using (var call = client.UnaryAsync(new FooRequest { Value = 42 }, options))
+            FooServiceClient client;
+            try
             {
+                var invoker = channel.CreateCallInvoker();
+                Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
+                client = new FooServiceClient(invoker);
+
+                using var call = client.UnaryAsync(new FooRequest { Value = 42 }, options);
                 var result = await call.ResponseAsync;
                 if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
-                Console.WriteLine();
+                Console.WriteLine("(validated)");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return;
             }
 
             long unarySequential = 0, unaryConcurrent = 0, clientStreamingBuffered = 0, clientStreamingNonBuffered = 0, serverStreamingBuffered = 0, serverStreamingNonBuffered = 0, duplex = 0;

@@ -15,4 +15,10 @@
     <ProjectReference Include="..\protobuf-net.GrpcLite.Test\protobuf-net.GrpcLite.Test.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="mytestserver.pfx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

@@ -198,15 +198,15 @@ public static class ConnectionFactory
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsServer(
         this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
-        X509Certificate serverCertificate) => async cancellationToken =>
+        X509Certificate serverCertificate, bool clientCertificateRequired = false, bool checkCertificateRevocation = false) => async cancellationToken =>
         {
             var source = await factory(cancellationToken);
             try
             {
                 // TODO: support cancellation
                 source.Logger.Debug("Authenticating as server...");
-                await source.Value.AuthenticateAsServerAsync(serverCertificate);
-                source.Logger.Debug("Authenticated");
+                await source.Value.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired, checkCertificateRevocation);
+                source.Logger.Debug(source.Value, static (state, _) => $"Authenticated; server: '{state?.LocalCertificate?.Subject}', client: '{state?.RemoteCertificate?.Subject}'");
                 return source;
             }
             catch
@@ -230,7 +230,8 @@ public static class ConnectionFactory
                 // TODO: support cancellation
                 source.Logger.Debug("Authenticating as client...");
                 await source.Value.AuthenticateAsClientAsync(targetHost);
-                source.Logger.Debug("Authenticated");
+                source.Logger.Debug(source.Value, static (state, _) => $"Authenticated; server: '{state?.RemoteCertificate?.Subject}', client: '{state?.LocalCertificate?.Subject}'");
+
                 return source;
             }
             catch
@@ -246,10 +247,12 @@ public static class ConnectionFactory
     /// </summary>
     public static Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> AuthenticateAsServer(
         this Func<CancellationToken, ValueTask<ConnectionState<SslStream>>> factory,
-        X509Certificate serverCertificate)
+        X509Certificate serverCertificate, bool clientCertificateRequired = false, bool checkCertificateRevocation = false)
         => factory.AuthenticateAsServer(new SslServerAuthenticationOptions
         {
-            ServerCertificate = serverCertificate
+            ServerCertificate = serverCertificate,
+            ClientCertificateRequired = clientCertificateRequired,
+            CertificateRevocationCheckMode = checkCertificateRevocation ? X509RevocationMode.Offline : X509RevocationMode.NoCheck,
         });
 
     /// <summary>
@@ -265,7 +268,7 @@ public static class ConnectionFactory
         {
             source.Logger.Debug("Authenticating as server...");
             await source.Value.AuthenticateAsServerAsync(options, cancellationToken);
-            source.Logger.Debug("Authenticated");
+            source.Logger.Debug(source.Value, static (state, _) => $"Authenticated; server: '{state?.LocalCertificate?.Subject}', client: '{state?.RemoteCertificate?.Subject}'");
             return source;
         }
         catch
@@ -300,7 +303,7 @@ public static class ConnectionFactory
         {
             source.Logger.Debug("Authenticating as client...");
             await source.Value.AuthenticateAsClientAsync(options, cancellationToken);
-            source.Logger.Debug("Authenticated");
+            source.Logger.Debug(source.Value, static (state, _) => $"Authenticated; server: '{state?.RemoteCertificate?.Subject}', client: '{state?.LocalCertificate?.Subject}'");
             return source;
         }
         catch

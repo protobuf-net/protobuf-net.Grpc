@@ -30,6 +30,30 @@ server.Stop();
 The `ListenAsync` call will listen for multiple connections; a single server can listen to many connections on many different listeneres at once - for example, you could
 listen to multiple TCP ports, with/without TLS. Your `MyService` instance will be activated just like it would have been with the unmanaged server host.
 
+## How do I use TLS?
+
+TLS is provided via `SslStream`, and works with or without client certificates; the `WithTls()` connector optionally accepts callbacks for providing user certificates (client), or
+validating remote certificates (client or server); the `AuthenticateAsServer()` connector accepts a server certificate, and optionally demands client certificates; for example:
+
+``` c#
+// TCP server; no TLS
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().AsFrames());
+// TCP server; TLS, no client certs
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().WithTls().AuthenticateAsServer(serverCert).AsFrames());
+// TCP server; TLS, client certs (validated via userCheck)
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().WithTls(userCheck).AuthenticateAsServer(serverCert, clientCertificateRequired: true).AsFrames());
+
+
+``` c#
+// TCP client; no TLS
+using var channel = await ConnectionFactory.ConnectSocket(endPoint).AsFrames().CreateChannelAsync();
+// TCP client; TLS, using default server validation and certificate selection
+using var channel = await ConnectionFactory.ConnectSocket(endpoint).AsStream().WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync();
+// TCP client; TLS, using custom server validation and certificate selection
+using var channel = await ConnectionFactory.ConnectSocket(endpoint).AsStream().WithTls(serverCheck, certSelector).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync();
+```
+
+
 ## Other notes
 
 It currently targets .NET Framework 4.7.2 up to .NET 6.0, using newer features when available. It is still very experimental - but most core things should work; feedback is welcome.

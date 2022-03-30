@@ -8,10 +8,21 @@ using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System;
 using System.Net;
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 
-var cert = new X509Certificate2("mytestserver.pfx", "password");
-
+var serverCert = new X509Certificate2("mytestserver.pfx", "password");
+RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
+    =>
+{
+    if (certificate is null)
+    {
+        Console.WriteLine($"No user-certificate received; rejecting ({sslPolicyErrors})");
+        return false;
+    }
+    Console.WriteLine($"Received cert from user '{certificate?.Subject}'; {sslPolicyErrors}; trusting...");
+    return true;
+};
 #if NET472
 var svc = new MyService();
 ILogger logger = ConsoleLogger.Information;
@@ -30,8 +41,9 @@ _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logg
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
 _ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10042), logger: logger).AsStream().AsFrames());
-_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).AsStream().WithTls().AuthenticateAsServer(cert).AsFrames());
-_ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).AsStream().WithTls().AuthenticateAsServer(serverCert).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10045), logger: logger).AsStream().WithTls(userCheck).AuthenticateAsServer(serverCert, clientCertificateRequired: true).AsFrames());
+_ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(serverCert).AsFrames());
 Console.WriteLine($"Servers running ({lServer.MethodCount} methods)... press any key");
 Console.ReadKey();
 lServer.Stop();
@@ -56,8 +68,9 @@ builder.Services.AddSingleton<LiteServer>(services =>
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
     server.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10042), logger: logger).AsStream().AsFrames());
-    server.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).AsStream().WithTls().AuthenticateAsServer(cert).AsFrames());
-    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(cert).AsFrames());
+    server.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10043), logger: logger).AsStream().WithTls().AuthenticateAsServer(serverCert).AsFrames());
+    server.ListenAsync(ConnectionFactory.ListenSocket(new IPEndPoint(IPAddress.Loopback, 10045), logger: logger).AsStream().WithTls(userCheck).AuthenticateAsServer(serverCert, clientCertificateRequired: true).AsFrames());
+    server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(serverCert).AsFrames());
     return server;
 });
 
