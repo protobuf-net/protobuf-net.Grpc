@@ -118,6 +118,11 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
     private LiteServiceBinder? _serviceBinder;
 
     /// <summary>
+    /// Gets the <see cref="ServiceBinderBase">binder</see> associated with this server.
+    /// </summary>
+    public ServiceBinderBase ServiceBinder => _serviceBinder ??= new LiteServiceBinder(this);
+
+    /// <summary>
     /// Attach endpoints to this instance, using the configuration from <see cref="BindServiceMethodAttribute"/> on the type.
     /// </summary>
     public void Bind<T>(T? server = null) where T : class
@@ -143,9 +148,8 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
         if (method is null) throw new InvalidOperationException("No suitable " + binder.BindType.Name + "." + binder.BindMethodName + " method found");
 
         server ??= Activator.CreateInstance<T>();
-        _serviceBinder ??= new LiteServiceBinder(this);
         var countBefore = MethodCount;
-        method.Invoke(null, new object[] { _serviceBinder, server });
+        method.Invoke(null, new object[] { ServiceBinder, server });
         var methodsAdded = MethodCount - countBefore;
         Logger.Information((type: typeof(T), methodsAdded), static (state, ex) => $"bound {state.type.FullName}, {state.methodsAdded} methods added");
     }

@@ -1,5 +1,9 @@
 ﻿using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Microsoft.Extensions.Logging;
+using ProtoBuf;
+using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Lite;
 using System;
 using System.Collections.Generic;
@@ -311,10 +315,85 @@ public class TestServerHost : IDisposable, ILogger
     IDisposable ILogger.BeginScope<TState>(TState state) => null!;
 }
 
-public class MyService : FooService.FooServiceBase
+public interface IIntercepted
+{
+    public bool Done { get; set; }
+}
+[ProtoContract]
+public class CodeFirstRequest : IIntercepted
+{
+    [ProtoMember(1)]
+    public int Value { get; set; }
+    [ProtoMember(2)]
+    public bool Done { get; set; }
+}
+[ProtoContract]
+public class CodeFirstResponse : IIntercepted
+{
+    [ProtoMember(1)]
+    public int Value { get; set; }
+    [ProtoMember(2)]
+    public bool Done { get; set; }
+}
+[Service("CodeFirstService")]
+public interface IMyService
+{
+    ValueTask<CodeFirstResponse> UnaryAsync(CodeFirstRequest request, CallContext context = default);
+    ValueTask<CodeFirstResponse> ClientStreamingAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context = default);
+    IAsyncEnumerable<CodeFirstResponse> ServerStreamingAsync(CodeFirstRequest request, CallContext context = default);
+    IAsyncEnumerable<CodeFirstResponse> DuplexAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context = default);
+}
+public sealed class MyInterceptor : Interceptor
+{
+    public override async Task<TResponse> UnaryServerHandler<TRequest, TResponse>(TRequest request, ServerCallContext context, UnaryServerMethod<TRequest, TResponse> continuation)
+    {
+        var resp = await continuation(request, context);
+        if (resp is IIntercepted intercepted)
+            intercepted.Done = true;
+        return resp;
+    }
+    public override async Task<TResponse> ClientStreamingServerHandler<TRequest, TResponse>(IAsyncStreamReader<TRequest> requestStream, ServerCallContext context, ClientStreamingServerMethod<TRequest, TResponse> continuation)
+    {
+        var resp = await continuation(requestStream, context);
+        if (resp is IIntercepted intercepted)
+            intercepted.Done = true;
+        return resp;
+    }
+    public override Task DuplexStreamingServerHandler<TRequest, TResponse>(IAsyncStreamReader<TRequest> requestStream, IServerStreamWriter<TResponse> responseStream, ServerCallContext context, DuplexStreamingServerMethod<TRequest, TResponse> continuation)
+    {
+        return base.DuplexStreamingServerHandler(requestStream, new InterceptorStreamWriter<TResponse>(responseStream), context, continuation);
+    }
+    public override Task ServerStreamingServerHandler<TRequest, TResponse>(TRequest request, IServerStreamWriter<TResponse> responseStream, ServerCallContext context, ServerStreamingServerMethod<TRequest, TResponse> continuation)
+    {
+        return base.ServerStreamingServerHandler(request, new InterceptorStreamWriter<TResponse>(responseStream), context, continuation);
+    }
+
+
+    class InterceptorStreamWriter<TResponse> : IServerStreamWriter<TResponse>
+    {
+        private IServerStreamWriter<TResponse> _tail;
+
+        public InterceptorStreamWriter(IServerStreamWriter<TResponse> responseStream) => _tail = responseStream;
+
+        WriteOptions IAsyncStreamWriter<TResponse>.WriteOptions
+        {
+            get => _tail.WriteOptions;
+            set => _tail.WriteOptions = value;
+        }
+
+        Task IAsyncStreamWriter<TResponse>.WriteAsync(TResponse message)
+        {
+            if (message is IIntercepted intercepted)
+                intercepted.Done = true;
+            return _tail.WriteAsync(message);
+        }
+    }
+}
+
+public class MyService : FooService.FooServiceBase, IMyService
 {
     public event Action<string>? Log;
-    
+
     private void OnLog(string message) => Log?.Invoke(message);
     public override async Task<FooResponse> Unary(FooRequest request, ServerCallContext context)
     {
@@ -346,7 +425,7 @@ public class MyService : FooService.FooServiceBase
         {
             var value = requestStream.Current;
             OnLog($"duplex received {value.Value}");
-            await responseStream.WriteAsync(new FooResponse {  Value = value.Value });
+            await responseStream.WriteAsync(new FooResponse { Value = value.Value });
         }
         OnLog("duplex returning");
     }
@@ -384,6 +463,42 @@ public class MyService : FooService.FooServiceBase
         }
         OnLog("client-streaming returning");
         return new FooResponse { Value = sum };
+    }
+
+    ValueTask<CodeFirstResponse> IMyService.UnaryAsync(CodeFirstRequest request, CallContext context)
+        => new(new CodeFirstResponse { Value = request.Value });
+
+    async ValueTask<CodeFirstResponse> IMyService.ClientStreamingAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context)
+    {
+        int sum = 0;
+        await foreach (var item in request.WithCancellation(context.CancellationToken))
+        {
+            sum += item.Value;
+        }
+        return new CodeFirstResponse { Value = sum };
+    }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+    async IAsyncEnumerable<CodeFirstResponse> IMyService.ServerStreamingAsync(CodeFirstRequest request, CallContext context)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+    {
+        var count = request.Value;
+        if (count < 0)
+        {
+            count = -count;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            yield return new CodeFirstResponse { Value = i };
+        }
+    }
+
+    async IAsyncEnumerable<CodeFirstResponse> IMyService.DuplexAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context)
+    {
+        await foreach (var item in request.WithCancellation(context.CancellationToken))
+        {
+            yield return new CodeFirstResponse { Value = item.Value };
+        }
     }
 }
 

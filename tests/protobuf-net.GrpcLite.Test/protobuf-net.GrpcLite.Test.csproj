@@ -23,6 +23,7 @@
     </PackageReference>
     <ProjectReference Include="..\..\src\protobuf-net.GrpcLite.Pipelines\protobuf-net.GrpcLite.Pipelines.csproj" />
     <ProjectReference Include="..\..\src\protobuf-net.GrpcLite\protobuf-net.GrpcLite.csproj" />
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
   </ItemGroup>
 
     <ItemGroup>

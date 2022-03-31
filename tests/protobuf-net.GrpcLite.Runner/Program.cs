@@ -1,5 +1,7 @@
 ﻿using Grpc.Core;
 using Grpc.Net.Client;
+using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System;
@@ -36,6 +38,13 @@ static class Program
         TcpSAEA = 1 << 11,
         TcpTlsClientCert = 1 << 12,
     }
+    [Flags]
+    public enum CodeStyle
+    {
+        None = 0,
+        ContractFirst = 1 << 0,
+        CodeFirst = 1 << 1,
+    }
     static async Task<int> Main(string[] args)
     {
         try
@@ -54,11 +63,13 @@ static class Program
                 return userCert!;
             };
             Tests tests;
+            CodeStyle styles;
             if (args.Length == 0)
             {
                 // reasonable defaults
                 tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.TcpTlsClientCert | Tests.NamedPipeTls
                     | Tests.ManagedTls;
+                styles = CodeStyle.CodeFirst | CodeStyle.ContractFirst;
 #if NET472
                 tests |= Tests.TcpSAEA; // something glitching here on net6; probably fixable
 #else
@@ -68,11 +79,26 @@ static class Program
             else
             {
                 tests = Tests.None;
+                styles = CodeStyle.None;
                 foreach (var arg in args)
                 {
-                    if (Enum.TryParse(arg, true, out Tests tmp))
-                        tests |= tmp;
+                    if (Enum.TryParse(arg, true, out Tests test))
+                        tests |= test;
+                    else if (Enum.TryParse(arg, true, out CodeStyle style))
+                        styles |= style;
                 }
+            }
+            if (styles == CodeStyle.None)
+            {
+                Console.WriteLine("No code-style selected");
+                foreach (CodeStyle style in Enum.GetValues(typeof(CodeStyle)))
+                {
+                    if (style != CodeStyle.None)
+                    {
+                        Console.WriteLine($"\t{style}");
+                    }
+                }
+                return -1;
             }
             if (tests == Tests.None)
             {
@@ -88,7 +114,7 @@ static class Program
             }
             Console.WriteLine($"Running tests: {tests}");
 
-            async Task Execute<T>(Tests test, Func<ValueTask<T>> channelCreator, int repeatCount = 5, bool runClientStreaming = true, Func<T, ValueTask>? after = null) where T : ChannelBase
+            async Task ExecuteAsync<T>(Tests test, Func<ValueTask<T>> channelCreator, int repeatCount = 5, bool runClientStreaming = true) where T : ChannelBase
             {
                 T? channel = null;
                 try
@@ -96,10 +122,13 @@ static class Program
                     if ((tests & test) != 0)
                     {
                         channel = await channelCreator();
-                        await Run(channel, test, repeatCount, runClientStreaming);
-                        if (after is not null)
+                        if ((styles & CodeStyle.ContractFirst) != 0)
                         {
-                            try { await after(channel); } catch { }
+                            await RunContractFirst(channel, test, repeatCount, runClientStreaming);
+                        }
+                        if ((styles & CodeStyle.CodeFirst) != 0)
+                        {
+                            await RunCodeFirst(channel, test, repeatCount, runClientStreaming);
                         }
                     }
                 }
@@ -109,21 +138,22 @@ static class Program
                 }
                 finally
                 {
-                    try
+                    if (channel is not null)
                     {
+                        try { await channel.ShutdownAsync(); } catch { }
                         switch (channel)
                         {
                             case IAsyncDisposable ad:
-                                await ad.DisposeAsync();
+                                try { await ad.DisposeAsync(); } catch { }
                                 break;
                             case IDisposable d:
-                                d.Dispose();
+                                try { d.Dispose(); } catch { }
                                 break;
                         }
                     }
-                    catch { }
                 }
             }
+
             GrpcChannelOptions grpcChannelOptions = new();
 #if NET472
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
@@ -134,33 +164,34 @@ static class Program
 #endif
             const bool ManagedClientStreaming = true; // always try, even if we think it is doomed
 
-            await Execute(Tests.TcpKestrel, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.NamedPipe, () => ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.NamedPipePassThru, () => ConnectionFactory.ConnectNamedPipe("grpctest_passthru").AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.NamedPipeMerge, () => ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.Tcp, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.TcpSAEA, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.TcpTls, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043)).AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.TcpTlsClientCert, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10045)).AsStream().WithTls(trustAny, selectCert).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
-            await Execute(Tests.NamedPipeTls, () => ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)));
-            await Execute(Tests.Managed, () => new ValueTask<GrpcChannel>(GrpcChannel.ForAddress("http://localhost:5074", grpcChannelOptions)), runClientStreaming: ManagedClientStreaming);
-            await Execute(Tests.ManagedTls, () => new ValueTask<GrpcChannel>(GrpcChannel.ForAddress("https://localhost:7074", grpcChannelOptions)), runClientStreaming: ManagedClientStreaming);
-            await Execute(Tests.Unmanaged, () => new ValueTask<Channel>(new Channel("localhost", 5074, ChannelCredentials.Insecure)), after: channel => new ValueTask(channel.ShutdownAsync()));
-
             LiteServer? localServer = null;
-            await Execute(Tests.Local, () =>
+            if ((tests & Tests.Local) != 0)
             {
+                var svc = new MyService();
                 localServer = new LiteServer();
-                localServer.Bind<MyService>();
-                return new ValueTask<LiteChannel>(localServer.CreateLocalClient());
-            }, after: _ =>
+                localServer.Bind(svc);
+                localServer.ServiceBinder.Intercept(new MyInterceptor()).AddCodeFirst<IMyService>(svc);
+            }
+
+            await ExecuteAsync(Tests.TcpKestrel, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.NamedPipe, () => ConnectionFactory.ConnectNamedPipe("grpctest_buffer").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.NamedPipePassThru, () => ConnectionFactory.ConnectNamedPipe("grpctest_passthru").AsFrames(outputBufferSize: 0).CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.NamedPipeMerge, () => ConnectionFactory.ConnectNamedPipe("grpctest_merge").AsFrames(true).CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.Tcp, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.TcpSAEA, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10042)).AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.TcpTls, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10043)).AsStream().WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.TcpTlsClientCert, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10045)).AsStream().WithTls(trustAny, selectCert).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
+            await ExecuteAsync(Tests.NamedPipeTls, () => ConnectionFactory.ConnectNamedPipe("grpctest_tls").WithTls(trustAny).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(50)));
+            await ExecuteAsync(Tests.Managed, () => new ValueTask<GrpcChannel>(GrpcChannel.ForAddress("http://localhost:5074", grpcChannelOptions)), runClientStreaming: ManagedClientStreaming);
+            await ExecuteAsync(Tests.ManagedTls, () => new ValueTask<GrpcChannel>(GrpcChannel.ForAddress("https://localhost:7074", grpcChannelOptions)), runClientStreaming: ManagedClientStreaming);
+            await ExecuteAsync(Tests.Unmanaged, () => new ValueTask<Channel>(new Channel("localhost", 5074, ChannelCredentials.Insecure)));
+            await ExecuteAsync(Tests.Local, () => new ValueTask<LiteChannel>(localServer!.CreateLocalClient()));
+
+            if (localServer is not null)
             {
                 localServer?.Stop();
                 localServer = null;
-                return default;
-            });
-         
-
+            }
 
             Console.WriteLine();
             Console.WriteLine("| Scenario | Unary (seq) | Unary (con) | Client-Streaming (b) | Client-Streaming (n) | Server-Streaming (b) | Server-Streaming (n) | Duplex |");
@@ -171,6 +202,9 @@ static class Program
                 var data = pair.Value;
                 Console.WriteLine($"| {scenario} | {data.unarySequential} | {data.unaryConcurrent} | {data.clientStreamingBuffered} | {data.clientStreamingNonBuffered} | {data.serverStreamingBuffered} | {data.serverStreamingNonBuffered} | {data.duplex} |");
             }
+            timings.Clear();
+            Console.WriteLine();
+            Console.WriteLine("A: contract-first (.proto/protoc), B: code-first (protobuf-net)");
             return 0;
         }
         catch (Exception ex)
@@ -190,7 +224,7 @@ static class Program
             tasks[i] = operation();
         return Task.WhenAll(tasks);
     }
-    async static Task Run(ChannelBase channel, Tests test, int repeatCount, bool runClientStreaming = true)
+    async static Task RunContractFirst(ChannelBase channel, Tests test, int repeatCount, bool runClientStreaming = true)
     {
         try
         {
@@ -414,7 +448,7 @@ static class Program
             }
 
             // store the average nanos-per-op
-            timings.Add(test.ToString(), (
+            timings.Add("A:" + test.ToString(), (
                 AutoScale(unarySequential / repeatCount, true),
                 AutoScale(unaryConcurrent / repeatCount, true),
                 AutoScale(clientStreamingBuffered / repeatCount, true),
@@ -427,11 +461,6 @@ static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[{channel.Target}]: {ex.Message}");
-        }
-        finally
-        {
-            try { await channel.ShutdownAsync(); }
-            catch { }
         }
 
         static long ShowTiming(string label, Stopwatch watch, int operations)
@@ -455,5 +484,216 @@ static class Program
             return TimeSpan.FromMilliseconds(qty).ToString();
         }
     }
+
+    async static Task RunCodeFirst(ChannelBase channel, Tests test, int repeatCount, bool runClientStreaming = true)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromSeconds(60));
+            CallContext options = new CallOptions(cancellationToken: cts.Token);
+
+            IMyService client;
+            try
+            {
+                var invoker = channel.CreateCallInvoker();
+                Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
+                client = channel.CreateGrpcService<IMyService>();
+
+                var result = await client.UnaryAsync(new CodeFirstRequest { Value = 42 }, options);
+                if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
+                if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                Console.WriteLine("(validated)");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return;
+            }
+
+            long unarySequential = 0, unaryConcurrent = 0, clientStreamingBuffered = 0, clientStreamingNonBuffered = 0, serverStreamingBuffered = 0, serverStreamingNonBuffered = 0, duplex = 0;
+
+            try
+            {
+                for (int j = 0; j < repeatCount; j++)
+                {
+                    var watch = Stopwatch.StartNew();
+                    const int OPCOUNT = 10000;
+                    for (int i = 0; i < OPCOUNT; i++)
+                    {
+                        var result = await client.UnaryAsync(new CodeFirstRequest { Value = i }, options);
+
+                        if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+                        if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                    }
+                    unarySequential += ShowTiming(nameof(client.UnaryAsync) + " (sequential)", watch, OPCOUNT);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                unarySequential = int.MinValue;
+            }
+            Console.WriteLine();
+
+
+            try
+            {
+                for (int j = 0; j < repeatCount; j++)
+                {
+                    var watch = Stopwatch.StartNew();
+                    const int OPCOUNT = 1000, CONCURRENCY = 10;
+                    await RunParallel(async () =>
+                    {
+                        for (int i = 0; i < OPCOUNT; i++)
+                        {
+                            var result = await client.UnaryAsync(new CodeFirstRequest { Value = i }, options);
+
+                            if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+                            if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                        }
+                    }, CONCURRENCY);
+                    unaryConcurrent += ShowTiming(nameof(client.UnaryAsync) + " (concurrent)", watch, OPCOUNT * CONCURRENCY);
+                }
+                Console.WriteLine();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                unaryConcurrent = int.MinValue;
+            }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+            static async IAsyncEnumerable<CodeFirstRequest> Generate(int opCount)
+            {
+                for (int i = 0; i < opCount; i++)
+                    yield return new CodeFirstRequest { Value = i };
+            }
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+
+            clientStreamingBuffered = int.MinValue;
+            if (runClientStreaming)
+            {
+                try
+                {
+                    const int OPCOUNT = 50000;
+                    var sum = Enumerable.Range(0, OPCOUNT).Sum();
+                    for (int j = 0; j < repeatCount; j++)
+                    {
+                        var watch = Stopwatch.StartNew();
+                        var result = await client.ClientStreamingAsync(Generate(OPCOUNT), options);
+                        if (result?.Value != sum) throw new InvalidOperationException("Incorrect response received: " + result);
+                        if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                        clientStreamingNonBuffered += ShowTiming(nameof(client.ClientStreamingAsync) + " b", watch, OPCOUNT);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex.Message);
+                    clientStreamingNonBuffered = int.MinValue;
+                }
+                Console.WriteLine();
+            }
+            else
+            {
+                clientStreamingNonBuffered = int.MinValue;
+            }
+
+            serverStreamingBuffered = int.MinValue;
+            try
+            {
+                for (int j = 0; j < repeatCount; j++)
+                {
+                    var watch = Stopwatch.StartNew();
+                    const int OPCOUNT = 50000;
+                    int count = 0;
+                    await foreach (var result in client.ServerStreamingAsync(new CodeFirstRequest { Value = OPCOUNT }, options))
+                    {
+                        if (result?.Value != count) throw new InvalidOperationException("Incorrect response received: " + result);
+                        if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                        count++;
+                    }
+                    if (count != OPCOUNT) throw new InvalidOperationException("Incorrect response count received: " + count);
+                    serverStreamingNonBuffered += ShowTiming(nameof(client.ServerStreamingAsync) + " b", watch, OPCOUNT);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                serverStreamingNonBuffered = int.MinValue;
+            }
+            Console.WriteLine();
+
+            if (runClientStreaming)
+            {
+                try
+                {
+                    for (int j = 0; j < repeatCount; j++)
+                    {
+                        var watch = Stopwatch.StartNew();
+                        const int OPCOUNT = 10000;
+
+                        int i = 0;
+                        await foreach (var result in client.DuplexAsync(Generate(OPCOUNT), options))
+                        {
+                            if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+                            if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                            i++;
+                        }
+                        if (i != OPCOUNT) throw new InvalidOperationException("Duplex length mismatch");
+
+                        duplex += ShowTiming(nameof(client.DuplexAsync), watch, OPCOUNT);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex.Message);
+                    duplex = int.MinValue;
+                }
+                Console.WriteLine();
+            }
+            else
+            {
+                duplex = int.MinValue;
+            }
+
+            // store the average nanos-per-op
+            timings.Add("B:" + test.ToString(), (
+                AutoScale(unarySequential / repeatCount, true),
+                AutoScale(unaryConcurrent / repeatCount, true),
+                AutoScale(clientStreamingBuffered / repeatCount, true),
+                AutoScale(clientStreamingNonBuffered / repeatCount, true),
+                AutoScale(serverStreamingBuffered / repeatCount, true),
+                AutoScale(serverStreamingNonBuffered / repeatCount, true),
+                AutoScale(duplex / repeatCount, true)
+            ));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[{channel.Target}]: {ex.Message}");
+        }
+
+        static long ShowTiming(string label, Stopwatch watch, int operations)
+        {
+            watch.Stop();
+            var nanos = (watch.ElapsedTicks * 1_000_000_000) / Stopwatch.Frequency;
+            Console.WriteLine($"{label} ×{operations}: {AutoScale(nanos)}, {AutoScale(nanos / operations)}/op");
+            return nanos / operations;
+        }
+        static string AutoScale(long nanos, bool forceNanos = false)
+        {
+            if (nanos < 0) return "n/a";
+            long qty = nanos;
+            if (forceNanos) return $"{qty:###,###,##0}ns";
+            if (qty < 10000) return $"{qty:#,##0}ns";
+            qty /= 1000;
+            if (qty < 10000) return $"{qty:#,##0}μs";
+            qty /= 1000;
+            if (qty < 10000) return $"{qty:#,##0}ms";
+
+            return TimeSpan.FromMilliseconds(qty).ToString();
+        }
+    }
+
 
 }

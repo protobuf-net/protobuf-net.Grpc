@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFrameworks>net472;net6.0</TargetFrameworks>
@@ -12,6 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" Condition="$(TargetFramework)!='net472'"/>
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" Condition="$(TargetFramework)=='net472'"/>
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
     <ProjectReference Include="..\protobuf-net.GrpcLite.Test\protobuf-net.GrpcLite.Test.csproj" />
   </ItemGroup>
 

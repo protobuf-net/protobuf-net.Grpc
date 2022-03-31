@@ -1,15 +1,21 @@
-#if !NET472
+#if NET472
+using ProtoBuf.Grpc.Server;
+#else
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 #endif
 using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Lite;
 using protobuf_net.GrpcLite.Test;
 using System;
 using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
+using System.Threading;
 
 var serverCert = new X509Certificate2("mytestserver.pfx", "password");
 RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
@@ -23,7 +29,9 @@ RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate?
     Console.WriteLine($"Received cert from user '{certificate?.Subject}'; {sslPolicyErrors}; trusting...");
     return true;
 };
+
 #if NET472
+var interceptor = new MyInterceptor();
 var svc = new MyService();
 ILogger logger = ConsoleLogger.Information;
 Server gServer = new Server
@@ -33,10 +41,14 @@ Server gServer = new Server
         FooService.BindService(svc),
     }
 };
+
+gServer.Services.AddCodeFirst<IMyService>(svc, interceptors: new[] { interceptor });
 gServer.Start();
 
 var lServer = new LiteServer(logger);
 lServer.Bind(svc);
+lServer.ServiceBinder.Intercept(interceptor).AddCodeFirst<IMyService>(svc);
+
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
@@ -57,13 +69,18 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddGrpc();
-builder.Services.AddSingleton<MyService>();
+builder.Services.AddGrpc().AddServiceOptions<IMyService>(options =>
+{
+    options.Interceptors.Add<MyInterceptor>();
+});
+builder.Services.AddSingleton<MyService>().AddSingleton<MyInterceptor>();
 builder.Services.AddSingleton<LiteServer>(services =>
 {
     var logger = services.GetService<ILogger<LiteServer>>();
     var server = new LiteServer(logger);
-    server.Bind(services.GetService<MyService>());
+    var svc = services.GetService<MyService>()!;
+    server.Bind(svc);
+    server.ServiceBinder.Intercept(services.GetService<MyInterceptor>()!).AddCodeFirst<IMyService>(svc);
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
@@ -86,6 +103,7 @@ app.MapGet("/", () => "Communication with gRPC endpoints must be made through a 
 
 app.Run();
 #endif
+
 /* non-working attempt to get gRPC and TCP endpoint working together
  * outcome: no gRPC bound (I'm guessing I need to add moar endpoints?)
  * what I want is: regular aspnet like above, but with a raw pipeline
