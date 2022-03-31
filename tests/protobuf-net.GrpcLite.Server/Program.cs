@@ -16,6 +16,7 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using System.Threading;
+using ProtoBuf.Grpc.Server;
 
 var serverCert = new X509Certificate2("mytestserver.pfx", "password");
 RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
@@ -32,22 +33,23 @@ RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate?
 
 #if NET472
 var interceptor = new MyInterceptor();
-var svc = new MyService();
+var svc1 = new MyContractFirstService();
+var svc2 = new MyCodeFirstService();
 ILogger logger = ConsoleLogger.Information;
 Server gServer = new Server
 {
     Ports = { new ServerPort("localhost", 5074, ServerCredentials.Insecure) },
     Services = {
-        FooService.BindService(svc),
+        FooService.BindService(svc1),
     }
 };
 
-gServer.Services.AddCodeFirst<IMyService>(svc, interceptors: new[] { interceptor });
+gServer.Services.AddCodeFirst(svc2, interceptors: new[] { interceptor });
 gServer.Start();
 
 var lServer = new LiteServer(logger);
-lServer.Bind(svc);
-lServer.ServiceBinder.Intercept(interceptor).AddCodeFirst<IMyService>(svc);
+lServer.Bind(svc1);
+lServer.ServiceBinder.Intercept(interceptor).AddCodeFirst(svc2);
 
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
@@ -68,19 +70,18 @@ var builder = WebApplication.CreateBuilder(args);
 // For instructions on how to configure Kestrel and gRPC clients on macOS, visit https://go.microsoft.com/fwlink/?linkid=2099682
 
 // Add services to the container.
-
+builder.Services.AddSingleton<MyContractFirstService>().AddSingleton<IMyService, MyCodeFirstService>().AddSingleton<MyInterceptor>();
 builder.Services.AddGrpc().AddServiceOptions<IMyService>(options =>
-{
+{   // add an interceptor just for IMyService (but not for MyContractFirstService)
     options.Interceptors.Add<MyInterceptor>();
 });
-builder.Services.AddSingleton<MyService>().AddSingleton<MyInterceptor>();
+builder.Services.AddCodeFirstGrpc();
 builder.Services.AddSingleton<LiteServer>(services =>
 {
     var logger = services.GetService<ILogger<LiteServer>>();
     var server = new LiteServer(logger);
-    var svc = services.GetService<MyService>()!;
-    server.Bind(svc);
-    server.ServiceBinder.Intercept(services.GetService<MyInterceptor>()!).AddCodeFirst<IMyService>(svc);
+    server.Bind(services.GetService<MyContractFirstService>());
+    server.ServiceBinder.Intercept(services.GetService<MyInterceptor>()!).AddCodeFirst(services.GetService<IMyService>()!);
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_passthru", logger: logger).AsFrames(outputBufferSize: 0));
@@ -90,13 +91,13 @@ builder.Services.AddSingleton<LiteServer>(services =>
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_tls", logger: logger).WithTls().AuthenticateAsServer(serverCert).AsFrames());
     return server;
 });
-
 var app = builder.Build();
 
 var grpc = app.Services.GetService<LiteServer>()!;
 
 // Configure the HTTP request pipeline.
-app.MapGrpcService<MyService>();
+app.UseRouting().UseEndpoints(ep => ep.MapGrpcService<IMyService>());
+app.MapGrpcService<MyContractFirstService>();
 app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
 
 

@@ -238,12 +238,12 @@ public class EndToEndTests : IClassFixture<TestServerHost>
 
         if (count < 0)
         {
-            call.RequestStream.WriteOptions = MyService.NonBuffered;
+            call.RequestStream.WriteOptions = MyContractFirstService.NonBuffered;
             count = -count;
         }
         else
         {
-            call.RequestStream.WriteOptions = MyService.Buffered;
+            call.RequestStream.WriteOptions = MyContractFirstService.Buffered;
         }
         for (int i = 0; i < count; i++)
         {
@@ -297,9 +297,9 @@ public class TestServerHost : IDisposable, ILogger
 
         Name = Guid.NewGuid().ToString();
         _server = new LiteServer(logger: this);
-        var svc = new MyService();
+        var svc = new MyContractFirstService();
         svc.Log += message => this.Information(message);
-        _server.Bind<MyService>(svc);
+        _server.Bind<MyContractFirstService>(svc);
 
         Debug.WriteLine($"starting listener {Name}...");
         _server.ListenAsync(ConnectionFactory.ListenNamedPipe(Name, logger: this));
@@ -390,7 +390,45 @@ public sealed class MyInterceptor : Interceptor
     }
 }
 
-public class MyService : FooService.FooServiceBase, IMyService
+public class MyCodeFirstService : IMyService
+{
+    ValueTask<CodeFirstResponse> IMyService.UnaryAsync(CodeFirstRequest request, CallContext context)
+        => new(new CodeFirstResponse { Value = request.Value });
+
+    async ValueTask<CodeFirstResponse> IMyService.ClientStreamingAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context)
+    {
+        int sum = 0;
+        await foreach (var item in request.WithCancellation(context.CancellationToken))
+        {
+            sum += item.Value;
+        }
+        return new CodeFirstResponse { Value = sum };
+    }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+    async IAsyncEnumerable<CodeFirstResponse> IMyService.ServerStreamingAsync(CodeFirstRequest request, CallContext context)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+    {
+        var count = request.Value;
+        if (count < 0)
+        {
+            count = -count;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            yield return new CodeFirstResponse { Value = i };
+        }
+    }
+
+    async IAsyncEnumerable<CodeFirstResponse> IMyService.DuplexAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context)
+    {
+        await foreach (var item in request.WithCancellation(context.CancellationToken))
+        {
+            yield return new CodeFirstResponse { Value = item.Value };
+        }
+    }
+}
+public class MyContractFirstService : FooService.FooServiceBase
 {
     public event Action<string>? Log;
 
@@ -463,42 +501,6 @@ public class MyService : FooService.FooServiceBase, IMyService
         }
         OnLog("client-streaming returning");
         return new FooResponse { Value = sum };
-    }
-
-    ValueTask<CodeFirstResponse> IMyService.UnaryAsync(CodeFirstRequest request, CallContext context)
-        => new(new CodeFirstResponse { Value = request.Value });
-
-    async ValueTask<CodeFirstResponse> IMyService.ClientStreamingAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context)
-    {
-        int sum = 0;
-        await foreach (var item in request.WithCancellation(context.CancellationToken))
-        {
-            sum += item.Value;
-        }
-        return new CodeFirstResponse { Value = sum };
-    }
-
-#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-    async IAsyncEnumerable<CodeFirstResponse> IMyService.ServerStreamingAsync(CodeFirstRequest request, CallContext context)
-#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
-    {
-        var count = request.Value;
-        if (count < 0)
-        {
-            count = -count;
-        }
-        for (int i = 0; i < count; i++)
-        {
-            yield return new CodeFirstResponse { Value = i };
-        }
-    }
-
-    async IAsyncEnumerable<CodeFirstResponse> IMyService.DuplexAsync(IAsyncEnumerable<CodeFirstRequest> request, CallContext context)
-    {
-        await foreach (var item in request.WithCancellation(context.CancellationToken))
-        {
-            yield return new CodeFirstResponse { Value = item.Value };
-        }
     }
 }
 

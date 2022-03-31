@@ -210,7 +210,7 @@ public class BasicTests
     public void CanBindService()
     {
         var server = new LiteServer(Logger);
-        server.Bind<MyService>();
+        server.Bind<MyContractFirstService>();
         Assert.Equal(4, server.MethodCount);
     }
 

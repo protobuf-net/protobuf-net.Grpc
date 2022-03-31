@@ -62,21 +62,9 @@ static class Program
                 Console.WriteLine($"Being challenged for cert from server '{remoteCertificate?.Subject}' for {targetHost}; providing {userCert?.Subject}...");
                 return userCert!;
             };
-            Tests tests;
-            CodeStyle styles;
-            if (args.Length == 0)
-            {
-                // reasonable defaults
-                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.TcpTlsClientCert | Tests.NamedPipeTls
-                    | Tests.ManagedTls;
-                styles = CodeStyle.CodeFirst | CodeStyle.ContractFirst;
-#if NET472
-                tests |= Tests.TcpSAEA; // something glitching here on net6; probably fixable
-#else
-                tests |= Tests.Managed; // net472 doesn't like non-TLS gRPC, even with the feature-flag set
-#endif
-            }
-            else
+            Tests tests = Tests.None;
+            CodeStyle styles = CodeStyle.None;
+            if (args is not null)
             {
                 tests = Tests.None;
                 styles = CodeStyle.None;
@@ -86,33 +74,36 @@ static class Program
                         tests |= test;
                     else if (Enum.TryParse(arg, true, out CodeStyle style))
                         styles |= style;
+                    else
+                    {
+                        foreach (var val in Enum.GetValues(typeof(Tests)))
+                        {
+                            Console.WriteLine(val);
+                        }
+                        foreach (var val in Enum.GetValues(typeof(CodeStyle)))
+                        {
+                            Console.WriteLine(val);
+                        }
+                        return -1;
+                    }
                 }
             }
             if (styles == CodeStyle.None)
             {
-                Console.WriteLine("No code-style selected");
-                foreach (CodeStyle style in Enum.GetValues(typeof(CodeStyle)))
-                {
-                    if (style != CodeStyle.None)
-                    {
-                        Console.WriteLine($"\t{style}");
-                    }
-                }
-                return -1;
+                styles = CodeStyle.CodeFirst | CodeStyle.ContractFirst;
             }
             if (tests == Tests.None)
             {
-                Console.WriteLine("No tests selected");
-                foreach (Tests test in Enum.GetValues(typeof(Tests)))
-                {
-                    if (test != Tests.None)
-                    {
-                        Console.WriteLine($"\t{test}");
-                    }
-                }
-                return -1;
+                // reasonable defaults
+                tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.TcpTlsClientCert | Tests.NamedPipeTls
+                    | Tests.ManagedTls;
+#if NET472
+                tests |= Tests.TcpSAEA; // something glitching here on net6; probably fixable
+#else
+                tests |= Tests.Managed; // net472 doesn't like non-TLS gRPC, even with the feature-flag set
+#endif
             }
-            Console.WriteLine($"Running tests: {tests}");
+            Console.WriteLine($"Running tests: {tests} for: {styles}");
 
             async Task ExecuteAsync<T>(Tests test, Func<ValueTask<T>> channelCreator, int repeatCount = 5, bool runClientStreaming = true) where T : ChannelBase
             {
@@ -167,10 +158,11 @@ static class Program
             LiteServer? localServer = null;
             if ((tests & Tests.Local) != 0)
             {
-                var svc = new MyService();
+                var svc1 = new MyContractFirstService();
+                var svc2 = new MyCodeFirstService();
                 localServer = new LiteServer();
-                localServer.Bind(svc);
-                localServer.ServiceBinder.Intercept(new MyInterceptor()).AddCodeFirst<IMyService>(svc);
+                localServer.Bind(svc1);
+                localServer.ServiceBinder.Intercept(new MyInterceptor()).AddCodeFirst(svc2);
             }
 
             await ExecuteAsync(Tests.TcpKestrel, () => ConnectionFactory.ConnectSocket(new IPEndPoint(IPAddress.Loopback, 10044)).AsStream().AsFrames().CreateChannelAsync(TimeSpan.FromSeconds(5)));
@@ -233,7 +225,6 @@ static class Program
             var options = new CallOptions(cancellationToken: cts.Token);
 
             FooServiceClient client;
-            try
             {
                 var invoker = channel.CreateCallInvoker();
                 Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
@@ -243,11 +234,6 @@ static class Program
                 var result = await call.ResponseAsync;
                 if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
                 Console.WriteLine("(validated)");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex.Message);
-                return;
             }
 
             long unarySequential = 0, unaryConcurrent = 0, clientStreamingBuffered = 0, clientStreamingNonBuffered = 0, serverStreamingBuffered = 0, serverStreamingNonBuffered = 0, duplex = 0;
@@ -312,7 +298,7 @@ static class Program
                         using var call = client.ClientStreaming(options);
                         const int OPCOUNT = 50000;
                         int sum = 0;
-                        call.RequestStream.WriteOptions = MyService.Buffered;
+                        call.RequestStream.WriteOptions = MyContractFirstService.Buffered;
                         for (int i = 0; i < OPCOUNT; i++)
                         {
                             await call.RequestStream.WriteAsync(new FooRequest { Value = i });
@@ -339,7 +325,7 @@ static class Program
                         using var call = client.ClientStreaming(options);
                         const int OPCOUNT = 50000;
                         int sum = 0;
-                        call.RequestStream.WriteOptions = MyService.NonBuffered;
+                        call.RequestStream.WriteOptions = MyContractFirstService.NonBuffered;
                         for (int i = 0; i < OPCOUNT; i++)
                         {
                             await call.RequestStream.WriteAsync(new FooRequest { Value = i });
@@ -417,21 +403,39 @@ static class Program
             {
                 try
                 {
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+                    static async Task WriteAsync(IClientStreamWriter<FooRequest> output, int opCount)
+                    {
+                        try
+                        {
+                            for (int i = 0; i < opCount; i++)
+                                await output.WriteAsync(new FooRequest { Value = i });
+                            await output.CompleteAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine(ex.Message);
+                        }
+                    }
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+
+
                     for (int j = 0; j < repeatCount; j++)
                     {
                         var watch = Stopwatch.StartNew();
                         const int OPCOUNT = 10000;
                         using var call = client.Duplex(options);
 
-                        for (int i = 0; i < OPCOUNT; i++)
+                        var writer = Task.Run(() => WriteAsync(call.RequestStream, OPCOUNT));
+                        int i = 0;
+                        while (await call.ResponseStream.MoveNext())
                         {
-                            await call.RequestStream.WriteAsync(new FooRequest { Value = i });
-                            if (!await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream terminated early");
                             var result = call.ResponseStream.Current;
                             if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+                            i++;
                         }
-                        await call.RequestStream.CompleteAsync();
-                        if (await call.ResponseStream.MoveNext()) throw new InvalidOperationException("Duplex stream ran over");
+                        await writer;
+                        if (i != OPCOUNT) throw new InvalidOperationException("Duplex length mismatch");
                         duplex += ShowTiming(nameof(client.Duplex), watch, OPCOUNT);
                     }
                 }
@@ -461,6 +465,7 @@ static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[{channel.Target}]: {ex.Message}");
+            timings["A:" + test.ToString()] = ("err", "err", "err", "err", "err", "err", "err");
         }
 
         static long ShowTiming(string label, Stopwatch watch, int operations)
@@ -494,7 +499,6 @@ static class Program
             CallContext options = new CallOptions(cancellationToken: cts.Token);
 
             IMyService client;
-            try
             {
                 var invoker = channel.CreateCallInvoker();
                 Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
@@ -504,11 +508,6 @@ static class Program
                 if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
                 if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
                 Console.WriteLine("(validated)");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex.Message);
-                return;
             }
 
             long unarySequential = 0, unaryConcurrent = 0, clientStreamingBuffered = 0, clientStreamingNonBuffered = 0, serverStreamingBuffered = 0, serverStreamingNonBuffered = 0, duplex = 0;
@@ -671,6 +670,7 @@ static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[{channel.Target}]: {ex.Message}");
+            timings["B:" + test.ToString()] = ("err", "err", "err", "err", "err", "err", "err");
         }
 
         static long ShowTiming(string label, Stopwatch watch, int operations)
