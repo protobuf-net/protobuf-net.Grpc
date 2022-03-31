@@ -14,7 +14,6 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
-using static FooService;
 
 static class Program
 {
@@ -161,7 +160,7 @@ static class Program
                 var svc1 = new MyContractFirstService();
                 var svc2 = new MyCodeFirstService();
                 localServer = new LiteServer();
-                localServer.Bind(svc1);
+                localServer.ServiceBinder.Bind(svc1);
                 localServer.ServiceBinder.Intercept(new MyInterceptor()).AddCodeFirst(svc2);
             }
 
@@ -224,11 +223,11 @@ static class Program
             cts.CancelAfter(TimeSpan.FromSeconds(60));
             var options = new CallOptions(cancellationToken: cts.Token);
 
-            FooServiceClient client;
+            FooService.FooServiceClient client;
             {
                 var invoker = channel.CreateCallInvoker();
                 Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
-                client = new FooServiceClient(invoker);
+                client = new FooService.FooServiceClient(invoker);
 
                 using var call = client.UnaryAsync(new FooRequest { Value = 42 }, options);
                 var result = await call.ResponseAsync;

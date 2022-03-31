@@ -17,11 +17,16 @@ using var channel = await ConnectionFactory.ConnectSocket(endPoint).AsFrames().C
 The rest of your client code *shouldn't change at all*. This is just one example; other terminators are possible - for example, anything that can provide a `Stream` should work, including support
 for things like TLS, compression, named pipes, etc.
 
-At the server, the code is currently a bit closer to the unmanaged server implementation (the server does not integrate deeply into Kestrel, although it works fine inside a Kestrel process); for example:
+At the server, the code is currently a bit closer to the unmanaged server implementation (the server does not integrate deeply into Kestrel, although it works fine inside a Kestrel process); service-binding
+is via the `.ServiceBinder`:
 
 ``` c#
 var server = new LiteServer();
-server.Bind(new MyService());
+server.ServiceBinder.Bind(new MyService()); // contract-first example, generated via protoc
+
+// alternative if not also using protobuf-net.Grpc, which provides the Bind API
+// YourService.BindService(server.ServiceBinder, new MyService());
+
 _ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().AsFrames());
 // ... note: leave your server running here, until you're ready to exit!
 server.Stop();
@@ -53,6 +58,29 @@ using var channel = await ConnectionFactory.ConnectSocket(endpoint).AsStream().W
 using var channel = await ConnectionFactory.ConnectSocket(endpoint).AsStream().WithTls(serverCheck, certSelector).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync();
 ```
 
+## How do I use code-first?
+
+At the client, code-first works exactly as it always has; just use the `.CreateClient<TService>()` method on the channel.
+
+As the server, binding code-first serves to the custom server is uses the `.Binder` API:
+
+``` c#
+server.ServiceBinder.AddCodeFirst(...);
+```
+
+## How do I use interceptors?
+
+Client-side interceptors work exactly like they do in all scenarios.
+
+To register a server-side interceptor, the `Intercept()` API is used alongside the `.ServiceBinder`:
+
+``` c#
+server.ServiceBinder.Intercept(...).Bind(new MyService()); // contract-first example, generated via protoc
+server.ServiceBinder.Intercept(...).AddCodeFirst(...); // code-first
+
+// alternative for contract-first if not also using protobuf-net.Grpc, which provides the Bind API
+// YourService.BindService(server.ServiceBinder.Intercept(...), new MyService());
+```
 
 ## Other notes
 
@@ -65,3 +93,4 @@ Known gaps:
 - testing needs more coverage
 - per-stream backoff negotiation; designed, not yet implemented
 - for some reason the server implementation isn't working 100% with SAEA currently - hence `.AsStream().AsFrames()` instead of just `.AsFrames()`
+- open question around interceptor order

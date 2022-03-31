@@ -1,5 +1,6 @@
 ﻿using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Lite;
 using ProtoBuf.Grpc.Lite.Connections;
 using ProtoBuf.Grpc.Lite.Internal;
@@ -210,7 +211,7 @@ public class BasicTests
     public void CanBindService()
     {
         var server = new LiteServer(Logger);
-        server.Bind<MyContractFirstService>();
+        server.ServiceBinder.Bind<MyContractFirstService>();
         Assert.Equal(4, server.MethodCount);
     }
 

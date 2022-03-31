@@ -1,10 +1,10 @@
 #if NET472
-using ProtoBuf.Grpc.Server;
+using Grpc.Core;
 #else
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 #endif
-using Grpc.Core;
+using ProtoBuf.Grpc.Server;
 using Grpc.Core.Interceptors;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc;
@@ -14,9 +14,6 @@ using System;
 using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
-using System.Threading;
-using ProtoBuf.Grpc.Server;
 
 var serverCert = new X509Certificate2("mytestserver.pfx", "password");
 RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
@@ -48,7 +45,7 @@ gServer.Services.AddCodeFirst(svc2, interceptors: new[] { interceptor });
 gServer.Start();
 
 var lServer = new LiteServer(logger);
-lServer.Bind(svc1);
+lServer.ServiceBinder.Bind(svc1);
 lServer.ServiceBinder.Intercept(interceptor).AddCodeFirst(svc2);
 
 _ = lServer.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
@@ -80,7 +77,7 @@ builder.Services.AddSingleton<LiteServer>(services =>
 {
     var logger = services.GetService<ILogger<LiteServer>>();
     var server = new LiteServer(logger);
-    server.Bind(services.GetService<MyContractFirstService>());
+    server.ServiceBinder.Bind(services.GetService<MyContractFirstService>());
     server.ServiceBinder.Intercept(services.GetService<MyInterceptor>()!).AddCodeFirst(services.GetService<IMyService>()!);
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_merge", logger: logger).AsFrames(true));
     server.ListenAsync(ConnectionFactory.ListenNamedPipe("grpctest_buffer", logger: logger).AsFrames());

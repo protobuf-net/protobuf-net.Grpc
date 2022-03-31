@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -121,38 +120,6 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
     /// Gets the <see cref="ServiceBinderBase">binder</see> associated with this server.
     /// </summary>
     public ServiceBinderBase ServiceBinder => _serviceBinder ??= new LiteServiceBinder(this);
-
-    /// <summary>
-    /// Attach endpoints to this instance, using the configuration from <see cref="BindServiceMethodAttribute"/> on the type.
-    /// </summary>
-    public void Bind<T>(T? server = null) where T : class
-    {
-        var binder = typeof(T).GetCustomAttribute<BindServiceMethodAttribute>(true);
-        if (binder is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + " found");
-        if (binder.BindType is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + "." + nameof(BindServiceMethodAttribute.BindType) + " found");
-
-        var method = binder.BindType.FindMembers(MemberTypes.Method, BindingFlags.Public | BindingFlags.Static,
-            static (member, state) =>
-            {
-                if (member is not MethodInfo method) return false;
-                if (method.Name != (string)state!) return false;
-
-                if (method.ReturnType != typeof(void)) return false;
-                var args = method.GetParameters();
-                if (args.Length != 2) return false;
-                if (args[0].ParameterType != typeof(ServiceBinderBase)) return false;
-                if (!args[1].ParameterType.IsAssignableFrom(typeof(T))) return false;
-                return true;
-
-            }, binder.BindMethodName).OfType<MethodInfo>().SingleOrDefault();
-        if (method is null) throw new InvalidOperationException("No suitable " + binder.BindType.Name + "." + binder.BindMethodName + " method found");
-
-        server ??= Activator.CreateInstance<T>();
-        var countBefore = MethodCount;
-        method.Invoke(null, new object[] { ServiceBinder, server });
-        var methodsAdded = MethodCount - countBefore;
-        Logger.Information((type: typeof(T), methodsAdded), static (state, ex) => $"bound {state.type.FullName}, {state.methodsAdded} methods added");
-    }
 
     /// <summary>
     /// Gets the number of methods bound to this server, over all services.

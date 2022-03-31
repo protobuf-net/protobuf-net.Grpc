@@ -299,7 +299,7 @@ public class TestServerHost : IDisposable, ILogger
         _server = new LiteServer(logger: this);
         var svc = new MyContractFirstService();
         svc.Log += message => this.Information(message);
-        _server.Bind<MyContractFirstService>(svc);
+        _server.ServiceBinder.Bind<MyContractFirstService>(svc);
 
         Debug.WriteLine($"starting listener {Name}...");
         _server.ListenAsync(ConnectionFactory.ListenNamedPipe(Name, logger: this));
