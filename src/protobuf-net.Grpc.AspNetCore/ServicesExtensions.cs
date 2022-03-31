@@ -63,27 +63,29 @@ namespace ProtoBuf.Grpc.Server
                 where TRequest : class
                 where TResponse : class
             {
-                var metadata = bindContext.GetMetadata(stub.Method);
-                
-                var context = (ServiceMethodProviderContext<TService>)bindContext.State;
-                switch (method.Type)
+                if (bindContext.State is ServiceMethodProviderContext<TService> context)
                 {
-                    case MethodType.Unary:
-                        context.AddUnaryMethod(method, metadata, stub.CreateDelegate<UnaryServerMethod<TService, TRequest, TResponse>>());
-                        break;
-                    case MethodType.ClientStreaming:
-                        context.AddClientStreamingMethod(method, metadata, stub.CreateDelegate<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
-                        break;
-                    case MethodType.ServerStreaming:
-                        context.AddServerStreamingMethod(method, metadata, stub.CreateDelegate<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
-                        break;
-                    case MethodType.DuplexStreaming:
-                        context.AddDuplexStreamingMethod(method, metadata, stub.CreateDelegate<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
-                        break;
-                    default:
-                        return false;
+                    var metadata = bindContext.GetMetadata(stub.Method);
+                    switch (method.Type)
+                    {
+                        case MethodType.Unary:
+                            context.AddUnaryMethod(method, metadata, stub.CreateDelegate<UnaryServerMethod<TService, TRequest, TResponse>>());
+                            break;
+                        case MethodType.ClientStreaming:
+                            context.AddClientStreamingMethod(method, metadata, stub.CreateDelegate<ClientStreamingServerMethod<TService, TRequest, TResponse>>());
+                            break;
+                        case MethodType.ServerStreaming:
+                            context.AddServerStreamingMethod(method, metadata, stub.CreateDelegate<ServerStreamingServerMethod<TService, TRequest, TResponse>>());
+                            break;
+                        case MethodType.DuplexStreaming:
+                            context.AddDuplexStreamingMethod(method, metadata, stub.CreateDelegate<DuplexStreamingServerMethod<TService, TRequest, TResponse>>());
+                            break;
+                        default:
+                            return false;
+                    }
+                    return true;
                 }
-                return true;
+                return base.TryBind(bindContext, method, stub);
             }
         }
     }
