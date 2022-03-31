@@ -26,7 +26,7 @@
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
-    <PBGRPCLibVersion>1.0.147</PBGRPCLibVersion>
+    <PBGRPCLibVersion>1.0.167</PBGRPCLibVersion>
     <GrpcDotNetVersion>2.44.0</GrpcDotNetVersion>
     <GoogleProtobufVersion>3.19.2</GoogleProtobufVersion>
     <GrpcVersion>2.44.0</GrpcVersion>
