@@ -1,18 +1,18 @@
-﻿using System;
+﻿using Grpc.Core;
+using ProtoBuf.Grpc.Internal;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
-using Grpc.Core;
-using ProtoBuf.Grpc.Internal;
 
 namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
     /// Helper API for binding servers; this is an advanced API that would only be used if you are implementing a new transport provider
     /// </summary>
-    public abstract class ServerBinder : IBindContext
+    public partial class ServerBinder : IBindContext
     {
         /*
          warning: this code is reflection hell - lots of switching from Type to <T>; it isn't pretty,
@@ -102,11 +102,6 @@ namespace ProtoBuf.Grpc.Configuration
                 }
             }
         }
-
-        /// <summary>
-        /// Reports the number of operations available for a service
-        /// </summary>
-        protected virtual void OnServiceBound(object state, string serviceName, Type serviceType, Type serviceContract, int operationCount) { }
 
         private static readonly MethodInfo s_addMethod = typeof(ServerBinder).GetMethod(
             nameof(AddMethod), BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -231,7 +226,9 @@ namespace ProtoBuf.Grpc.Configuration
             var stub = new MethodStub<TService>(invoker, method, service, simplfiedExceptionHandling);
             try
             {
-                return TryBind<TService, TRequest, TResponse>(bindContext, grpcMethod, stub);
+                var success = TryBind<TService, TRequest, TResponse>(bindContext, grpcMethod, stub);
+                if (success) _log?.WriteLine($"{grpcMethod.ServiceName} / {grpcMethod.Name} ({grpcMethod.Type}) bound to {stub.Method.DeclaringType?.Name}.{stub.Method.Name}");
+                return success;
             }
             catch (Exception ex)
             {
@@ -241,26 +238,8 @@ namespace ProtoBuf.Grpc.Configuration
 
         }
 
-        /// <summary>
-        /// The implementing binder should bind the method to the bind-state
-        /// </summary>
-        protected abstract bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
-            where TService : class
-            where TRequest : class
-            where TResponse : class;
-
         void IBindContext.LogWarning(string message, object?[]? args) => OnWarn(message, args);
         void IBindContext.LogError(string message, object?[]? args) => OnError(message, args);
-
-        /// <summary>
-        /// Publish a warning message
-        /// </summary>
-        protected internal virtual void OnWarn(string message, object?[]? args = null) { }
-
-        /// <summary>
-        /// Publish a warning message
-        /// </summary>
-        protected internal virtual void OnError(string message, object?[]? args = null) { }
 
         /// <summary>
         /// Describes the relationship between a service contract and a service definition
