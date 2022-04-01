@@ -74,7 +74,7 @@ public static class Logging
     /// <summary>
     /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Debug"/> event.
     /// </summary>
-    [Conditional("DEBUG")]
+    //[Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug<TState>(this ILogger? logger, TState state, Func<TState, Exception?, string> formatter, Exception? exception = null)
     {
@@ -85,7 +85,7 @@ public static class Logging
     /// <summary>
     /// Log a <see cref="Microsoft.Extensions.Logging.LogLevel.Debug"/> event.
     /// </summary>
-    [Conditional("DEBUG")]
+    //[Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug(this ILogger? logger, string message)
     {
