@@ -43,6 +43,7 @@ static class Program
         None = 0,
         ContractFirst = 1 << 0,
         CodeFirst = 1 << 1,
+        Parallel = 1 << 2,
     }
     static async Task<int> Main(string[] args)
     {
@@ -89,7 +90,7 @@ static class Program
             }
             if (styles == CodeStyle.None)
             {
-                styles = CodeStyle.CodeFirst | CodeStyle.ContractFirst;
+                styles = CodeStyle.CodeFirst | CodeStyle.ContractFirst | CodeStyle.Parallel;
             }
             if (tests == Tests.None)
             {
@@ -119,6 +120,10 @@ static class Program
                         if ((styles & CodeStyle.CodeFirst) != 0)
                         {
                             await RunCodeFirst(channel, test, repeatCount, runClientStreaming);
+                        }
+                        if ((styles & CodeStyle.Parallel) != 0)
+                        {
+                            await RunParallel(channel, test, repeatCount, runClientStreaming);
                         }
                     }
                 }
@@ -488,7 +493,94 @@ static class Program
             return TimeSpan.FromMilliseconds(qty).ToString();
         }
     }
+    async static Task RunParallel(ChannelBase channel, Tests test, int repeatCount, bool runClientStreaming = true)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromSeconds(60));
+            CallContext options = new CallOptions(cancellationToken: cts.Token);
 
+            IMyService client;
+            {
+                var invoker = channel.CreateCallInvoker();
+                Console.WriteLine($"Connecting to {channel.Target} ({test}, {invoker.GetType().Name})...");
+                client = channel.CreateGrpcService<IMyService>();
+
+                var result = await client.UnaryAsync(new CodeFirstRequest { Value = 42 }, options);
+                if (result?.Value != 42) throw new InvalidOperationException("Incorrect response received: " + result);
+                if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                Console.WriteLine("(validated)");
+            }
+
+            long unaryConcurrent = 0;
+            const long unarySequential = -1, clientStreamingBuffered = -1, clientStreamingNonBuffered = -1, serverStreamingBuffered = -1, serverStreamingNonBuffered = -1, duplex = -1;
+
+            try
+            {
+                for (int j = 0; j < repeatCount; j++)
+                {
+                    var watch = Stopwatch.StartNew();
+                    const int OPCOUNT = 10, CONCURRENCY = 5000;
+                    await RunParallel(async () =>
+                    {
+                        await Task.Yield();
+                        for (int i = 0; i < OPCOUNT; i++)
+                        {
+                            var result = await client.UnaryAsync(new CodeFirstRequest { Value = i }, options);
+
+                            if (result?.Value != i) throw new InvalidOperationException("Incorrect response received: " + result);
+                            if (!result.Done) throw new InvalidOperationException("Interceptor failed!");
+                        }
+                    }, CONCURRENCY);
+                    unaryConcurrent += ShowTiming(nameof(client.UnaryAsync) + " (concurrent)", watch, OPCOUNT * CONCURRENCY);
+                }
+                Console.WriteLine();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                unaryConcurrent = int.MinValue;
+            }
+
+            // store the average nanos-per-op
+            timings.Add("B:" + test.ToString(), (
+                AutoScale(unarySequential / repeatCount, true),
+                AutoScale(unaryConcurrent / repeatCount, true),
+                AutoScale(clientStreamingBuffered / repeatCount, true),
+                AutoScale(clientStreamingNonBuffered / repeatCount, true),
+                AutoScale(serverStreamingBuffered / repeatCount, true),
+                AutoScale(serverStreamingNonBuffered / repeatCount, true),
+                AutoScale(duplex / repeatCount, true)
+            ));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[{channel.Target}]: {ex.Message}");
+            timings["B:" + test.ToString()] = ("err", "err", "err", "err", "err", "err", "err");
+        }
+
+        static long ShowTiming(string label, Stopwatch watch, int operations)
+        {
+            watch.Stop();
+            var nanos = (watch.ElapsedTicks * 1_000_000_000) / Stopwatch.Frequency;
+            Console.WriteLine($"{label} ×{operations}: {AutoScale(nanos)}, {AutoScale(nanos / operations)}/op");
+            return nanos / operations;
+        }
+        static string AutoScale(long nanos, bool forceNanos = false)
+        {
+            if (nanos < 0) return "n/a";
+            long qty = nanos;
+            if (forceNanos) return $"{qty:###,###,##0}ns";
+            if (qty < 10000) return $"{qty:#,##0}ns";
+            qty /= 1000;
+            if (qty < 10000) return $"{qty:#,##0}μs";
+            qty /= 1000;
+            if (qty < 10000) return $"{qty:#,##0}ms";
+
+            return TimeSpan.FromMilliseconds(qty).ToString();
+        }
+    }
     async static Task RunCodeFirst(ChannelBase channel, Tests test, int repeatCount, bool runClientStreaming = true)
     {
         try
