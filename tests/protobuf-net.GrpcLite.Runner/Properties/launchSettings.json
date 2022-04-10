@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "protobuf-net.GrpcLite.Runner": {
-      "commandName": "Project",
-      "commandLineArgs": "TcpTls"
-    }
-  }
-}
