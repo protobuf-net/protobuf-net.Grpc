@@ -52,7 +52,7 @@ namespace ProtoBuf.Grpc.Configuration
                 var bindCtx = new ServiceBindContext(serviceContract, serviceType, state, binderConfiguration.Binder);
                 foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, this))
                 {
-                    if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
+                    if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Arg, op.Result, op.Void, out var invoker)
                         && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker, bindCtx,
                         serviceContractSimplifiedExceptions || op.Method.IsDefined(typeof(SimpleRpcExceptionsAttribute))
                         ))
