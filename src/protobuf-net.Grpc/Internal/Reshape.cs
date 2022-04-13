@@ -6,6 +6,8 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Sources;
+
 namespace ProtoBuf.Grpc.Internal
 {
     /// <summary>
@@ -125,7 +127,59 @@ namespace ProtoBuf.Grpc.Internal
         }
 
         /// <summary>
-        /// Consumes an asynchronous enumerable sequence and writes it to a server stream-writer
+        /// Interprets a stream-reader as an observable sequence
+        /// </summary>
+        public static IObservable<T> AsObservable<T>(this IAsyncStreamReader<T> reader)
+            => new ReaderObservable<T>(reader);
+
+        private sealed class ReaderObservable<T> : IObservable<T>, IDisposable
+        {
+            private readonly IAsyncStreamReader<T> _reader;
+            private IObserver<T>? _observer;
+
+            public ReaderObservable(IAsyncStreamReader<T> reader)
+            {
+                _reader = reader;
+            }
+
+            IDisposable IObservable<T>.Subscribe(IObserver<T> observer)
+            {
+
+                if (observer is null) ThrowNull();
+                if (Interlocked.CompareExchange(ref _observer, observer, null) is not null) ThrowObserved();
+                Task.Run(PushToObserver);
+                return this;
+
+                static void ThrowNull() => throw new ArgumentNullException(nameof(observer));
+                static void ThrowObserved() => throw new InvalidOperationException("The sequence is already being observed");
+            }
+            public void Dispose() => Volatile.Write(ref _observer, null);
+            private async Task PushToObserver()
+            {
+                // we don't *expect* eager dispose, and using a custom CT *on top of* the gRPC CT
+                // makes for perf complications; instead, we'll optimize for "consume everything",
+                // and in the rare occasion when the consumer stops early: we'll just handle it
+                try
+                {
+                    while (await _reader.MoveNext(CancellationToken.None).ConfigureAwait(false))
+                    {
+                        Volatile.Read(ref _observer)?.OnNext(_reader.Current);
+                    }
+                    Volatile.Read(ref _observer)?.OnCompleted();
+                }
+                catch (Exception ex)
+                {
+                    Volatile.Read(ref _observer)?.OnError(ex);
+                }
+                finally
+                {
+                    Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Consumes an observable sequence and writes it to a server stream-writer
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
@@ -134,6 +188,148 @@ namespace ProtoBuf.Grpc.Internal
             await foreach (var value in reader.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
                 await writer.WriteAsync(value).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Consumes an asynchronous enumerable sequence and writes it to a server stream-writer
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static Task WriteTo<T>(this IObservable<T> reader, IAsyncStreamWriter<T> writer)
+            => new WriterObserver<T>().Subscribe(reader, writer);
+
+        private sealed class WriterObserver<T> : IObserver<T>, IValueTaskSource<bool>
+#if NETCOREAPP3_1_OR_GREATER
+            , IThreadPoolWorkItem
+#endif
+        {
+#if NETCOREAPP3_1_OR_GREATER
+            void IThreadPoolWorkItem.Execute() => Activate();
+#else
+            private static readonly WaitCallback s_Activate = static state => Unsafe.As<WriterObserver<T>>(state)!.Activate();
+#endif
+
+            private readonly Queue<T> _backlog = new Queue<T>();
+            private ManualResetValueTaskSourceCore<bool> _pendingWork;
+            [Flags]
+            private enum StateFlags
+            {
+                None = 0,
+                IsCompleted = 1 << 0,
+                NeedsActivation = 1 << 1,
+            }
+            private StateFlags _flags;
+
+            public async Task Subscribe(IObservable<T> reader, IAsyncStreamWriter<T> writer)
+            {
+                await Task.Yield();
+                var sub = reader.Subscribe(this);
+                try
+                {
+                    while (await WaitForWorkAsync().ConfigureAwait(false))
+                    {
+                        // try to read synchronously as much as possible
+                        while (true)
+                        {
+                            T next;
+
+                            lock (_backlog)
+                            {
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+                                if (!_backlog.TryDequeue(out next!)) break;
+#else
+                                if (_backlog.Count == 0) break;
+                                next = _backlog.Dequeue();
+#endif
+                            }
+                            await writer.WriteAsync(next).ConfigureAwait(false);
+                        }
+                    }
+                }
+                finally
+                {
+                    lock (_backlog)
+                    {   // we won't be writing any more; formalize that
+                        _backlog.Clear();
+                        _flags |= StateFlags.IsCompleted;
+                    }
+                    try
+                    {
+                        sub?.Dispose();
+                    }
+                    catch { }
+                }
+            }
+            private ValueTask<bool> WaitForWorkAsync()
+            {
+                lock (_backlog)
+                {
+                    if (_backlog.Count != 0) return new ValueTask<bool>(true);
+                    if ((_flags & StateFlags.IsCompleted) != 0) return new ValueTask<bool>(false);
+                    _flags |= StateFlags.NeedsActivation;
+                    return new ValueTask<bool>(this, _pendingWork.Version);
+                }
+            }
+
+            private void Activate() => _pendingWork.SetResult(true); // note this value is a dummy; the real value comes from GetResult
+            private void ActivateIfNeededLocked()
+            {
+                if ((_flags & StateFlags.NeedsActivation) != 0)
+                {
+                    _flags &= ~StateFlags.NeedsActivation;
+#if NETCOREAPP3_1_OR_GREATER
+                    ThreadPool.UnsafeQueueUserWorkItem(this, false);
+#else
+                    ThreadPool.UnsafeQueueUserWorkItem(s_Activate, this);
+#endif
+                }
+            }
+            void IObserver<T>.OnCompleted()
+            {
+                lock (_backlog)
+                {
+                    _flags |= StateFlags.IsCompleted;
+                    ActivateIfNeededLocked();
+                }
+            }
+
+            void IObserver<T>.OnError(Exception error)
+            {
+                lock (_backlog)
+                {
+                    _backlog.Clear(); // something bad happened; throw away the outstanding work
+                    _flags |= StateFlags.IsCompleted;
+                    ActivateIfNeededLocked();
+                }
+            }
+
+            void IObserver<T>.OnNext(T value)
+            {
+                lock (_backlog)
+                {
+                    if ((_flags & StateFlags.IsCompleted) == 0)
+                    {
+                        _backlog.Enqueue(value);
+                        ActivateIfNeededLocked();
+                    }
+                }
+            }
+
+            ValueTaskSourceStatus IValueTaskSource<bool>.GetStatus(short token)
+                => _pendingWork.GetStatus(token);
+
+            void IValueTaskSource<bool>.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
+                => _pendingWork.OnCompleted(continuation, state, token, flags);
+
+            bool IValueTaskSource<bool>.GetResult(short token)
+            {
+                lock (_backlog)
+                {
+                    _pendingWork.GetResult(token); // discard the dummy value
+                    _pendingWork.Reset();
+                    return _backlog.Count != 0;
+                }
             }
         }
 
@@ -224,7 +420,7 @@ namespace ProtoBuf.Grpc.Internal
             {
                 invoker.BlockingUnaryCall(method, host, context.CallOptions, request);
             }
-            catch(RpcException fault)
+            catch (RpcException fault)
             {
                 metadata?.SetTrailers(fault);
                 throw;
