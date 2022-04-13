@@ -73,9 +73,10 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
-        internal void SetTrailers<T>(T call, Func<T, Status> getStatus, Func<T, Metadata> getMetadata)
+        internal void SetTrailers<T>(T? call, Func<T, Status> getStatus, Func<T, Metadata> getMetadata)
             where T : class
         {
+            if (call is null) return;
             try
             {
                 _trailers = getMetadata(call) ?? Metadata.Empty;
@@ -88,10 +89,15 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
-        internal ValueTask SetHeadersAsync(Task<Metadata> headers)
+        internal ValueTask SetHeadersAsync(Task<Metadata>? headers)
         {
+            if (headers is null) return default;
             var tcs = Interlocked.CompareExchange(ref _headersTaskOrSource, headers, null) as TaskCompletionSource<Metadata>;
-            if (headers.RanToCompletion())
+            if (tcs is null)
+            {
+                return new ValueTask(headers);
+            }
+            else if (headers.RanToCompletion())
             {
                 // headers are sync; update TCS if one
                 tcs?.TrySetResult(headers.Result);
@@ -103,11 +109,11 @@ namespace ProtoBuf.Grpc.Internal
                 return Awaited(this, tcs, headers);
             }
 
-            static async ValueTask Awaited(MetadataContext context, TaskCompletionSource<Metadata>? tcs, Task<Metadata> headers)
+            static async ValueTask Awaited(MetadataContext context, TaskCompletionSource<Metadata> tcs, Task<Metadata> headers)
             {
                 try
                 {
-                    tcs?.TrySetResult(await headers.ConfigureAwait(false));
+                    tcs.TrySetResult(await headers.ConfigureAwait(false));
                 }
                 catch (RpcException fault)
                 {

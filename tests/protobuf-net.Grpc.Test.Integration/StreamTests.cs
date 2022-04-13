@@ -7,7 +7,10 @@ using ProtoBuf.Grpc.Server;
 using ProtoBuf.Meta;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +32,7 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 lock (tmp)
                 {
-                    tmp.WriteLine(message);
+                    tmp.WriteLine(DateTime.Now + ":" + message);
                 }
             }
         }
@@ -56,6 +59,7 @@ namespace protobuf_net.Grpc.Test.Integration
     public interface IStreamAPI
     {
         IAsyncEnumerable<Foo> DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx = default);
+        IObservable<Foo> DuplexEchoObservable(IObservable<Foo> values, CallContext ctx = default);
 
 
         IAsyncEnumerable<Foo> FullDuplex(IAsyncEnumerable<Foo> values, CallContext ctx = default);
@@ -89,7 +93,11 @@ namespace protobuf_net.Grpc.Test.Integration
         readonly StreamTestsFixture _fixture;
         internal StreamServer(StreamTestsFixture fixture)
             => _fixture = fixture;
-        public void Log(string message) => _fixture.Log(message);
+        public void Log(string message)
+        {
+            Debug.WriteLine(message);
+            _fixture.Log(message);
+        }
 
         static Scenario GetScenario(in CallContext ctx)
         {
@@ -158,6 +166,81 @@ namespace protobuf_net.Grpc.Test.Integration
             if (scenario == Scenario.FaultAfterYield) Throw("after yield");
 
             Log("server is complete");
+        }
+
+        IObservable<Foo> IStreamAPI.DuplexEchoObservable(IObservable<Foo> values, CallContext ctx)
+        {
+            Log("server checking scenario");
+            var scenario = GetScenario(ctx);
+
+            if (scenario == Scenario.FaultBeforeHeaders) Throw("before headers");
+
+            var sCtx = ctx.ServerCallContext!;
+            Log("server yielding response headers");
+            sCtx.WriteResponseHeadersAsync(new Metadata { { "prekey", "preval" } }).Wait(); // sync-over-async; bite me
+
+            Log("server setting response status in advance");
+            sCtx.Status = new Status(StatusCode.OK, "resp detail");
+            sCtx.ResponseTrailers.Add("postkey", "postval");
+
+            if (scenario == Scenario.FaultBeforeYield) Throw("before yield");
+
+            switch (scenario)
+            {
+                case Scenario.FaultSuccessBadProducer:
+                case Scenario.FaultSuccessGoodProducer:
+                    var prefaulted = new Subject<Foo>();
+                    try
+                    {
+                        Log("server faulting with success");
+                        throw new RpcException(Status.DefaultSuccess); // another way of expressing yield break
+                    }
+                    catch (Exception ex)
+                    {
+                        prefaulted.OnError(ex);
+                    }
+                    return prefaulted;
+                case Scenario.TakeNothingBadProducer:
+                case Scenario.TakeNothingGoodProducer:
+                    var empty = new Subject<Foo>();
+                    empty.OnCompleted();
+                    return empty;
+                default:
+                    var subject = new Subject<Foo>();
+                    values.Subscribe(value =>
+                    {
+                        Log($"server received {value.Bar}");
+                        switch (scenario)
+                        {
+                            case Scenario.YieldNothing:
+                                break;
+                            default:
+                                Log($"server yielding {value.Bar}");
+                                subject.OnNext(value);
+                                break;
+                        }
+                    }, () =>
+                    {
+                        Log("server is done yielding");
+                        if (scenario == Scenario.FaultAfterYield)
+                        {
+                            try
+                            {
+                                Throw("after yield");
+                            }
+                            catch (Exception ex)
+                            {
+                                subject.OnError(ex);
+                            }
+                        }
+                        else
+                        {
+                            subject.OnCompleted();
+                        }
+                        Log("server is complete");
+                    });
+                    return subject;
+            }
         }
 
         static void Throw(string state)
@@ -473,6 +556,89 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
+
+        [DebugTheory]
+        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.CaptureMetadata)]
+
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination)]
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.None)]
+        [InlineData(Scenario.YieldNothing, 0, CallContextFlags.CaptureMetadata)]
+        //[InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        //[InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        //[InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.None)]
+        //[InlineData(Scenario.TakeNothingGoodProducer, 0, CallContextFlags.CaptureMetadata)]
+        //[InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        //[InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        //[InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.None)]
+        //[InlineData(Scenario.FaultSuccessGoodProducer, 0, CallContextFlags.CaptureMetadata)]
+        //[InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        //[InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+        //[InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination)]
+        //[InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
+
+        //[InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.None, true)]
+        //[InlineData(Scenario.TakeNothingBadProducer, 0, CallContextFlags.CaptureMetadata, true)]
+        //[InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.None)]
+        //[InlineData(Scenario.FaultSuccessBadProducer, 0, CallContextFlags.CaptureMetadata)]
+        public async Task DuplexEchoObservable(Scenario scenario, int expectedCount, CallContextFlags flags, bool expectBrittle = false)
+        {
+            await using var svc = CreateClient(out var client);
+
+            var ctx = new CallContext(new CallOptions(deadline: DateTime.UtcNow.AddSeconds(20), headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            bool haveCheckedHeaders = false;
+            var values = new List<int>(expectedCount);
+            try
+            {
+                await client.DuplexEchoObservable(ForObservable(DEFAULT_SIZE), ctx).ForEachAsync(async item =>
+                {
+                    _fixture.Log($"client received {item.Bar}");
+                    await CheckHeaderStateAsync();
+                    values.Add(item.Bar);
+                });
+            }
+            catch (Exception ex) when (expectBrittle && ex.GetType().FullName == "ProtoBuf.Grpc.Internal.IncompleteSendRpcException")
+            {
+                _fixture?.Log($"faulted as incomplete; user advised: '{ex.Message}'");
+                return; // best we can do
+            }
+            _fixture?.Log("after await foreach");
+            await CheckHeaderStateAsync();
+            Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
+
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {   // check trailers
+                Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
+
+                var status = ctx.ResponseStatus();
+                Assert.Equal(StatusCode.OK, status.StatusCode);
+                switch (scenario)
+                {
+                    case Scenario.FaultSuccessGoodProducer:
+                    case Scenario.FaultSuccessBadProducer:
+                        Assert.Equal("", status.Detail);
+                        break;
+                    default:
+                        Assert.Equal("resp detail", status.Detail);
+                        break;
+                }
+            }
+
+            async Task CheckHeaderStateAsync()
+            {
+                if (haveCheckedHeaders) return;
+                haveCheckedHeaders = true;
+                if ((flags & CallContextFlags.CaptureMetadata) != 0)
+                {
+                    var headers = await ctx.ResponseHeadersAsync();
+                    var prekey = headers.GetString("prekey");
+                    Assert.Equal("preval", prekey);
+                }
+            }
+        }
+
         [DebugTheory]
         [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.None)]
         [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.CaptureMetadata)]
@@ -541,6 +707,10 @@ namespace protobuf_net.Grpc.Test.Integration
                 Scenario.TakeNothingBadProducer => false,
                 _ => true
             }, default);
+
+        IObservable<Foo> ForObservable(int count, int from = 0, int millisecondsDelay = 10)
+            => ForObservableImpl(_fixture, count, from, millisecondsDelay);
+
         private static async IAsyncEnumerable<Foo> ForImpl(StreamTestsFixture fixture, int count, int from, int millisecondsDelay,
             bool checkForCancellation, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -574,6 +744,43 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 Log("exiting producer");
             }
+        }
+
+        private static IObservable<Foo> ForObservableImpl(StreamTestsFixture fixture, int count, int from, int millisecondsDelay)
+        {
+            void Log(string message)
+            {
+                Debug.WriteLine(message);
+                fixture?.Log(message);
+            }
+
+            var subject = new Subject<Foo>();
+            Task.Run(async () =>
+            {
+                Log("starting producer");
+                try
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        await Task.Delay(millisecondsDelay);
+
+                        Log($"producer yielding {i}");
+                        subject.OnNext(new Foo { Bar = i + from });
+                    }
+
+                    Log($"producer ran to completion");
+                    subject.OnCompleted();
+                }
+                catch (Exception ex)
+                {
+                    subject.OnError(ex);
+                }
+                finally
+                {
+                    Log("exiting producer");
+                }
+            });
+            return subject;
         }
 
         [DebugTheory]

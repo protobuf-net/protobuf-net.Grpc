@@ -3,6 +3,7 @@ using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -132,7 +133,7 @@ namespace ProtoBuf.Grpc.Internal
         public static IObservable<T> AsObservable<T>(this IAsyncStreamReader<T> reader)
             => new ReaderObservable<T>(reader);
 
-        private sealed class ReaderObservable<T> : IObservable<T>, IDisposable
+        private class ReaderObservable<T> : IObservable<T>, IDisposable
         {
             private readonly IAsyncStreamReader<T> _reader;
             private IObserver<T>? _observer;
@@ -153,7 +154,7 @@ namespace ProtoBuf.Grpc.Internal
                 static void ThrowNull() => throw new ArgumentNullException(nameof(observer));
                 static void ThrowObserved() => throw new InvalidOperationException("The sequence is already being observed");
             }
-            public void Dispose() => Volatile.Write(ref _observer, null);
+            public virtual void Dispose() => Volatile.Write(ref _observer, null);
             private async Task PushToObserver()
             {
                 // we don't *expect* eager dispose, and using a custom CT *on top of* the gRPC CT
@@ -161,14 +162,26 @@ namespace ProtoBuf.Grpc.Internal
                 // and in the rare occasion when the consumer stops early: we'll just handle it
                 try
                 {
+                    Debug.WriteLine("starting observer publish", ToString());
+                    await OnBeforeAsync().ConfigureAwait(false);
                     while (await _reader.MoveNext(CancellationToken.None).ConfigureAwait(false))
                     {
+                        Debug.WriteLine($"forwarding: {_reader.Current}", ToString());
                         Volatile.Read(ref _observer)?.OnNext(_reader.Current);
                     }
+                    Debug.WriteLine($"completing observer publish", ToString());
+                    await OnAfterAsync().ConfigureAwait(false);
                     Volatile.Read(ref _observer)?.OnCompleted();
+                }
+                catch (RpcException fault)
+                {
+                    Debug.WriteLine($"observer fault: {fault.Message}", ToString());
+                    OnFault(fault);
+                    Volatile.Read(ref _observer)?.OnError(fault);
                 }
                 catch (Exception ex)
                 {
+                    Debug.WriteLine($"observer fault: {ex.Message}", ToString());
                     Volatile.Read(ref _observer)?.OnError(ex);
                 }
                 finally
@@ -176,6 +189,9 @@ namespace ProtoBuf.Grpc.Internal
                     Dispose();
                 }
             }
+            protected virtual ValueTask OnBeforeAsync() => default;
+            protected virtual void OnFault(RpcException fault) { }
+            protected virtual ValueTask OnAfterAsync() => default;
         }
 
         /// <summary>
@@ -196,7 +212,7 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        public static Task WriteTo<T>(this IObservable<T> reader, IAsyncStreamWriter<T> writer)
+        public static Task WriteObservableTo<T>(this IObservable<T> reader, IAsyncStreamWriter<T> writer)
             => new WriterObserver<T>().Subscribe(reader, writer);
 
         private sealed class WriterObserver<T> : IObserver<T>, IValueTaskSource<bool>
@@ -209,8 +225,12 @@ namespace ProtoBuf.Grpc.Internal
 #else
             private static readonly WaitCallback s_Activate = static state => Unsafe.As<WriterObserver<T>>(state)!.Activate();
 #endif
-
+            public WriterObserver()
+            {
+                Debug.WriteLine("Creating...", ToString());
+            }
             private readonly Queue<T> _backlog = new Queue<T>();
+            private volatile Exception? _fault;
             private ManualResetValueTaskSourceCore<bool> _pendingWork;
             [Flags]
             private enum StateFlags
@@ -223,10 +243,14 @@ namespace ProtoBuf.Grpc.Internal
 
             public async Task Subscribe(IObservable<T> reader, IAsyncStreamWriter<T> writer)
             {
+                Debug.WriteLine($"Subscribing...", ToString());
                 await Task.Yield();
-                var sub = reader.Subscribe(this);
+                var sub = reader?.Subscribe(this);
+                string debugStep = nameof(Subscribe);
                 try
                 {
+                    if (reader is null) return; // nothing to write
+                    debugStep = nameof(WaitForWorkAsync);
                     while (await WaitForWorkAsync().ConfigureAwait(false))
                     {
                         // try to read synchronously as much as possible
@@ -234,6 +258,7 @@ namespace ProtoBuf.Grpc.Internal
                         {
                             T next;
 
+                            debugStep = nameof(_backlog.Dequeue);
                             lock (_backlog)
                             {
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
@@ -243,9 +268,17 @@ namespace ProtoBuf.Grpc.Internal
                                 next = _backlog.Dequeue();
 #endif
                             }
+                            Debug.WriteLine($"Writing: {next}", ToString());
+                            debugStep = nameof(writer.WriteAsync);
                             await writer.WriteAsync(next).ConfigureAwait(false);
                         }
                     }
+                    Debug.WriteLine($"Subscribe exiting with success", ToString());
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Subscribe exiting with failure during {debugStep}: {ex.Message}", ToString());
+                    throw;
                 }
                 finally
                 {
@@ -254,6 +287,16 @@ namespace ProtoBuf.Grpc.Internal
                         _backlog.Clear();
                         _flags |= StateFlags.IsCompleted;
                     }
+
+                    if (writer is IClientStreamWriter<T> client)
+                    {
+                        try // tell the writer that we're done, if possible
+                        {
+                            await client.CompleteAsync().ConfigureAwait(false);
+                        }
+                        catch { }
+                    }
+
                     try
                     {
                         sub?.Dispose();
@@ -268,16 +311,29 @@ namespace ProtoBuf.Grpc.Internal
                     if (_backlog.Count != 0) return new ValueTask<bool>(true);
                     if ((_flags & StateFlags.IsCompleted) != 0) return new ValueTask<bool>(false);
                     _flags |= StateFlags.NeedsActivation;
+                    Debug.WriteLine("Subscribe awaiting reactivation", ToString());
                     return new ValueTask<bool>(this, _pendingWork.Version);
                 }
             }
 
-            private void Activate() => _pendingWork.SetResult(true); // note this value is a dummy; the real value comes from GetResult
+            private void Activate()
+            {
+                var fault = _fault;
+                if (fault is null)
+                {
+                    _pendingWork.SetResult(true); // note this value is a dummy; the real value comes from GetResult
+                }
+                else
+                {
+                    _pendingWork.SetException(fault);
+                }
+            }
             private void ActivateIfNeededLocked()
             {
                 if ((_flags & StateFlags.NeedsActivation) != 0)
                 {
                     _flags &= ~StateFlags.NeedsActivation;
+                    Debug.WriteLine("Activating", ToString());
 #if NETCOREAPP3_1_OR_GREATER
                     ThreadPool.UnsafeQueueUserWorkItem(this, false);
 #else
@@ -289,6 +345,7 @@ namespace ProtoBuf.Grpc.Internal
             {
                 lock (_backlog)
                 {
+                    Debug.WriteLine("Completing", ToString());
                     _flags |= StateFlags.IsCompleted;
                     ActivateIfNeededLocked();
                 }
@@ -298,6 +355,8 @@ namespace ProtoBuf.Grpc.Internal
             {
                 lock (_backlog)
                 {
+                    Debug.WriteLine("Faulting", ToString());
+                    _fault = error;
                     _backlog.Clear(); // something bad happened; throw away the outstanding work
                     _flags |= StateFlags.IsCompleted;
                     ActivateIfNeededLocked();
@@ -310,8 +369,13 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     if ((_flags & StateFlags.IsCompleted) == 0)
                     {
+                        Debug.WriteLine($"Adding work: {value}", ToString());
                         _backlog.Enqueue(value);
                         ActivateIfNeededLocked();
+                    }
+                    else
+                    {
+                        Debug.WriteLine("Ignoring work: already completed", ToString());
                     }
                 }
             }
@@ -506,9 +570,22 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => ServerStreamingAsyncImpl<TRequest, TResponse>(invoker.AsyncServerStreamingCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare(), context.CancellationToken);
+            => ServerStreamingAsyncImpl<TResponse>(invoker.AsyncServerStreamingCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare(), context.CancellationToken);
 
-        private static async IAsyncEnumerable<TResponse> ServerStreamingAsyncImpl<TRequest, TResponse>(
+        /// <summary>
+        /// Performs a gRPC server-streaming call
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static IObservable<TResponse> ServerStreamingObservable<TRequest, TResponse>(
+            this in CallContext context,
+            CallInvoker invoker, Method<TRequest, TResponse> method, TRequest request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => new ServerStreamingObservableImpl<TResponse>(invoker.AsyncServerStreamingCall<TRequest, TResponse>(method, host, context.CallOptions, request), context.Prepare());
+
+        private static async IAsyncEnumerable<TResponse> ServerStreamingAsyncImpl<TResponse>(
             AsyncServerStreamingCall<TResponse> call, MetadataContext? metadata,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -543,6 +620,42 @@ namespace ProtoBuf.Grpc.Internal
                 } while (haveMore);
 
                 metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+            }
+        }
+
+        private sealed class ServerStreamingObservableImpl<TResponse> : ReaderObservable<TResponse>
+        {
+            private AsyncServerStreamingCall<TResponse>? _call;
+            private MetadataContext? _metadata;
+            public ServerStreamingObservableImpl(AsyncServerStreamingCall<TResponse> call, MetadataContext? metadata) : base(call.ResponseStream)
+            {
+                _call = call;
+                _metadata = metadata;
+            }
+
+            public override void Dispose()
+            {
+                base.Dispose();
+                var call = _call;
+                _call = null;
+                call?.Dispose();
+            }
+
+            protected override ValueTask OnBeforeAsync()
+            {
+                var metadata = _metadata;
+                return metadata is null ? default : metadata.SetHeadersAsync(_call?.ResponseHeadersAsync);
+            }
+
+            protected override ValueTask OnAfterAsync()
+            {
+                _metadata?.SetTrailers(_call, c => c.GetStatus(), c => c.GetTrailers());
+                return default;
+            }
+
+            protected override void OnFault(RpcException fault)
+            {
+                _metadata?.SetTrailers(fault);
             }
         }
 
@@ -617,6 +730,71 @@ namespace ProtoBuf.Grpc.Internal
         }
 
         /// <summary>
+        /// Performs a gRPC client-streaming call
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Task<TResponse> ClientStreamingObservableTaskAsync<TRequest, TResponse>(
+            this in CallContext options,
+            CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request);
+
+        /// <summary>
+        /// Performs a gRPC client-streaming call
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<TResponse> ClientStreamingObservableValueTaskAsync<TRequest, TResponse>(
+            this in CallContext options,
+            CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => new ValueTask<TResponse>(ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request));
+
+        /// <summary>
+        /// Performs a gRPC client-streaming call
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask ClientStreamingObservableValueTaskAsyncVoid<TRequest, TResponse>(
+            this in CallContext options,
+            CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => new ValueTask(ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request));
+
+        private static async Task<TResponse> ClientStreamingObservableTaskAsyncImpl<TRequest, TResponse>(
+            AsyncClientStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
+            IObservable<TRequest> request)
+        {
+            using (call)
+            {
+                if (metadata != null) await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
+
+                // send all the data *before* we check for a reply
+                try
+                {
+                    await request.WriteObservableTo(call.RequestStream).ConfigureAwait(false);
+
+                    var result = await call.ResponseAsync.ConfigureAwait(false);
+
+                    metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                    return result;
+                }
+                catch (RpcException fault)
+                {
+                    metadata?.SetTrailers(fault);
+                    throw;
+                }
+            }
+        }
+
+        /// <summary>
         /// Performs a gRPC duplex call
         /// </summary>
         [Obsolete(WarningMessage, false)]
@@ -628,6 +806,19 @@ namespace ProtoBuf.Grpc.Internal
             where TRequest : class
             where TResponse : class
             => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken);
+
+        /// <summary>
+        /// Performs a gRPC duplex call
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static IObservable<TResponse> DuplexObservable<TRequest, TResponse>(
+            this in CallContext options,
+            CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+            => new DuplexObservableImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request);
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
             AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
@@ -689,6 +880,42 @@ namespace ProtoBuf.Grpc.Internal
                 }
                 metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
             }
+        }
+
+        private sealed class DuplexObservableImpl<TRequest, TResponse> : ReaderObservable<TResponse>
+        {
+            private AsyncDuplexStreamingCall<TRequest, TResponse>? _call;
+            private MetadataContext? _metadata;
+            private readonly Task _sendAll;
+            public DuplexObservableImpl(AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata, IObservable<TRequest> request) : base(call.ResponseStream)
+            {
+                _call = call;
+                _metadata = metadata;
+                _sendAll = request.WriteObservableTo(call.RequestStream);
+            }
+
+            public override void Dispose()
+            {
+                base.Dispose();
+                var call = _call;
+                _call = null;
+                call?.Dispose();
+            }
+
+            protected override ValueTask OnBeforeAsync()
+            {
+                var metadata = _metadata;
+                return metadata is null ? default : metadata.SetHeadersAsync(_call?.ResponseHeadersAsync);
+            }
+
+            protected override async ValueTask OnAfterAsync()
+            {
+                await _sendAll;
+                _metadata?.SetTrailers(_call, c => c.GetStatus(), c => c.GetTrailers());
+            }
+
+            protected override void OnFault(RpcException fault)
+                => _metadata?.SetTrailers(fault);
         }
 
         static async Task SendAll<T>(IClientStreamWriter<T> output, IAsyncEnumerable<T> request, CancellationTokenSource allDone, bool ignoreStreamTermination)
