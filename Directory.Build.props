@@ -27,9 +27,9 @@
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
     <PBGRPCLibVersion>1.0.167</PBGRPCLibVersion>
-    <GrpcDotNetVersion>2.44.0</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.19.2</GoogleProtobufVersion>
-    <GrpcVersion>2.44.0</GrpcVersion>
+    <GrpcDotNetVersion>2.46.0</GrpcDotNetVersion>
+    <GoogleProtobufVersion>3.21.1</GoogleProtobufVersion>
+    <GrpcVersion>2.46.3</GrpcVersion>
 
     <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
     <ProtoBufNet3Version>3.0.101</ProtoBufNet3Version>

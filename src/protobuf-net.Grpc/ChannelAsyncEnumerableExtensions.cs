@@ -114,7 +114,11 @@ namespace ProtoBuf.Grpc
                     {
                         while (!writer.TryWrite(value))
                         {
-                            await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false);
+                            if (!await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false))
+                            {
+                                writer.TryComplete(); // nothing more can be written
+                                return;
+                            }
                         }
                     }
                     writer.TryComplete();

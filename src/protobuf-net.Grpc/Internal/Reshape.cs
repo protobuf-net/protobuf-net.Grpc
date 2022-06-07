@@ -100,7 +100,7 @@ namespace ProtoBuf.Grpc.Internal
                     {
                         while (await reader.MoveNext(context.CancellationToken).ConfigureAwait(false))
                         {
-                            await writer.WriteAsync(reader.Current).ConfigureAwait(false);
+                            await writer.WriteAsync(reader.Current, context.CancellationToken).ConfigureAwait(false);
                         }
                     }
                 }
@@ -203,7 +203,11 @@ namespace ProtoBuf.Grpc.Internal
         {
             await foreach (var value in reader.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+                await writer.WriteAsync(value, cancellationToken).ConfigureAwait(false);
+#else
                 await writer.WriteAsync(value).ConfigureAwait(false);
+#endif
             }
         }
 
@@ -212,8 +216,8 @@ namespace ProtoBuf.Grpc.Internal
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-        public static Task WriteObservableTo<T>(this IObservable<T> reader, IAsyncStreamWriter<T> writer)
-            => new WriterObserver<T>().Subscribe(reader, writer);
+        public static Task WriteObservableTo<T>(this IObservable<T> reader, IAsyncStreamWriter<T> writer, CancellationToken cancellationToken)
+            => new WriterObserver<T>().Subscribe(reader, writer, cancellationToken);
 
         private sealed class WriterObserver<T> : IObserver<T>, IValueTaskSource<bool>
 #if NETCOREAPP3_1_OR_GREATER
@@ -241,7 +245,7 @@ namespace ProtoBuf.Grpc.Internal
             }
             private StateFlags _flags;
 
-            public async Task Subscribe(IObservable<T> reader, IAsyncStreamWriter<T> writer)
+            public async Task Subscribe(IObservable<T> reader, IAsyncStreamWriter<T> writer, CancellationToken cancellationToken)
             {
                 Debug.WriteLine($"Subscribing...", ToString());
                 await Task.Yield();
@@ -270,7 +274,11 @@ namespace ProtoBuf.Grpc.Internal
                             }
                             Debug.WriteLine($"Writing: {next}", ToString());
                             debugStep = nameof(writer.WriteAsync);
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+                            await writer.WriteAsync(next, cancellationToken).ConfigureAwait(false);
+#else
                             await writer.WriteAsync(next).ConfigureAwait(false);
+#endif
                         }
                     }
                     Debug.WriteLine($"Subscribe exiting with success", ToString());
@@ -740,7 +748,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request);
+            => ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request, options.CancellationToken);
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -753,7 +761,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask<TResponse>(ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request));
+            => new ValueTask<TResponse>(ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request, options.CancellationToken));
 
         /// <summary>
         /// Performs a gRPC client-streaming call
@@ -766,11 +774,11 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new ValueTask(ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request));
+            => new ValueTask(ClientStreamingObservableTaskAsyncImpl(invoker.AsyncClientStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request, options.CancellationToken));
 
         private static async Task<TResponse> ClientStreamingObservableTaskAsyncImpl<TRequest, TResponse>(
             AsyncClientStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
-            IObservable<TRequest> request)
+            IObservable<TRequest> request, CancellationToken cancellationToken)
         {
             using (call)
             {
@@ -779,7 +787,7 @@ namespace ProtoBuf.Grpc.Internal
                 // send all the data *before* we check for a reply
                 try
                 {
-                    await request.WriteObservableTo(call.RequestStream).ConfigureAwait(false);
+                    await request.WriteObservableTo(call.RequestStream, cancellationToken).ConfigureAwait(false);
 
                     var result = await call.ResponseAsync.ConfigureAwait(false);
 
@@ -818,7 +826,7 @@ namespace ProtoBuf.Grpc.Internal
             CallInvoker invoker, Method<TRequest, TResponse> method, IObservable<TRequest> request, string? host = null)
             where TRequest : class
             where TResponse : class
-            => new DuplexObservableImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request);
+            => new DuplexObservableImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), request, options.CancellationToken);
 
         private static async IAsyncEnumerable<TResponse> DuplexAsyncImpl<TRequest, TResponse>(
             AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata,
@@ -887,11 +895,11 @@ namespace ProtoBuf.Grpc.Internal
             private AsyncDuplexStreamingCall<TRequest, TResponse>? _call;
             private MetadataContext? _metadata;
             private readonly Task _sendAll;
-            public DuplexObservableImpl(AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata, IObservable<TRequest> request) : base(call.ResponseStream)
+            public DuplexObservableImpl(AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata, IObservable<TRequest> request, CancellationToken cancellationToken) : base(call.ResponseStream)
             {
                 _call = call;
                 _metadata = metadata;
-                _sendAll = request.WriteObservableTo(call.RequestStream);
+                _sendAll = request.WriteObservableTo(call.RequestStream, cancellationToken);
             }
 
             public override void Dispose()
@@ -928,7 +936,11 @@ namespace ProtoBuf.Grpc.Internal
                     try
                     {
                         if (ignoreStreamTermination && allDone.IsCancellationRequested) break;
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+                        await output.WriteAsync(value, allDone.Token).ConfigureAwait(false);
+#else
                         await output.WriteAsync(value).ConfigureAwait(false);
+#endif
                     }
                     catch (Exception ex)
                     {
