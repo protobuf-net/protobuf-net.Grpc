@@ -3,6 +3,7 @@ using ProtoBuf;
 using ProtoBuf.Grpc;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -97,6 +98,12 @@ namespace protobuf_net.Grpc.Test
         Task Shared_TaskClientStreaming_NoContext_ValVoid(IAsyncEnumerable<HelloRequest> request);
         Task Shared_TaskClientStreaming_Context_ValVoid(IAsyncEnumerable<HelloRequest> request, CallContext context);
         Task Shared_TaskClientStreaming_CancellationToken_ValVoid(IAsyncEnumerable<HelloRequest> request, CancellationToken cancellationToken);
+        Task<HelloReply> Shared_TaskClientStream_NoContext(Stream request);
+        Task<HelloReply> Shared_TaskClientStream_Context(Stream request, CallContext context);
+        Task<HelloReply> Shared_TaskClientStream_CancellationToken(Stream request, CancellationToken cancellationToken);
+        Task Shared_TaskClientStream_NoContext_ValVoid(Stream request);
+        Task Shared_TaskClientStream_Context_ValVoid(Stream request, CallContext context);
+        Task Shared_TaskClientStream_CancellationToken_ValVoid(Stream request, CancellationToken cancellationToken);
 
         ValueTask<HelloReply> Shared_ValueTaskClientStreaming_NoContext(IAsyncEnumerable<HelloRequest> request);
         ValueTask<HelloReply> Shared_ValueTaskClientStreaming_Context(IAsyncEnumerable<HelloRequest> request, CallContext context);
@@ -104,6 +111,12 @@ namespace protobuf_net.Grpc.Test
         ValueTask Shared_ValueTaskClientStreaming_NoContext_ValVoid(IAsyncEnumerable<HelloRequest> request);
         ValueTask Shared_ValueTaskClientStreaming_Context_ValVoid(IAsyncEnumerable<HelloRequest> request, CallContext context);
         ValueTask Shared_ValueTaskClientStreaming_CancellationToken_ValVoid(IAsyncEnumerable<HelloRequest> request, CancellationToken cancellationToken);
+        ValueTask<HelloReply> Shared_ValueTaskClientStream_NoContext(Stream request);
+        ValueTask<HelloReply> Shared_ValueTaskClientStream_Context(Stream request, CallContext context);
+        ValueTask<HelloReply> Shared_ValueTaskClientStream_CancellationToken(Stream request, CancellationToken cancellationToken);
+        ValueTask Shared_ValueTaskClientStream_NoContext_ValVoid(Stream request);
+        ValueTask Shared_ValueTaskClientStream_Context_ValVoid(Stream request, CallContext context);
+        ValueTask Shared_ValueTaskClientStream_CancellationToken_ValVoid(Stream request, CancellationToken cancellationToken);
 
         // server-streaming
         IAsyncEnumerable<HelloReply> Shared_ServerStreaming_NoContext(HelloRequest request);
@@ -112,11 +125,26 @@ namespace protobuf_net.Grpc.Test
         IAsyncEnumerable<HelloReply> Shared_ServerStreaming_NoContext_VoidVal();
         IAsyncEnumerable<HelloReply> Shared_ServerStreaming_Context_VoidVal(CallContext context);
         IAsyncEnumerable<HelloReply> Shared_ServerStreaming_CancellationToken_VoidVal(CancellationToken cancellationToken);
+        Stream Shared_ServerStream_NoContext(HelloRequest request);
+        Stream Shared_ServerStream_Context(HelloRequest request, CallContext context);
+        Stream Shared_ServerStream_CancellationToken(HelloRequest request, CancellationToken cancellationToken);
+        Stream Shared_ServerStream_NoContext_VoidVal();
+        Stream Shared_ServerStream_Context_VoidVal(CallContext context);
+        Stream Shared_ServerStream_CancellationToken_VoidVal(CancellationToken cancellationToken);
 
         // duplex
         IAsyncEnumerable<HelloReply> Shared_Duplex_NoContext(IAsyncEnumerable<HelloRequest> request);
         IAsyncEnumerable<HelloReply> Shared_Duplex_Context(IAsyncEnumerable<HelloRequest> request, CallContext context);
         IAsyncEnumerable<HelloReply> Shared_Duplex_CancellationToken(IAsyncEnumerable<HelloRequest> request, CancellationToken cancellationToken);
+        Stream Shared_DuplexStream2_NoContext(IAsyncEnumerable<HelloRequest> request);
+        Stream Shared_DuplexStream2_Context(IAsyncEnumerable<HelloRequest> request, CallContext context);
+        Stream Shared_DuplexStream2_CancellationToken(IAsyncEnumerable<HelloRequest> request, CancellationToken cancellationToken);
+        IAsyncEnumerable<HelloReply> Shared_DuplexStream3_NoContext(Stream request);
+        IAsyncEnumerable<HelloReply> Shared_DuplexStream3_Context(Stream request, CallContext context);
+        IAsyncEnumerable<HelloReply> Shared_DuplexStream3_CancellationToken(Stream request, CancellationToken cancellationToken);
+        Stream Shared_DuplexStream4_NoContext(Stream request);
+        Stream Shared_DuplexStream4_Context(Stream request, CallContext context);
+        Stream Shared_DuplexStream4_CancellationToken(Stream request, CancellationToken cancellationToken);
 
         // client-streaming (observable)
         Task<HelloReply> Shared_TaskClientStreaming_NoContext_Observable(IObservable<HelloRequest> request);

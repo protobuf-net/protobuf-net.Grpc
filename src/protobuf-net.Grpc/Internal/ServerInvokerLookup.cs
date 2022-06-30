@@ -55,6 +55,11 @@ namespace ProtoBuf.Grpc.Internal
                 typeArguments: value.Type.GetGenericArguments(),
                 arguments: new Expression[] { value });
 
+        static Expression AsStream(Expression value, Expression context)
+            => Expression.Call(typeof(Reshape), nameof(Reshape.AsStream),
+                typeArguments: Type.EmptyTypes,
+                arguments: new Expression[] { value });
+
         static Expression WriteTo(Expression value, Expression writer, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.WriteTo),
                 typeArguments: value.Type.GetGenericArguments(),
@@ -63,6 +68,11 @@ namespace ProtoBuf.Grpc.Internal
         static Expression WriteObservableTo(Expression value, Expression writer, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.WriteObservableTo),
                 typeArguments: value.Type.GetGenericArguments(),
+                arguments: new Expression[] { value, writer });
+
+        static Expression WriteStreamTo(Expression value, Expression writer, Expression context)
+            => Expression.Call(typeof(Reshape), nameof(Reshape.WriteStreamTo),
+                typeArguments: Type.EmptyTypes,
                 arguments: new Expression[] { value, writer });
 
         internal static bool TryGetValue(MethodType MethodType, ContextKind Context, ResultKind Arg, ResultKind Result, VoidKind Void, out Func<MethodInfo, Expression[], Expression>? invoker)
@@ -169,6 +179,25 @@ namespace ProtoBuf.Grpc.Internal
                 {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Observable, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsObservable(args[1], args[2]), ToCancellationToken(args[2]))) },
                 {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Observable, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsObservable(args[1], args[2]), ToCancellationToken(args[2]))) },
 
+                // and the same for streams
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, AsStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+
                 // Server Streaming: Task Foo(TService service, TRequest request, IServerStreamWriter<TResponse> stream, ServerCallContext serverCallContext);
                 // => service.{method}(request, [new CallContext(serverCallContext)]).WriteTo(stream, serverCallContext.CancellationToken)
                 {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, args[1]), args[2], args[3])},
@@ -188,11 +217,32 @@ namespace ProtoBuf.Grpc.Internal
                 {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.Observable, VoidKind.Request), (method, args) => WriteObservableTo(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
                 {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.Observable, VoidKind.Request), (method, args) => WriteObservableTo(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
 
+                // and the same for streams
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, args[1]), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.Stream, VoidKind.Request), (method, args) => WriteStreamTo(Expression.Call(args[0], method), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.Stream, VoidKind.Request), (method, args) => WriteStreamTo(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.Stream, VoidKind.Request), (method, args) => WriteStreamTo(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
+
                 // Duplex: Task Foo(TService service, IAsyncStreamReader<TRequest> input, IServerStreamWriter<TResponse> output, ServerCallContext serverCallContext);
                 // => service.{method}(input.AsAsyncEnumerable(serverCallContext.CancellationToken), [new CallContext(serverCallContext)]).WriteTo(output, serverCallContext.CancellationToken)
                 {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
+
+                {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.AsyncEnumerable, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3])), args[2], args[3]) },
+                {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.AsyncEnumerable, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
+                {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.AsyncEnumerable, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, AsAsyncEnumerable(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
+
+                {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsStream(args[1], args[3])), args[2], args[3]) },
+                {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsStream(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
+                {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.AsyncEnumerable, VoidKind.None), (method, args) => WriteTo(Expression.Call(args[0], method, AsStream(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
+
+                {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, AsStream(args[1], args[3])), args[2], args[3]) },
+                {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, AsStream(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
+                {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.Stream, VoidKind.None), (method, args) => WriteStreamTo(Expression.Call(args[0], method, AsStream(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
 
                 // and for observables
                 {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.Observable, ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3])), args[2], args[3]) },

@@ -5,6 +5,7 @@ using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -52,13 +53,13 @@ namespace protobuf_net.Grpc.Test
         [Fact]
         public void GeneralPurposeSignatureCount()
         {
-            Assert.Equal(78, ContractOperation.GeneralPurposeSignatureCount());
+            Assert.Equal(105, ContractOperation.GeneralPurposeSignatureCount());
         }
 
         [Fact]
         public void ServerSignatureCount()
         {
-            Assert.Equal(78, ServerInvokerLookup.GeneralPurposeSignatureCount());
+            Assert.Equal(105, ServerInvokerLookup.GeneralPurposeSignatureCount());
         }
 
         [Fact]
@@ -112,6 +113,18 @@ namespace protobuf_net.Grpc.Test
         [InlineData(nameof(IAllOptions.Shared_Duplex_NoContext), typeof(HelloRequest), typeof(HelloReply), MethodType.DuplexStreaming, (int)ContextKind.NoContext, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_Duplex_CancellationToken), typeof(HelloRequest), typeof(HelloReply), MethodType.DuplexStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
 
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream2_Context), typeof(HelloRequest), typeof(Reshape.StreamFragment), MethodType.DuplexStreaming, (int)ContextKind.CallContext, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream2_NoContext), typeof(HelloRequest), typeof(Reshape.StreamFragment), MethodType.DuplexStreaming, (int)ContextKind.NoContext, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream2_CancellationToken), typeof(HelloRequest), typeof(Reshape.StreamFragment), MethodType.DuplexStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
+
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream3_Context), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.DuplexStreaming, (int)ContextKind.CallContext, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream3_NoContext), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.DuplexStreaming, (int)ContextKind.NoContext, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream3_CancellationToken), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.DuplexStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.Stream)]
+
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream4_Context), typeof(Reshape.StreamFragment), typeof(Reshape.StreamFragment), MethodType.DuplexStreaming, (int)ContextKind.CallContext, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream4_NoContext), typeof(Reshape.StreamFragment), typeof(Reshape.StreamFragment), MethodType.DuplexStreaming, (int)ContextKind.NoContext, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_DuplexStream4_CancellationToken), typeof(Reshape.StreamFragment), typeof(Reshape.StreamFragment), MethodType.DuplexStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.Stream)]
+
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_Context), typeof(HelloRequest), typeof(HelloReply), MethodType.ServerStreaming, (int)ContextKind.CallContext, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_NoContext), typeof(HelloRequest), typeof(HelloReply), MethodType.ServerStreaming, (int)ContextKind.NoContext, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_CancellationToken), typeof(HelloRequest), typeof(HelloReply), MethodType.ServerStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.AsyncEnumerable, (int)VoidKind.None, (int)ResultKind.Sync)]
@@ -119,12 +132,26 @@ namespace protobuf_net.Grpc.Test
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_NoContext_VoidVal), typeof(Empty), typeof(HelloReply), MethodType.ServerStreaming, (int)ContextKind.NoContext, (int)ResultKind.AsyncEnumerable, (int)VoidKind.Request, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_CancellationToken_VoidVal), typeof(Empty), typeof(HelloReply), MethodType.ServerStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.AsyncEnumerable, (int)VoidKind.Request, (int)ResultKind.Sync)]
 
+        [InlineData(nameof(IAllOptions.Shared_ServerStream_Context), typeof(HelloRequest), typeof(Reshape.StreamFragment), MethodType.ServerStreaming, (int)ContextKind.CallContext, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.Sync)]
+        [InlineData(nameof(IAllOptions.Shared_ServerStream_NoContext), typeof(HelloRequest), typeof(Reshape.StreamFragment), MethodType.ServerStreaming, (int)ContextKind.NoContext, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.Sync)]
+        [InlineData(nameof(IAllOptions.Shared_ServerStream_CancellationToken), typeof(HelloRequest), typeof(Reshape.StreamFragment), MethodType.ServerStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Stream, (int)VoidKind.None, (int)ResultKind.Sync)]
+        [InlineData(nameof(IAllOptions.Shared_ServerStream_Context_VoidVal), typeof(Empty), typeof(Reshape.StreamFragment), MethodType.ServerStreaming, (int)ContextKind.CallContext, (int)ResultKind.Stream, (int)VoidKind.Request, (int)ResultKind.Sync)]
+        [InlineData(nameof(IAllOptions.Shared_ServerStream_NoContext_VoidVal), typeof(Empty), typeof(Reshape.StreamFragment), MethodType.ServerStreaming, (int)ContextKind.NoContext, (int)ResultKind.Stream, (int)VoidKind.Request, (int)ResultKind.Sync)]
+        [InlineData(nameof(IAllOptions.Shared_ServerStream_CancellationToken_VoidVal), typeof(Empty), typeof(Reshape.StreamFragment), MethodType.ServerStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Stream, (int)VoidKind.Request, (int)ResultKind.Sync)]
+
         [InlineData(nameof(IAllOptions.Shared_TaskClientStreaming_Context), typeof(HelloRequest), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_TaskClientStreaming_NoContext), typeof(HelloRequest), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_TaskClientStreaming_CancellationToken), typeof(HelloRequest), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_TaskClientStreaming_Context_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.Task, (int)VoidKind.Response, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_TaskClientStreaming_NoContext_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.Response, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_TaskClientStreaming_CancellationToken_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Task, (int)VoidKind.Response, (int)ResultKind.AsyncEnumerable)]
+
+        [InlineData(nameof(IAllOptions.Shared_TaskClientStream_Context), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_TaskClientStream_NoContext), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_TaskClientStream_CancellationToken), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_TaskClientStream_Context_ValVoid), typeof(Reshape.StreamFragment), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.Task, (int)VoidKind.Response, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_TaskClientStream_NoContext_ValVoid), typeof(Reshape.StreamFragment), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.Response, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_TaskClientStream_CancellationToken_ValVoid), typeof(Reshape.StreamFragment), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.Task, (int)VoidKind.Response, (int)ResultKind.Stream)]
 
         [InlineData(nameof(IAllOptions.Shared_TaskUnary_Context), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallContext, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_TaskUnary_NoContext), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.Task, (int)VoidKind.None, (int)ResultKind.Sync)]
@@ -145,6 +172,13 @@ namespace protobuf_net.Grpc.Test
         [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStreaming_Context_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTask, (int)VoidKind.Response, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStreaming_NoContext_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTask, (int)VoidKind.Response, (int)ResultKind.AsyncEnumerable)]
         [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStreaming_CancellationToken_ValVoid), typeof(HelloRequest), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTask, (int)VoidKind.Response, (int)ResultKind.AsyncEnumerable)]
+
+        [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStream_Context), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTask, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStream_NoContext), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTask, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStream_CancellationToken), typeof(Reshape.StreamFragment), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTask, (int)VoidKind.None, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStream_Context_ValVoid), typeof(Reshape.StreamFragment), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTask, (int)VoidKind.Response, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStream_NoContext_ValVoid), typeof(Reshape.StreamFragment), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTask, (int)VoidKind.Response, (int)ResultKind.Stream)]
+        [InlineData(nameof(IAllOptions.Shared_ValueTaskClientStream_CancellationToken_ValVoid), typeof(Reshape.StreamFragment), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTask, (int)VoidKind.Response, (int)ResultKind.Stream)]
 
         [InlineData(nameof(IAllOptions.Shared_ValueTaskUnary_Context), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallContext, (int)ResultKind.ValueTask, (int)VoidKind.None, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_ValueTaskUnary_NoContext), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.NoContext, (int)ResultKind.ValueTask, (int)VoidKind.None, (int)ResultKind.Sync)]

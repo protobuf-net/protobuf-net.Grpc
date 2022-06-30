@@ -1,9 +1,11 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +18,7 @@ namespace ProtoBuf.Grpc.Internal
     /// </summary>
     [Obsolete(WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-    public static class Reshape
+    public static partial class Reshape
     {
         internal const string WarningMessage = "This API is intended for use by runtime-generated code; all types and methods can be changed without notice - it is only guaranteed to work with the internally generated code";
 
@@ -133,6 +135,12 @@ namespace ProtoBuf.Grpc.Internal
         public static IObservable<T> AsObservable<T>(this IAsyncStreamReader<T> reader)
             => new ReaderObservable<T>(reader);
 
+        /// <summary>
+        /// Interprets a stream-reader as an observable sequence
+        /// </summary>
+        public static Stream AsStream(this IAsyncStreamReader<StreamFragment> reader)
+            => new GrpcFragmentStream(reader, null);
+
         private class ReaderObservable<T> : IObservable<T>, IDisposable
         {
             private readonly IAsyncStreamReader<T> _reader;
@@ -208,12 +216,52 @@ namespace ProtoBuf.Grpc.Internal
         }
 
         /// <summary>
-        /// Consumes an asynchronous enumerable sequence and writes it to a server stream-writer
+        /// Consumes an observale sequence and writes it to a server stream-writer
         /// </summary>
         [Obsolete(WarningMessage, false)]
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         public static Task WriteObservableTo<T>(this IObservable<T> reader, IAsyncStreamWriter<T> writer)
             => new WriterObserver<T>().Subscribe(reader, writer);
+
+        /// <summary>
+        /// Consumes a stream and writes it to a server stream-writer
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        public static async Task WriteStreamTo(this Stream source, IAsyncStreamWriter<StreamFragment> writer)
+        {
+            if (source is MemoryStream ms && ms.TryGetBuffer(out var segment))
+            {
+                if (segment.Count > 0)
+                {
+                    // TODO: avoid this extra rent/copy
+                    byte[] leased = ArrayPool<byte>.Shared.Rent(segment.Count);
+                    Buffer.BlockCopy(segment.Array!, segment.Offset, leased, 0, segment.Count);
+                    var fragment = StreamFragment.Create(leased, segment.Count);
+                    await writer.WriteAsync(fragment).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                while (true)
+                {
+                    // TODO: overlapped reads and writes?
+                    const int CHUNK_SIZE = 16 * 1024;
+                    byte[] leased = ArrayPool<byte>.Shared.Rent(CHUNK_SIZE);
+                    var length = await source.ReadAsync(leased, 0, leased.Length).ConfigureAwait(false);
+
+                    var fragment = StreamFragment.Create(leased, length); // note: this also does a handy recycle for zero lengths
+                    if (length <= 0) break;
+
+                    await writer.WriteAsync(fragment).ConfigureAwait(false);
+                    // fragment.Dispose();
+                }
+            }
+            if (writer is IClientStreamWriter<StreamFragment> client)
+            {
+                await client.CompleteAsync().ConfigureAwait(false);
+            }
+        }
 
         private sealed class WriterObserver<T> : IObserver<T>, IValueTaskSource<bool>
 #if NETCOREAPP3_1_OR_GREATER
@@ -806,6 +854,261 @@ namespace ProtoBuf.Grpc.Internal
             where TRequest : class
             where TResponse : class
             => DuplexAsyncImpl<TRequest, TResponse>(invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions), options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken);
+
+        /// <summary>
+        /// Performs a gRPC duplex call
+        /// </summary>
+        [Obsolete(WarningMessage, false)]
+        [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Stream DuplexStreamStreamAsync<TRequest, TResponse>(
+            this in CallContext options,
+            CallInvoker invoker, Method<TRequest, TResponse> method, Stream request, string? host = null)
+            where TRequest : class
+            where TResponse : class
+        {
+            var call = (AsyncDuplexStreamingCall<StreamFragment, StreamFragment>)(object)invoker.AsyncDuplexStreamingCall<TRequest, TResponse>(method, host, options.CallOptions);
+
+            Task.Run(() => WriteStreamTo(request, call.RequestStream));
+            return new GrpcFragmentStream(call.ResponseStream, call);
+        }
+        //    => DuplexStreamStreamImpl(call, options.Prepare(), options.IgnoreStreamTermination, request, options.CancellationToken);
+
+        private sealed class GrpcFragmentStream : Stream
+        {
+            private readonly object? _parent;
+            private readonly IAsyncStreamReader<StreamFragment> _reader;
+            private Task<bool>? _pendingMoveNext;
+
+            private int _offset;
+            private StreamFragment _current = StreamFragment.Empty;
+
+            public GrpcFragmentStream(IAsyncStreamReader<StreamFragment> reader, object? parent)
+            {
+                _reader = reader;
+                _parent = parent;
+            }
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    ReleaseCurrent();
+                    if (_parent is IDisposable d) d.Dispose();
+                }
+            }
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+            public override ValueTask DisposeAsync()
+            {
+                ReleaseCurrent();
+                switch (_parent)
+                {
+                    case IAsyncDisposable ad: return ad.DisposeAsync();
+                    case IDisposable d: d.Dispose(); break;
+                }
+                return default;
+            }
+
+            public override void CopyTo(Stream destination, int bufferSize)
+            {
+                do
+                {
+                    var chunk = _current.TakeSegment(ref _offset, int.MaxValue);
+                    if (chunk.Count != 0) destination.Write(chunk.Array!, chunk.Offset, chunk.Count);
+                }
+                while (ReadNextSync());
+            }
+#endif
+
+            public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+            {
+                do
+                {
+                    var chunk = _current.TakeSegment(ref _offset, int.MaxValue);
+                    if (chunk.Count != 0) destination.Write(chunk.Array!, chunk.Offset, chunk.Count);
+                }
+                while (await ReadNextAsync(cancellationToken).ConfigureAwait(false));
+            }
+
+            public override bool CanWrite => false;
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanTimeout => true;
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw new NotSupportedException();
+            public override void WriteByte(byte value) => throw new NotSupportedException();
+            public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) => throw new NotSupportedException();
+            public override void EndWrite(IAsyncResult asyncResult) => throw new NotSupportedException();
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+            public override void Write(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
+            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+#endif
+            public override long Length => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Flush() => throw new NotSupportedException();
+            public override Task FlushAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+            public override int WriteTimeout
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                var chunk = _current.TakeSegment(ref _offset, count);
+                if (chunk.Count == 0 && !IsSyncCheck(count)) return ReadSlow(buffer, offset, count);
+                Buffer.BlockCopy(chunk.Array!, chunk.Offset, buffer, offset, chunk.Count);
+                return chunk.Count;
+            }
+
+            private bool IsSyncCheck(int count) => count == 0 && _current.Length >= _offset;
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private int ReadSlow(byte[] buffer, int offset, int count)
+                => ReadNextSync() ? Read(buffer, offset, count) : 0;
+
+            public override int ReadTimeout { get; set; }
+            private bool ReadNextSync()
+            {
+                if (_pendingMoveNext is null) _pendingMoveNext = _reader.MoveNext();
+                var timeout = ReadTimeout;
+                var guid = Guid.NewGuid();
+                while (true)
+                {
+                    ReleaseCurrent();
+                    if (timeout <= 0 || timeout == int.MaxValue)
+                    {
+                        _pendingMoveNext.Wait();
+                    }
+                    else
+                    {
+                        if (!_pendingMoveNext.Wait(timeout)) throw new TimeoutException();
+                    }
+                    bool moveNext = _pendingMoveNext.Result;
+                    _pendingMoveNext = null;
+                    if (!moveNext) return false;
+                    
+
+                    _current = _reader.Current;
+                    Debug.WriteLine($"Received (sync): {_current} from {_reader.GetType().Name}");
+                    // only return non-empty fragments (we don't actually expect empty fragments, note!)
+                    if (_current.Length > 0)
+                    {
+                        Debug.Assert(!_current.IsDisposed, $"received dead payload");
+                        return true;
+                    }
+
+                    _pendingMoveNext = _reader.MoveNext();
+                }
+            }
+            public override int ReadByte()
+            {
+                var chunk = _current.TakeSpan(ref _offset, 1);
+                if (chunk.IsEmpty) return ReadByteSlow();
+                return chunk[0];
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private int ReadByteSlow()
+                => ReadNextSync() ? ReadByte() : -1;
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+            public override int Read(Span<byte> buffer)
+            {
+                var chunk = _current.TakeSpan(ref _offset, buffer.Length);
+                if (chunk.IsEmpty && !IsSyncCheck(buffer.Length)) return ReadSlow(buffer);
+                chunk.CopyTo(buffer);
+                return chunk.Length;
+            }
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private int ReadSlow(Span<byte> buffer)
+                => ReadNextSync() ? Read(buffer) : 0;
+
+            public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                var chunk = _current.TakeSegment(ref _offset, count);
+                if (chunk.Count == 0 && !IsSyncCheck(count)) return ReadSlowAsync(buffer, offset, count, cancellationToken);
+                Buffer.BlockCopy(chunk.Array!, chunk.Offset, buffer, offset, chunk.Count);
+                return Task.FromResult<int>(chunk.Count);
+            }
+
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                var chunk = _current.TakeSpan(ref _offset, buffer.Length);
+                if (chunk.IsEmpty && !IsSyncCheck(buffer.Length)) return ReadSlowAsync(buffer, cancellationToken);
+                chunk.CopyTo(buffer.Span);
+                return new(chunk.Length);
+            }
+
+            private ValueTask<int> ReadSlowAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+            {
+                var pending = ReadNextAsync(cancellationToken);
+                if (!pending.IsCompletedSuccessfully) return ReadSlowIncompleteAsync(pending, buffer, cancellationToken);
+                return pending.Result ? new(Read(buffer.Span)) : new(0);
+            }
+
+            private async ValueTask<int> ReadSlowIncompleteAsync(ValueTask<bool> pending, Memory<byte> buffer, CancellationToken cancellationToken)
+                => (await pending.ConfigureAwait(false)) ? Read(buffer.Span) : 0;
+#endif
+            private async Task<int> ReadSlowAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+                => await ReadNextAsync(cancellationToken).ConfigureAwait(false) ? Read(buffer, offset, count) : 0;
+
+            private ValueTask<bool> ReadNextAsync(CancellationToken cancellationToken)
+            {
+                if (_pendingMoveNext is null) _pendingMoveNext = _reader.MoveNext();
+                while (true)
+                {
+                    ReleaseCurrent();
+                    if (!_pendingMoveNext.IsCompleted) return ReadNextIncompleteAsync(cancellationToken);
+
+                    var moveNext = _pendingMoveNext.Result;
+                    _pendingMoveNext = null;
+                    if (!moveNext) return new(false);
+                    
+
+                    _current = _reader.Current;
+                    Debug.WriteLine($"Received (async): {_current} from {_reader.GetType().Name}");
+                    // only return non-empty fragments (we don't actually expect empty fragments, note!)
+                    if (_current.Length > 0)
+                    {
+                        Debug.Assert(!_current.IsDisposed, $"received dead payload");
+                        Debug.Assert(!_current.IsDisposed);
+                        return new(true);
+                    }
+
+                    _pendingMoveNext = _reader.MoveNext(cancellationToken);
+                }
+            }
+
+            private async ValueTask<bool> ReadNextIncompleteAsync(CancellationToken cancellationToken)
+            {
+                while (true)
+                {
+                    ReleaseCurrent();
+                    var moveNext = await _pendingMoveNext!.ConfigureAwait(false);
+                    _pendingMoveNext = null;
+                    if (!moveNext) return false;
+
+                    _current = _reader.Current;
+                    // only return non-empty fragments (we don't actually expect empty fragments, note!)
+                    if (_current.Length > 0) return true;
+
+                    _pendingMoveNext = _reader.MoveNext(cancellationToken);
+                }
+            }
+
+            private void ReleaseCurrent()
+            {
+                _current.Dispose();
+                _current = StreamFragment.Empty;
+                _offset = 0;
+            }
+        }
+
 
         /// <summary>
         /// Performs a gRPC duplex call

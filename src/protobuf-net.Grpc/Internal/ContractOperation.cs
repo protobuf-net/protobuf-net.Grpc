@@ -6,6 +6,7 @@ using ProtoBuf.Grpc.Configuration;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Threading;
+using System.IO;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -60,6 +61,7 @@ namespace ProtoBuf.Grpc.Internal
             AsyncDuplexStreamingCall,
             AsyncServerStreamingCall,
             Data,
+            Stream,
             Invalid,
         }
 
@@ -156,6 +158,22 @@ namespace ProtoBuf.Grpc.Internal
                 { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.None, 0, RET) },
                 { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.Response, 0, VOID) },
 
+                // (and for stream)
+                { (TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                { (TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                { (TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
                 // server streaming
                 { (TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
                 { (TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
@@ -172,6 +190,15 @@ namespace ProtoBuf.Grpc.Internal
                 { (TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None, 0, RET) },
                 { (TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None, 0, RET) },
 
+                // (and for stream)
+                { (TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.Stream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Stream, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.Stream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.Stream, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.None, TypeCategory.Stream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Stream, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.Stream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.Stream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.Stream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Stream, VoidKind.None, 0, RET) },
+
+                // note: we don't quite support all duplex crossovers
                 // duplex
                 { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable,ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
                 { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
@@ -181,6 +208,17 @@ namespace ProtoBuf.Grpc.Internal
                 { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.Observable,ResultKind.Observable, VoidKind.None, 0, RET) },
                 { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None, 0, RET) },
                 { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None, 0, RET) },
+
+                // (and for stream)
+                { (TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.Stream), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.Stream,ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.Stream), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.Stream, ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.Stream), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.Stream, ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.Stream), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable,ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.Stream), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.Stream), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.Stream, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.Stream,ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.Stream, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.Stream, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
         };
         internal static int SignatureCount => s_signaturePatterns.Count;
 
@@ -196,6 +234,7 @@ namespace ProtoBuf.Grpc.Internal
             if (type == typeof(CallOptions)) return TypeCategory.CallOptions;
             if (type == typeof(CallContext)) return TypeCategory.CallContext;
             if (type == typeof(CancellationToken)) return TypeCategory.CancellationToken;
+            if (type == typeof(Stream)) return TypeCategory.Stream;
 
             if (type.IsGenericType)
             {
@@ -286,6 +325,10 @@ namespace ProtoBuf.Grpc.Internal
                     case TypeCategory.AsyncClientStreamingCall:
                     case TypeCategory.AsyncDuplexStreamingCall:
                         return type.GetGenericArguments()[req ? 0 : 1];
+                    case TypeCategory.Stream:
+#pragma warning disable CS0618 // Empty
+                        return typeof(Reshape.StreamFragment);
+#pragma warning restore CS0618
                     default:
                         throw new ArgumentOutOfRangeException(key.category.ToString());
                 }
@@ -346,9 +389,13 @@ namespace ProtoBuf.Grpc.Internal
         static readonly Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string> _clientResponseMap = new Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string>
         {
             {(MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.DuplexAsync) },
+            //{(MethodType.DuplexStreaming, ResultKind.Stream, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.DuplexStreamEnumerableAsync) },
+            //{(MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.Stream, VoidKind.None), nameof(Reshape.DuplexEnumerableStreamAsync) },
+            {(MethodType.DuplexStreaming, ResultKind.Stream, ResultKind.Stream, VoidKind.None), nameof(Reshape.DuplexStreamStreamAsync) },
             {(MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None), nameof(Reshape.DuplexObservable) },
             {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.ServerStreamingAsync) },
             {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None), nameof(Reshape.ServerStreamingObservable) },
+            //{(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None), nameof(Reshape.ServerStreamingStream) },
             {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.None), nameof(Reshape.ClientStreamingTaskAsync) },
             {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientStreamingTaskAsync) }, // Task<T> works as Task
             {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientStreamingValueTaskAsync) },
@@ -357,6 +404,10 @@ namespace ProtoBuf.Grpc.Internal
             {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientStreamingObservableTaskAsync) }, // Task<T> works as Task
             {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientStreamingObservableValueTaskAsync) },
             {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.ClientStreamingObservableValueTaskAsyncVoid) },
+            //{(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None), nameof(Reshape.ClientStreamingStreamTaskAsync) },
+            //{(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientStreamingStreamTaskAsync) }, // Task<T> works as Task
+            //{(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientStreamingStreamValueTaskAsync) },
+            //{(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.ClientStreamingStreamValueTaskAsyncVoid) },
             {(MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.None), nameof(Reshape.UnaryTaskAsync) },
             {(MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Response), nameof(Reshape.UnaryTaskAsync) }, // Task<T> works as Task
             {(MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.UnaryValueTaskAsync) },
@@ -423,6 +474,7 @@ namespace ProtoBuf.Grpc.Internal
         AsyncEnumerable,
         Grpc,
         Observable,
+        Stream,
     }
 
     [Flags]

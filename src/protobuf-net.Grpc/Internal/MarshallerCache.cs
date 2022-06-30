@@ -60,6 +60,11 @@ namespace ProtoBuf.Grpc.Internal
         }
         private Marshaller<T>? CreateMarshaller<T>()
         {
+#pragma warning disable CS0618 // inbuilt support for StreamFragment
+            if (typeof(T) == typeof(Reshape.StreamFragment))
+                return (Marshaller<T>)(object)Reshape.StreamFragment.Marshaller;
+#pragma warning restore CS0618
+
             foreach (var factory in _factories)
             {
                 if (factory.CanSerialize(typeof(T)))
