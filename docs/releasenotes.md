@@ -1,5 +1,9 @@
 # Release Notes
 
+## unreleased
+
+- try to improve blazor linker support (i.e. avoid removal of necessary APIs)
+
 ## 1.0.136
 
 - add .NET 5 target

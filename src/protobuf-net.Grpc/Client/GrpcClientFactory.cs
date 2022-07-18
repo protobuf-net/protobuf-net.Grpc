@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using ProtoBuf.Grpc.Configuration;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Client
@@ -10,6 +11,13 @@ namespace ProtoBuf.Grpc.Client
     /// </summary>
     public static class GrpcClientFactory
     {
+#if NET5_0_OR_GREATER
+        // it is *intended* that this attribute usage will help the linker not remove things that we need
+        // see: https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming#dynamicallyaccessedmembers
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
+#endif
+        internal static readonly Type ClientBaseType = typeof(ClientBase);
+
         private const string SwitchAllowUnencryptedHttp2 = "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport";
         /// <summary>
         /// Allows HttpClient to use HTTP/2 without TLS

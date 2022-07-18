@@ -1,4 +1,5 @@
 ﻿using Grpc.Core;
+using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
@@ -135,7 +136,7 @@ namespace ProtoBuf.Grpc.Internal
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig)
         {
-            Type baseType = typeof(ClientBase);
+            Type baseType = GrpcClientFactory.ClientBaseType;
 
             var callInvoker = baseType.GetProperty("CallInvoker", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetGetMethod(true);
             if (callInvoker == null || callInvoker.ReturnType != typeof(CallInvoker) || callInvoker.GetParameters().Length != 0)
