@@ -2,6 +2,10 @@
 
 ## unreleased
 
+- automatically resolve Google.Protobuf `IMessage` types used in APIs
+
+## 1.0.171
+
 - try to improve blazor linker support (i.e. avoid removal of necessary APIs)
 
 ## 1.0.136
