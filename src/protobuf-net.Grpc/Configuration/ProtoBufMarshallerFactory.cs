@@ -35,9 +35,14 @@ namespace ProtoBuf.Grpc.Configuration
         }
 
         /// <summary>
-        /// Uses the default protobuf-net serializer
+        /// Uses the default protobuf-net serializer.
         /// </summary>
         public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None, default);
+
+        /// <summary>
+        /// Provides support for <a href="https://www.nuget.org/packages/Google.Protobuf/">Google.Protobuf</a> types.
+        /// </summary>
+        public static MarshallerFactory GoogleProtobuf => GoogleProtobufMarshallerFactory.Default;
 
         /// <summary>
         /// Gets the model used by this instance.

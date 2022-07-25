@@ -21,6 +21,7 @@ message Foo {
         [Fact]
         public void GetMarshallerOnUnknownTypeFailsInExpectedWay()
         {
+            Assert.False(BinderConfiguration.Default.MarshallerCache.CanSerializeType(typeof(UnknownType)));
             var ex = Assert.Throws<InvalidOperationException>(
                 () =>
                 {
@@ -33,7 +34,9 @@ message Foo {
         public void CanAutoDetectProtobufMarshaller()
         {
             var sctx = new TestSerializationContext();
+            Assert.True(BinderConfiguration.Default.MarshallerCache.CanSerializeType(typeof(Foo)));
             var marshaller = BinderConfiguration.Default.GetMarshaller<Foo>();
+
             marshaller.ContextualSerializer(new Foo { Value = 42 }, sctx);
             var hex = BitConverter.ToString(sctx.Payload);
             Assert.Equal("08-2A", hex);
