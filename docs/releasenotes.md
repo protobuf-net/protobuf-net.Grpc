@@ -2,6 +2,7 @@
 
 ## unreleased
 
+- support sub`[SubService]` (imports one interface inside another top-level service interface) (#206 via meirkr; also )
 - automatically resolve Google.Protobuf `IMessage` types used in APIs
 
 ## 1.0.171
