@@ -82,6 +82,45 @@ namespace protobuf_net.Grpc.Test
 
             Assert.Empty(expected);
         }
+        
+        
+        [Service]
+        [SubService]
+        public interface IIServiceWithBothServiceAndSubServiceAttributes
+        {
+            void SomeMethod();
+        }
+    
+        [Fact]
+        public void WhenInterfaceHasAttributesServiceAndSubService_Throw()
+        {
+            var config = BinderConfiguration.Default;
+            Action activation = () => ContractOperation.ExpandWithInterfacesMarkedAsSubService(
+                config.Binder, 
+                typeof(IIServiceWithBothServiceAndSubServiceAttributes));
+            Assert.Throws<ArgumentException>(activation.Invoke);
+        }
+        
+        public class ServiceContractClassInheritsServiceAndSubServiceAttributes
+        : IIServiceWithBothServiceAndSubServiceAttributes, IGrpcService
+        {
+            public void SomeMethod()
+            {
+            }
+        }
+    
+        [Fact]
+        public void WhenServiceContractClassImplementsInterfaceHavingAttributesServiceAndServiceInheritable_Throw()
+        {
+            var config = BinderConfiguration.Default;
+            Action activation = () => ContractOperation.ExpandWithInterfacesMarkedAsSubService(
+                config.Binder, 
+                typeof(ServiceContractClassInheritsServiceAndSubServiceAttributes));
+            Assert.Throws<ArgumentException>(activation.Invoke);
+        }
+
+        
+        
 #pragma warning disable CS0618 // Empty
         [Theory]
         [InlineData(nameof(IAllOptions.Client_AsyncUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Grpc, (int)VoidKind.None, (int)ResultKind.Sync)]
