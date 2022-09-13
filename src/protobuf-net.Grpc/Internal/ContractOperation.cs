@@ -403,6 +403,47 @@ namespace ProtoBuf.Grpc.Internal
             if (type.IsInterface) set.Add(type);
             return set;
         }
+
+        /// <summary>
+        /// Collect all the types to be used for extracting methods for a specific Service Contract
+        /// </summary>
+        /// <param name="serviceBinder"></param>
+        /// <param name="serviceContract">Must be a service contract</param>
+        /// <returns>types to be used for extracting methods</returns>
+        internal static ISet<Type> ExpandWithInterfacesMarkedAsSubService(ServiceBinder serviceBinder,
+            Type serviceContract)
+        {
+            var set = new HashSet<Type>();
+            
+            // first add the service contract by itself 
+            set.Add(serviceContract); 
+
+            // now add all inherited interfaces which are marked as sub-services
+            foreach (var t in serviceContract.GetInterfaces())
+            {
+                if (t.IsDefined(typeof(SubServiceAttribute)))
+                {
+                    set.Add(t);
+                }
+            }
+
+            ValidateServiceContracts(serviceBinder, set);
+            return set;
+        }
+
+        private static void ValidateServiceContracts(ServiceBinder serviceBinder, HashSet<Type> set)
+        {
+            foreach (var item in set)
+            {
+                if (item.IsDefined(typeof(SubServiceAttribute)))
+                {
+                    if (serviceBinder.IsServiceContract(item, out var serviceName))
+                        throw new ArgumentException(
+                            $"Bad definition for service {serviceName}: " +
+                            $"A service contract cannot be marked as a sub-service as well");
+                }
+            }
+        }
     }
 
     internal enum ContextKind

@@ -4,9 +4,13 @@ using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Reflection;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using protobuf_net.Grpc.Reflection.Test;
+using Google.Protobuf.Reflection;
+using Grpc.Core;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -54,6 +58,43 @@ service MyService {
 }
 ", schema, ignoreLineEndingDifferences: true);
         }
+        
+        [Fact]
+        public void CheckInheritedInterfaceSchema()
+        {
+            var generator = new SchemaGenerator();
+            var schema = generator.GetSchema<IMyInheritedService>();
+            Log(schema);
+            Assert.Equal(@"syntax = ""proto3"";
+package protobuf_net.Grpc.Reflection.Test;
+import ""google/protobuf/empty.proto"";
+import ""google/protobuf/timestamp.proto"";
+
+enum Category {
+   Default = 0;
+   Foo = 1;
+   Bar = 2;
+}
+message MyRequest {
+   int32 Id = 1;
+   .google.protobuf.Timestamp When = 2;
+}
+message MyResponse {
+   string Value = 1;
+   Category Category = 2;
+   string RefId = 3; // default value could not be applied: 00000000-0000-0000-0000-000000000000
+}
+service MyInheritedService {
+   rpc GenericUnary (MyRequest) returns (MyResponse);
+   rpc InheritedAsyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+   rpc InheritedClientStreaming (stream MyRequest) returns (MyResponse);
+   rpc InheritedFullDuplex (stream MyRequest) returns (stream MyResponse);
+   rpc InheritedServerStreaming (MyRequest) returns (stream MyResponse);
+   rpc InheritedSyncEmpty (.google.protobuf.Empty) returns (.google.protobuf.Empty);
+   rpc InheritedUnary (MyRequest) returns (MyResponse);
+}
+", schema, ignoreLineEndingDifferences: true);
+        }
 
         [Service]
         public interface IMyService
@@ -65,6 +106,115 @@ service MyService {
 
             ValueTask AsyncEmpty();
             void SyncEmpty();
+        }
+
+        /// <summary>
+        /// An interface which is not marked with [Service] attribute.
+        /// Its methods are not expected to participate in reflection at all.
+        /// </summary>
+        public interface INotAService
+        {
+            ValueTask<MyResponse> NotAServiceUnary(MyRequest request, CallContext callContext = default);
+            ValueTask<MyResponse> NotAServiceClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> NotAServiceServerStreaming(MyRequest request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> NotAServiceFullDuplex(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+
+            ValueTask NotAServiceAsyncEmpty();
+            void NotAServiceSyncEmpty();
+        }
+        
+        [Theory]
+        [InlineData(typeof(IMyService))]
+        [InlineData(typeof(IMyInheritedService))]        
+        [InlineData(typeof(IMyServiceInheritTwoLevelsOfHierarchy))]        
+        public void CompareRouteTable(Type type)
+        {
+            // 1: use the existing binder logic to build the routes, using the server logic
+            var binder = new TestBinder();
+            binder.Bind(type, type, BinderConfiguration.Default);
+            var viaBinder = binder.Collect();
+            foreach (var method in viaBinder) Log(method);
+            Log("");
+
+
+            // 2: create a schema and parse it for equivalece
+            var generator = new SchemaGenerator();
+            var schema = generator.GetSchema(type);
+            Log(schema);
+            var fds = new FileDescriptorSet();
+            fds.Add("my.proto", source: new StringReader(schema));
+            fds.Process();
+            Assert.Empty(fds.GetErrors());
+            var viaSchema = new List<string>(viaBinder.Length);
+            var file = fds.Files.Single(static x => x.IncludeInOutput);
+            foreach (var service in file.Services)
+            {
+                var svcName = string.IsNullOrEmpty(file.Package) ? service.Name : $"{file.Package}.{service.Name}";
+                foreach (var method in service.Methods)
+                {
+                    viaSchema.Add($"/{svcName}/{method.Name}");
+                }
+            }
+            viaSchema.Sort();
+
+            var routeTableViaBinder = string.Join(Environment.NewLine, viaBinder);
+            var routeTableViaSchame = string.Join(Environment.NewLine, viaSchema);
+            Assert.Equal(routeTableViaBinder, routeTableViaSchame);
+
+        }
+
+        class TestBinder : ServerBinder
+        {
+            private readonly List<string> _methods = new List<string>();
+            protected override bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
+            {
+                _methods.Add(method.FullName);
+                return true;
+            }
+
+            public string[] Collect()
+            {
+                _methods.Sort();
+                var arr = _methods.ToArray();
+                _methods.Clear(); // reset
+                return arr;
+            }
+        }
+        
+        [SubService]
+        public interface ISomeInheritableGenericService<in TGenericRequest, TGenericResult>
+        {
+            ValueTask<TGenericResult> GenericUnary(TGenericRequest request, CallContext callContext = default);
+        }
+        
+        [Service]
+        public interface IMyInheritedService : ISomeInheritableGenericService<MyRequest, MyResponse>, INotAService
+        {
+            ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
+            ValueTask<MyResponse> InheritedClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedServerStreaming(MyRequest request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedFullDuplex(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+
+            ValueTask InheritedAsyncEmpty();
+            void InheritedSyncEmpty();
+        }
+        
+        [SubService]
+        public interface ISecondLevelInheritable : ISomeInheritableGenericService<MyRequest, MyResponse>, INotAService
+        {
+            ValueTask<MyResponse> InheritedUnary(MyRequest request, CallContext callContext = default);
+            ValueTask<MyResponse> InheritedClientStreaming(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedServerStreaming(MyRequest request, CallContext callContext = default);
+            IAsyncEnumerable<MyResponse> InheritedFullDuplex(IAsyncEnumerable<MyRequest> request, CallContext callContext = default);
+
+            ValueTask InheritedAsyncEmpty();
+            void InheritedSyncEmpty();
+        }
+
+        [Service]
+        public interface IMyServiceInheritTwoLevelsOfHierarchy : ISecondLevelInheritable
+        {
+            ValueTask<MyResponse> AnotherMethod(MyRequest request, CallContext callContext = default);
         }
 
         [DataContract]
@@ -151,11 +301,7 @@ service ConferencesService {
 }
 ", proto, ignoreLineEndingDifferences: true);
         }
-
-        public interface INotAService
-        {
-            ValueTask<MyResponse> SomeMethod1(MyRequest request, CallContext callContext = default);
-        }        
+        
         [Fact]
         public void WhenInterfaceIsNotServiceContract_Throw()
         {
@@ -175,6 +321,21 @@ service ConferencesService {
         {
             var generator = new SchemaGenerator();
             Action activation = () => generator.GetSchema<NotAService>();
+            Assert.Throws<ArgumentException>(activation.Invoke);
+        }
+
+
+        [Service]
+        [SubService]
+        public interface IIServiceWithBothServiceAndSubServiceAttributes
+        {
+            void SomeMethod();
+        }
+        [Fact]
+        public void WhenInterfaceHasAttributesServiceAndSubService_Throw()
+        {
+            var generator = new SchemaGenerator();
+            Action activation = () => generator.GetSchema<IIServiceWithBothServiceAndSubServiceAttributes>();
             Assert.Throws<ArgumentException>(activation.Invoke);
         }
 
@@ -266,4 +427,3 @@ namespace DifferentNamespace2
     }
 
 }
-    

@@ -185,7 +185,9 @@ namespace ProtoBuf.Grpc.Internal
                 }
 
                 int fieldIndex = 0;
-                foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
+                var contractExpandInterfaces = ContractOperation.ExpandInterfaces(typeof(TService))
+                    .ToArray();
+                foreach (var iType in contractExpandInterfaces)
                 {
                     bool isService = binderConfig.Binder.IsServiceContract(iType, out var serviceName);
 
@@ -203,10 +205,25 @@ namespace ProtoBuf.Grpc.Internal
                         type.DefineMethodOverride(impl, iMethod);
 
                         var il = impl.GetILGenerator();
-                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op, null)))
+                        
+                        // check whether the method belongs to [ServiceInherited] interface
+                        var isMethodInherited =
+                            iMethod.DeclaringType?.IsDefined(typeof(SubServiceAttribute)) ?? false;
+                        var shallMethodBeImplemented = isService || isMethodInherited;
+                        if (!(shallMethodBeImplemented && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op, null)))
                         {
                             il.ThrowException(typeof(NotSupportedException));
                             continue;
+                        }
+                        
+                        // in case method belongs to an sub-service interface, we have to find the service contract name inheriting it
+                        if (isMethodInherited)
+                        {
+                            if (!binderConfig.Binder.TryFindInheritedService(iType, contractExpandInterfaces, out serviceName))
+                            {
+                                il.ThrowException(typeof(NotSupportedException));
+                                continue;
+                            }
                         }
 
                         Type[] fromTo = new Type[] { op.From, op.To };

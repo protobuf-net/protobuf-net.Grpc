@@ -4,6 +4,7 @@ using ProtoBuf.Grpc.Internal;
 using ProtoBuf.Meta;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 namespace ProtoBuf.Grpc.Reflection
@@ -78,7 +79,8 @@ namespace ProtoBuf.Grpc.Reflection
                 {
                     Name = name
                 };
-                var ops = contractType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+            
+                var ops = GetMethodsRecursively(binder, contractType);
                 foreach (var method in ops)
                 {
                     if (method.DeclaringType == typeof(object))
@@ -133,6 +135,17 @@ namespace ProtoBuf.Grpc.Reflection
                 if (type == typeof(TimeSpan)) return typeof(WellKnownTypes.Duration);
                 return type;
             }
+        }
+
+        private static MethodInfo[] GetMethodsRecursively(ServiceBinder serviceBinder, Type contractType)
+        {
+            var includingInheritedInterfaces = ContractOperation.ExpandWithInterfacesMarkedAsSubService(serviceBinder, contractType);
+
+            var inheritedMethods = includingInheritedInterfaces
+                .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                .ToArray();
+            
+            return inheritedMethods;
         }
     }
 }
