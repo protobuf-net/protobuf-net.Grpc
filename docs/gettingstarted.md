@@ -97,8 +97,8 @@ interface IBar
 }
 ```
 
-Here, the bindings are `/foo/A` and `/bar/B`. A client can be constructed for `IBar` by itself, since `IBar` is routable (via `/bar/`). If there was an additional service that *also* inherited `IBar`, they
-could not be used independently, since both uses would want to route via `/bar/.
+Here, the bindings are `/foo/A` and `/bar/B`. A client can be constructed for `IBar` by itself, since `IBar` is routable (via `/bar/`) - or a client can be constructed for `IFoo`, which will route `A()` via `/foo/A` and `B()` via `/bar/B`.
+If there were additional services that *also* inherited `IBar`, they could not be configured as side-by-side independent implementations of `B`, since all uses would want to route via `/bar/`.
 
 2. Inherited interfaces as composition
 
