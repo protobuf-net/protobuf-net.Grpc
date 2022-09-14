@@ -64,15 +64,15 @@ namespace protobuf_net.Grpc.Test
         [Fact]
         public void CheckAllMethodsCovered()
         {
-            var expected =  new HashSet<string>(typeof(IAllOptions).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(x => x.Name));
+            var expected = new HashSet<string>(typeof(IAllOptions).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Select(x => x.Name));
             Assert.Equal(ContractOperation.SignatureCount, expected.Count);
 
             var attribs = GetType().GetMethod(nameof(CheckMethodIdentification))!.GetCustomAttributesData();
-            foreach(var attrib in attribs)
+            foreach (var attrib in attribs)
             {
                 if (attrib.AttributeType != typeof(InlineDataAttribute)) continue;
 
-                foreach(var arg in attrib.ConstructorArguments)
+                foreach (var arg in attrib.ConstructorArguments)
                 {
                     var vals = (ReadOnlyCollection<CustomAttributeTypedArgument>)arg.Value!;
                     var name = (string)vals[0].Value!;
@@ -82,25 +82,25 @@ namespace protobuf_net.Grpc.Test
 
             Assert.Empty(expected);
         }
-        
-        
+
+
         [Service]
         [SubService]
         public interface IIServiceWithBothServiceAndSubServiceAttributes
         {
             void SomeMethod();
         }
-    
+
         [Fact]
         public void WhenInterfaceHasAttributesServiceAndSubService_Throw()
         {
             var config = BinderConfiguration.Default;
             Action activation = () => ContractOperation.ExpandWithInterfacesMarkedAsSubService(
-                config.Binder, 
+                config.Binder,
                 typeof(IIServiceWithBothServiceAndSubServiceAttributes));
             Assert.Throws<ArgumentException>(activation.Invoke);
         }
-        
+
         public class ServiceContractClassInheritsServiceAndSubServiceAttributes
         : IIServiceWithBothServiceAndSubServiceAttributes, IGrpcService
         {
@@ -108,19 +108,51 @@ namespace protobuf_net.Grpc.Test
             {
             }
         }
-    
+
         [Fact]
         public void WhenServiceContractClassImplementsInterfaceHavingAttributesServiceAndServiceInheritable_Throw()
         {
             var config = BinderConfiguration.Default;
             Action activation = () => ContractOperation.ExpandWithInterfacesMarkedAsSubService(
-                config.Binder, 
+                config.Binder,
                 typeof(ServiceContractClassInheritsServiceAndSubServiceAttributes));
             Assert.Throws<ArgumentException>(activation.Invoke);
         }
 
-        
-        
+        [Fact]
+        public void MultiLevelSubServiceBindings()
+        {
+            // server
+            var serverBinder = new TestServerBinder();
+            Assert.Equal(5, serverBinder.Bind<IOuter>(null!));
+            var methods = string.Join(",", serverBinder.Methods.OrderBy(_ => _));
+
+            Assert.Equal("/other/C,/other/D,/outer/A,/outer/B,/outer/C", methods);
+        }
+
+        [Service("outer")]
+        public interface IOuter : IMiddle, IOtherMiddle
+        {
+            void A();
+        }
+
+        [SubService]
+        public interface IMiddle : IInner
+        {
+            void B();
+        }
+        [SubService]
+        public interface IInner
+        {
+            void C();
+        }
+
+        [Service("other")]
+        public interface IOtherMiddle : IInner
+        {
+            void D();
+        }
+
 #pragma warning disable CS0618 // Empty
         [Theory]
         [InlineData(nameof(IAllOptions.Client_AsyncUnary), typeof(HelloRequest), typeof(HelloReply), MethodType.Unary, (int)ContextKind.CallOptions, (int)ResultKind.Grpc, (int)VoidKind.None, (int)ResultKind.Sync)]
@@ -271,7 +303,7 @@ namespace protobuf_net.Grpc.Test
             {
                 _output.WriteLine(grp.Key.ToString());
                 _output.WriteLine("");
-                foreach(var (kind, signature) in grp.OrderBy(x => x.Signature))
+                foreach (var (kind, signature) in grp.OrderBy(x => x.Signature))
                     _output.WriteLine(signature);
                 _output.WriteLine("");
             }

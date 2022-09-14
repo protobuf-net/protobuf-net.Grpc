@@ -74,9 +74,63 @@ public class MultiplyResult
 Object models can be arbitrarily deep and complex (including lists, arrays, etc), but should be trees (not graphs).
 
 
-Service contracts are interfaces marked with `[ServiceContract]`. You can optionally specify the gRPC service name, otherwise it'll use
-reasonable convention-based defaults. Individual RPC calls are methods, which can optionally be marked with `[OperationContract]` to control
-the name.
+Service contracts are interfaces marked with `[ServiceContract]` (from `System.ServiceModel`) or `[Service]` (protobuf-net.Grpc inbuilt). You can optionally specify the gRPC service name, otherwise it'll use
+reasonable convention-based defaults. Individual RPC calls are methods, which can optionally be marked with `[OperationContract]` (from `System.ServiceModel`) or `[Operation]` (protobuf-net.Grpc inbuilt) to control
+the name. There is also `[SubService]`, which is used as below.
+
+### Interface inheritance works, with 2 possible scenarios:
+
+1. Inherited interfaces as distinct routable services
+
+Consider:
+
+``` c#
+[Service("foo")]
+interface IFoo : IBar
+{
+    Task A();
+}
+[Service("bar")]
+interface IBar
+{
+    Task B();
+}
+```
+
+Here, the bindings are `/foo/A` and `/bar/B`. A client can be constructed for `IBar` by itself, since `IBar` is routable (via `/bar/`). If there was an additional service that *also* inherited `IBar`, they
+could not be used independently, since both uses would want to route via `/bar/.
+
+2. Inherited interfaces as composition
+
+Consider:
+
+``` c#
+[Service("foo")]
+interface IFoo : IBar
+{
+    Task A();
+}
+[SubService]
+interface IBar
+{
+    Task B();
+}
+```
+
+Here, the bindings are `/foo/A`, `/foo/B`. The methods from `IBar` are lifted upwards and form part of the `IFoo` service. As a consequence, a client **cannot** be constructed for `IBar` in isolation, as
+`IBar` is not routable without knowing the top-level service to use. The upside of this, however, is that we can add additional services with the same common API, and route them independently. For example, we can add:
+
+``` c#
+[Service("blap")]
+interface IBlap : IBar
+{
+    Task C();
+}
+```
+
+This adds the bindings `/blap/C` and `/blap/B`, so now we have two completely independent routable implementations of `B()`. This is especially useful for generic scenarios, common repositories, etc.
+
+### Call types
 
 In gRPC, there are 4 types of call available:
 
@@ -88,7 +142,7 @@ In gRPC, there are 4 types of call available:
 Let's start with unary; a simple example there might be:
 
 ``` c#
-[ServiceContract(Name = "Hyper.Calculator")]
+[ServiceContract(Name = "Hyper.Calculator")] // or [Service("Hyper.Calculator")]
 public interface ICalculator
 {
     ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
