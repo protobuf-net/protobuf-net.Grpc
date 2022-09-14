@@ -128,7 +128,7 @@ interface IBlap : IBar
 }
 ```
 
-This adds the bindings `/blap/C` and `/blap/B`, so now we have two completely independent routable implementations of `B()`. This is especially useful for generic scenarios, common repositories, etc.
+This adds the bindings `/blap/C` and `/blap/B`, so now we have two completely independent routable implementations of `B()`. This is especially useful for generic scenarios, common service-level infrastructure APIs, repository APIs, etc.
 
 #### Call types
 
