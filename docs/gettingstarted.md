@@ -78,7 +78,7 @@ Service contracts are interfaces marked with `[ServiceContract]` (from `System.S
 reasonable convention-based defaults. Individual RPC calls are methods, which can optionally be marked with `[OperationContract]` (from `System.ServiceModel`) or `[Operation]` (protobuf-net.Grpc inbuilt) to control
 the name. There is also `[SubService]`, which is used as below.
 
-### Interface inheritance works, with 2 possible scenarios:
+#### Interface inheritance works, with 2 possible scenarios:
 
 1. Inherited interfaces as distinct routable services
 
@@ -130,7 +130,7 @@ interface IBlap : IBar
 
 This adds the bindings `/blap/C` and `/blap/B`, so now we have two completely independent routable implementations of `B()`. This is especially useful for generic scenarios, common repositories, etc.
 
-### Call types
+#### Call types
 
 In gRPC, there are 4 types of call available:
 
