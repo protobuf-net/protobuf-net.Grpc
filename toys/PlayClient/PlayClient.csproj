@@ -10,6 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="protobuf-net.ServiceModel" Version="$(ProtoBufNetServiceModelVersion)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'net461'">

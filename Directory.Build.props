@@ -33,6 +33,7 @@
 
     <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
     <ProtoBufNet3Version>3.0.101</ProtoBufNet3Version>
+    <ProtoBufNetServiceModelVersion>3.0.101</ProtoBufNetServiceModelVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

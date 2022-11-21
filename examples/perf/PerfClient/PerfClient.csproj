@@ -17,6 +17,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
+    <PackageReference Include="protobuf-net.ServiceModel" Version="$(ProtoBufNetServiceModelVersion)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
