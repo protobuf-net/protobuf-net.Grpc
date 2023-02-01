@@ -10,9 +10,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufVersion)" />
-    <PackageReference Include="Grpc" Version="$(GrpcVersion)" />
-    <PackageReference Include="Grpc.Tools" Version="$(GrpcVersion)">
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc" />
+    <PackageReference Include="Grpc.Tools">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

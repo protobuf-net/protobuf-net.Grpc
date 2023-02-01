@@ -80,7 +80,7 @@ namespace protobuf_net.Grpc.Test
 
                 T IAsyncStreamReader<T>.Current => default!;
 
-                WriteOptions IAsyncStreamWriter<T>.WriteOptions { get; set; } = WriteOptions.Default;
+                WriteOptions? IAsyncStreamWriter<T>.WriteOptions { get; set; } = WriteOptions.Default;
 
                 private NulStream() { }
 

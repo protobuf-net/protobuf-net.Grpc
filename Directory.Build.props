@@ -14,7 +14,8 @@
     <RepositoryType>git</RepositoryType>
     <Product>protobuf-net.Grpc ($(TargetFramework))</Product>
     <PackageReleaseNotes>https://protobuf-net.github.io/protobuf-net.Grpc/releasenotes#$(VersionPrefix)</PackageReleaseNotes>
-    
+
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <PackageTags>grpc</PackageTags>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>embedded</DebugType>
@@ -26,13 +27,8 @@
     <!--<CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>-->
 
     <ExampleRefs>local</ExampleRefs> <!-- local or nuget-->
-    <PBGRPCLibVersion>1.0.167</PBGRPCLibVersion>
-    <GrpcDotNetVersion>2.44.0</GrpcDotNetVersion>
-    <GoogleProtobufVersion>3.19.2</GoogleProtobufVersion>
-    <GrpcVersion>2.44.0</GrpcVersion>
 
-    <ProtoBufNet2Version>2.4.6</ProtoBufNet2Version>
-    <ProtoBufNet3Version>3.0.101</ProtoBufNet3Version>
+    <ProtoBufNet2Version>2.4.8</ProtoBufNet2Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release' or '$(Configuration)'=='VS'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -49,8 +45,8 @@
   </ItemGroup>
   
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
-    <PackageReference Include="Nerdbank.GitVersioning" Version="3.3.37" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All"/>
+    <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" />
   </ItemGroup>
 </Project>

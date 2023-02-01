@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.Net.ClientFactory" Version="$(GrpcDotNetVersion)" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
     <ProjectReference Include="..\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
   </ItemGroup>
 

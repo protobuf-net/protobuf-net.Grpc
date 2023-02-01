@@ -1,15 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net461;netstandard2.1;netstandard2.0;net5.0</TargetFrameworks>
+        <TargetFrameworks>net461;netstandard2.1;netstandard2.0;net6.0</TargetFrameworks>
         <RootNamespace>ProtoBuf.Grpc.Reflection</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
         <!-- note this uses v3 features that are not back-ported to v2 -->
-        <PackageReference Include="protobuf-net.Reflection" Version="$(ProtoBufNet3Version)" />
-        <PackageReference Include="protobuf-net" Version="$(ProtoBufNet3Version)" />
-        <PackageReference Include="protobuf-net.Core" Version="$(ProtoBufNet3Version)" />
+        <PackageReference Include="protobuf-net.Reflection" />
+        <PackageReference Include="protobuf-net" />
+        <PackageReference Include="protobuf-net.Core" />
     </ItemGroup>
 
     <ItemGroup>

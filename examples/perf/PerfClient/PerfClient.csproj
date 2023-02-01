@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
@@ -10,13 +10,13 @@
     <None Remove="PerfTest.proto" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufVersion)" />
-    <PackageReference Include="Grpc" Version="$(GrpcVersion)" />
-    <PackageReference Include="Grpc.Tools" Version="$(GrpcVersion)">
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc" />
+    <PackageReference Include="Grpc.Tools">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
+    <PackageReference Include="Grpc.Net.Client" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" />
