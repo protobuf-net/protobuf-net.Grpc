@@ -114,7 +114,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
 
 
-#if !(NET461 || NET472)
+#if !(NET462 || NET472)
         [Fact]
         public async Task ClientProxyTests_WhenCalledToDerivedInterfaceMethod_NoException()
         {

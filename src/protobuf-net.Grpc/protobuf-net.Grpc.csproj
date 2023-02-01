@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net461;netstandard2.1;netstandard2.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net462;netstandard2.1;netstandard2.0;net6.0</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc</RootNamespace>
     <DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
   </PropertyGroup>
@@ -9,7 +9,7 @@
     <PackageReference Include="Grpc.Core.Api" />
     <PackageReference Include="protobuf-net" VersionOverride="$(ProtoBufNet2Version)" />
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net461' or '$(TargetFramework)' == 'netstandard2.0'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="System.Threading.Channels" />
   </ItemGroup>

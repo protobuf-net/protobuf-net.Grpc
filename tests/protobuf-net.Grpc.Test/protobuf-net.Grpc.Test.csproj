@@ -2,12 +2,12 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFrameworks>net461;net472;net6.0;net7.0</TargetFrameworks>
+    <TargetFrameworks>net462;net472;net6.0;net7.0</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CA1822;CS8981</NoWarn>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net462' and '$(TargetFramework)' != 'net472'">
     <DefineConstants>$(DefineConstants);CLIENT_FACTORY</DefineConstants>
   </PropertyGroup>
   
@@ -23,7 +23,7 @@
     <PackageReference Include="Grpc.Core.Api" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
+  <ItemGroup Condition="'$(TargetFramework)' != 'net462' and '$(TargetFramework)' != 'net472'">
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>

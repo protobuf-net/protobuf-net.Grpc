@@ -1,4 +1,4 @@
-#if !(NET461 || NET472)
+#if !(NET462 || NET472)
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
