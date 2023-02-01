@@ -1,11 +1,6 @@
-﻿using Google.Protobuf.WellKnownTypes;
-using Grpc.Core;
+﻿using Grpc.Net.Client;
 using Hyper;
-using MegaCorp;
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Client
 {
@@ -37,7 +32,7 @@ namespace Client
 
             async Task RunClient()
             {
-                var channel = new Channel("localhost", 10042, ChannelCredentials.Insecure);
+                var channel = GrpcChannel.ForAddress("http://localhost:10042");
                 var calc = new Calculator.CalculatorClient(channel);
                 MultiplyRequest req = new MultiplyRequest { X = 2, Y = 4 };
                 while (!cts.IsCancellationRequested)

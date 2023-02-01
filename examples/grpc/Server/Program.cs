@@ -1,4 +1,6 @@
-﻿using Grpc.Core;
+﻿#define FAIL
+
+using Grpc.Core;
 using Hyper;
 using System;
 using System.Threading.Tasks;
@@ -32,9 +34,12 @@ namespace MyServer
     {
         public override Task<MultiplyResult> Multiply(MultiplyRequest request, ServerCallContext context)
         {
-            Console.WriteLine($"Processing request from {context.Peer}");
+#if FAIL
+        throw new InvalidOperationException("The cogs are misaligned");
+#else
             var result = request.X * request.Y;
             return Task.FromResult(new MultiplyResult { Result = result });
+#endif
         }
     }
     class MyClock : TimeService.TimeServiceBase
