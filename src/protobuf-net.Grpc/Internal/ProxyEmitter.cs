@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProtoBuf.Grpc.Internal
 {
@@ -215,7 +216,18 @@ namespace ProtoBuf.Grpc.Internal
                             // it is frequent for some infrastructure code to always call Dispose() on IDisposable,
                             // for instance Asp.Net Core dependency injection, so we don't want to throw in this case
                             if (iType == typeof(IDisposable) && iMethod.Name == nameof(IDisposable.Dispose))
+                            {
                                 il.Emit(OpCodes.Ret);
+                            }
+                            else if (iType == typeof(IAsyncDisposable) && iMethod.Name == nameof(IAsyncDisposable.DisposeAsync))
+                            {
+                                // "return default;"
+                                var loc = il.DeclareLocal(typeof(ValueTask));
+                                il.Emit(OpCodes.Ldloca, loc);
+                                il.Emit(OpCodes.Initobj, typeof(ValueTask));
+                                il.Emit(OpCodes.Ldloc, loc);
+                                il.Emit(OpCodes.Ret);
+                            }
                             else
                                 il.ThrowException(typeof(NotSupportedException));
                             continue;

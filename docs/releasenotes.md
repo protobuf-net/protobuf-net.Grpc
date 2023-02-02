@@ -1,5 +1,9 @@
 # Release Notes
 
+## unreleased
+
+- improve handling of `IAsyncDisposable`
+
 ## 1.1.1
 
 - update library references
