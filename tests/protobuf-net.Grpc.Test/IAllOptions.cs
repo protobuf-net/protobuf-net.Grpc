@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using ProtoBuf;
 using ProtoBuf.Grpc;
+using System;
 using System.Collections.Generic;
 using System.ServiceModel;
 using System.Threading;
@@ -116,5 +117,33 @@ namespace protobuf_net.Grpc.Test
         IAsyncEnumerable<HelloReply> Shared_Duplex_NoContext(IAsyncEnumerable<HelloRequest> request);
         IAsyncEnumerable<HelloReply> Shared_Duplex_Context(IAsyncEnumerable<HelloRequest> request, CallContext context);
         IAsyncEnumerable<HelloReply> Shared_Duplex_CancellationToken(IAsyncEnumerable<HelloRequest> request, CancellationToken cancellationToken);
+
+        // client-streaming (observable)
+        Task<HelloReply> Shared_TaskClientStreaming_NoContext_Observable(IObservable<HelloRequest> request);
+        Task<HelloReply> Shared_TaskClientStreaming_Context_Observable(IObservable<HelloRequest> request, CallContext context);
+        Task<HelloReply> Shared_TaskClientStreaming_CancellationToken_Observable(IObservable<HelloRequest> request, CancellationToken cancellationToken);
+        Task Shared_TaskClientStreaming_NoContext_ValVoid_Observable(IObservable<HelloRequest> request);
+        Task Shared_TaskClientStreaming_Context_ValVoid_Observable(IObservable<HelloRequest> request, CallContext context);
+        Task Shared_TaskClientStreaming_CancellationToken_ValVoid_Observable(IObservable<HelloRequest> request, CancellationToken cancellationToken);
+
+        ValueTask<HelloReply> Shared_ValueTaskClientStreaming_NoContext_Observable(IObservable<HelloRequest> request);
+        ValueTask<HelloReply> Shared_ValueTaskClientStreaming_Context_Observable(IObservable<HelloRequest> request, CallContext context);
+        ValueTask<HelloReply> Shared_ValueTaskClientStreaming_CancellationToken_Observable(IObservable<HelloRequest> request, CancellationToken cancellationToken);
+        ValueTask Shared_ValueTaskClientStreaming_NoContext_ValVoid_Observable(IObservable<HelloRequest> request);
+        ValueTask Shared_ValueTaskClientStreaming_Context_ValVoid_Observable(IObservable<HelloRequest> request, CallContext context);
+        ValueTask Shared_ValueTaskClientStreaming_CancellationToken_ValVoid_Observable(IObservable<HelloRequest> request, CancellationToken cancellationToken);
+
+        // server-streaming (observable)
+        IObservable<HelloReply> Shared_ServerStreaming_NoContext_Observable(HelloRequest request);
+        IObservable<HelloReply> Shared_ServerStreaming_Context_Observable(HelloRequest request, CallContext context);
+        IObservable<HelloReply> Shared_ServerStreaming_CancellationToken_Observable(HelloRequest request, CancellationToken cancellationToken);
+        IObservable<HelloReply> Shared_ServerStreaming_NoContext_VoidVal_Observable();
+        IObservable<HelloReply> Shared_ServerStreaming_Context_VoidVal_Observable(CallContext context);
+        IObservable<HelloReply> Shared_ServerStreaming_CancellationToken_VoidVal_Observable(CancellationToken cancellationToken);
+
+        // duplex (observable)
+        IObservable<HelloReply> Shared_Duplex_NoContext_Observable(IObservable<HelloRequest> request);
+        IObservable<HelloReply> Shared_Duplex_Context_Observable(IObservable<HelloRequest> request, CallContext context);
+        IObservable<HelloReply> Shared_Duplex_CancellationToken_Observable(IObservable<HelloRequest> request, CancellationToken cancellationToken);
     }
 }

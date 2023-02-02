@@ -17,6 +17,7 @@ namespace ProtoBuf.Grpc.Internal
         public MethodInfo Method { get; }
         public MethodType MethodType { get; }
         public ContextKind Context { get; }
+        public ResultKind Arg { get; }
         public ResultKind Result { get; }
         public VoidKind Void { get; }
         public bool VoidRequest => (Void & VoidKind.Request) != 0;
@@ -25,7 +26,7 @@ namespace ProtoBuf.Grpc.Internal
         public override string ToString() => $"{Name}: {From.Name}=>{To.Name}, {MethodType}, {Result}, {Context}, {Void}";
 
         public ContractOperation(string name, Type from, Type to, MethodInfo method,
-            MethodType methodType, ContextKind contextKind, ResultKind resultKind, VoidKind @void)
+            MethodType methodType, ContextKind contextKind, ResultKind arg, ResultKind resultKind, VoidKind @void)
         {
             Name = name;
             From = from;
@@ -33,6 +34,7 @@ namespace ProtoBuf.Grpc.Internal
             Method = method;
             MethodType = methodType;
             Context = contextKind;
+            Arg = arg;
             Result = resultKind;
             Void = @void;
         }
@@ -48,6 +50,7 @@ namespace ProtoBuf.Grpc.Internal
             IAsyncEnumerable,
             IAsyncStreamReader,
             IServerStreamWriter,
+            IObservable,
             CallOptions,
             ServerCallContext,
             CallContext,
@@ -61,94 +64,123 @@ namespace ProtoBuf.Grpc.Internal
         }
 
         const int RET = -1, VOID = -2;
-        private static readonly Dictionary<(TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret), (ContextKind Context, MethodType Method, ResultKind Result, VoidKind Void, int From, int To)>
-            s_signaturePatterns = new Dictionary<(TypeCategory, TypeCategory, TypeCategory, TypeCategory), (ContextKind, MethodType, ResultKind, VoidKind, int, int)>
+        private static readonly Dictionary<(TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret), (ContextKind Context, MethodType Method, ResultKind Arg, ResultKind Result, VoidKind Void, int From, int To)>
+            s_signaturePatterns = new Dictionary<(TypeCategory, TypeCategory, TypeCategory, TypeCategory), (ContextKind, MethodType, ResultKind, ResultKind, VoidKind, int, int)>
         {
                 // google server APIs
-                { (TypeCategory.IAsyncStreamReader, TypeCategory.ServerCallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.ServerCallContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncStreamReader, TypeCategory.IServerStreamWriter, TypeCategory.ServerCallContext, TypeCategory.UntypedTask), (ContextKind.ServerCallContext, MethodType.DuplexStreaming, ResultKind.Task, VoidKind.None, 0, 1) },
-                { (TypeCategory.Data, TypeCategory.IServerStreamWriter, TypeCategory.ServerCallContext, TypeCategory.UntypedTask), (ContextKind.ServerCallContext, MethodType.ServerStreaming, ResultKind.Task, VoidKind.None, 0, 1) },
-                { (TypeCategory.Data, TypeCategory.ServerCallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.ServerCallContext, MethodType.Unary, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncStreamReader, TypeCategory.ServerCallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.ServerCallContext, MethodType.ClientStreaming, ResultKind.Grpc, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncStreamReader, TypeCategory.IServerStreamWriter, TypeCategory.ServerCallContext, TypeCategory.UntypedTask), (ContextKind.ServerCallContext, MethodType.DuplexStreaming, ResultKind.Grpc, ResultKind.Task, VoidKind.None, 0, 1) },
+                { (TypeCategory.Data, TypeCategory.IServerStreamWriter, TypeCategory.ServerCallContext, TypeCategory.UntypedTask), (ContextKind.ServerCallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Task, VoidKind.None, 0, 1) },
+                { (TypeCategory.Data, TypeCategory.ServerCallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.ServerCallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.None, 0, RET) },
 
                 // google client APIs
-                { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.AsyncUnaryCall), (ContextKind.CallOptions, MethodType.Unary, ResultKind.Grpc, VoidKind.None, 0, RET) },
-                { (TypeCategory.CallOptions, TypeCategory.None, TypeCategory.None, TypeCategory.AsyncClientStreamingCall), (ContextKind.CallOptions, MethodType.ClientStreaming, ResultKind.Grpc, VoidKind.None, RET, RET) },
-                { (TypeCategory.CallOptions, TypeCategory.None, TypeCategory.None, TypeCategory.AsyncDuplexStreamingCall), (ContextKind.CallOptions, MethodType.DuplexStreaming, ResultKind.Grpc, VoidKind.None, RET, RET) },
-                { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.AsyncServerStreamingCall), (ContextKind.CallOptions, MethodType.ServerStreaming, ResultKind.Grpc, VoidKind.None, 0, RET) },
-                { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.Data), (ContextKind.CallOptions, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.AsyncUnaryCall), (ContextKind.CallOptions, MethodType.Unary, ResultKind.Sync, ResultKind.Grpc, VoidKind.None, 0, RET) },
+                { (TypeCategory.CallOptions, TypeCategory.None, TypeCategory.None, TypeCategory.AsyncClientStreamingCall), (ContextKind.CallOptions, MethodType.ClientStreaming, ResultKind.Grpc, ResultKind.Grpc, VoidKind.None, RET, RET) },
+                { (TypeCategory.CallOptions, TypeCategory.None, TypeCategory.None, TypeCategory.AsyncDuplexStreamingCall), (ContextKind.CallOptions, MethodType.DuplexStreaming, ResultKind.Grpc, ResultKind.Grpc, VoidKind.None, RET, RET) },
+                { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.AsyncServerStreamingCall), (ContextKind.CallOptions, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Grpc, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallOptions, TypeCategory.None, TypeCategory.Data), (ContextKind.CallOptions, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.None, 0, RET) },
 
                 // unary parameterless, with or without a return value
-                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.Both, VOID, VOID)},
-                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.Request, VOID, RET)},
-                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.Both, VOID, VOID) },
-                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Both, VOID, VOID) },
-                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.Request, VOID, RET) },
-                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Both, VOID, VOID)},
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Request, VOID, RET)},
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.None,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
 
-                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.Both,VOID, VOID)},
-                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.Request, VOID, RET)},
-                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.Both, VOID, VOID) },
-                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Both,VOID, VOID) },
-                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.Request, VOID, RET) },
-                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Both,VOID, VOID)},
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Request, VOID, RET)},
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Both,VOID, VOID) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
 
-                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, VoidKind.Both,VOID, VOID)},
-                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, VoidKind.Request, VOID, RET)},
-                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Task, VoidKind.Both, VOID, VOID) },
-                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.ValueTask, VoidKind.Both,VOID, VOID) },
-                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Task, VoidKind.Request, VOID, RET) },
-                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.Void), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Both,VOID, VOID)},
+                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.Data), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Request, VOID, RET)},
+                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Both, VOID, VOID) },
+                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Both,VOID, VOID) },
+                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Request, VOID, RET) },
 
                 // unary with parameter, with or without a return value
-                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.Void), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.Response, 0, VOID)},
-                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.Data), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET)},
-                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.Void), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Response, 0, VOID)},
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.Data), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.None, 0, RET)},
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.None,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.None, 0, RET) },
 
-                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.Void), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.Response,0, VOID)},
-                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.Data), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET)},
-                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.Response,0, VOID) },
-                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.Void), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Response,0, VOID)},
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.Data), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.None, 0, RET)},
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Response,0, VOID) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.None, 0, RET) },
 
-                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.Void), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, VoidKind.Response,0, VOID)},
-                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.Data), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, VoidKind.None, 0, RET)},
-                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Task, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.ValueTask, VoidKind.Response,0, VOID) },
-                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.Void), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Response,0, VOID)},
+                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.Data), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.None, 0, RET)},
+                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Response,0, VOID) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken,TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.None, 0, RET) },
 
                 // client streaming
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.Response, 0, VOID) },
 
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.Response, 0, VOID) },
 
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Task, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Task, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                // (and for observable)
+                { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.Response, 0, VOID) },
+
+                { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.Response, 0, VOID) },
+                { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.Response, 0, VOID) },
 
                 // server streaming
-                { (TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
-                { (TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
-                { (TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
-                { (TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
-                { (TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
-                { (TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+
+                // (and for observable)
+                { (TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.Observable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.Request, VOID, RET) },
+                { (TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync,ResultKind.Observable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None, 0, RET) },
+                { (TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None, 0, RET) },
 
                 // duplex
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
-                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.None, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable,ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+                { (TypeCategory.IAsyncEnumerable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IAsyncEnumerable), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None, 0, RET) },
+
+                // (and for observable)
+                { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.Observable,ResultKind.Observable, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None, 0, RET) },
+                { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None, 0, RET) },
         };
         internal static int SignatureCount => s_signaturePatterns.Count;
 
@@ -173,6 +205,7 @@ namespace ProtoBuf.Grpc.Internal
                 if (genType == typeof(IAsyncEnumerable<>)) return TypeCategory.IAsyncEnumerable;
                 if (genType == typeof(IAsyncStreamReader<>)) return TypeCategory.IAsyncStreamReader;
                 if (genType == typeof(IServerStreamWriter<>)) return TypeCategory.IServerStreamWriter;
+                if (genType == typeof(IObservable<>)) return TypeCategory.IObservable;
                 if (genType == typeof(AsyncUnaryCall<>)) return TypeCategory.AsyncUnaryCall;
                 if (genType == typeof(AsyncClientStreamingCall<,>)) return TypeCategory.AsyncClientStreamingCall;
                 if (genType == typeof(AsyncDuplexStreamingCall<,>)) return TypeCategory.AsyncDuplexStreamingCall;
@@ -246,6 +279,7 @@ namespace ProtoBuf.Grpc.Internal
                     case TypeCategory.IServerStreamWriter:
                     case TypeCategory.AsyncUnaryCall:
                     case TypeCategory.AsyncServerStreamingCall:
+                    case TypeCategory.IObservable:
                         return type.GetGenericArguments()[0];
                     case TypeCategory.AsyncClientStreamingCall:
                     case TypeCategory.AsyncDuplexStreamingCall:
@@ -258,7 +292,7 @@ namespace ProtoBuf.Grpc.Internal
             var from = GetDataType(GetTypeByIndex(config.From), true);
             var to = GetDataType(GetTypeByIndex(config.To), false);
 
-            operation = new ContractOperation(opName!, from, to, method, config.Method, config.Context, config.Result, config.Void);
+            operation = new ContractOperation(opName!, from, to, method, config.Method, config.Context, config.Arg, config.Result, config.Void);
             return true;
         }
         public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType, IBindContext? bindContext)
@@ -307,20 +341,26 @@ namespace ProtoBuf.Grpc.Internal
              && parameters[0].ParameterType == typeof(CallContext).MakeByRefType()
              select method).ToDictionary(x => x.Name);
 
-        static readonly Dictionary<(MethodType, ResultKind, VoidKind), string> _clientResponseMap = new Dictionary<(MethodType, ResultKind, VoidKind), string>
+        static readonly Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string> _clientResponseMap = new Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string>
         {
-            {(MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.DuplexAsync) },
-            {(MethodType.ServerStreaming, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.ServerStreamingAsync) },
-            {(MethodType.ClientStreaming, ResultKind.Task, VoidKind.None), nameof(Reshape.ClientStreamingTaskAsync) },
-            {(MethodType.ClientStreaming, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientStreamingTaskAsync) }, // Task<T> works as Task
-            {(MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientStreamingValueTaskAsync) },
-            {(MethodType.ClientStreaming, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.ClientStreamingValueTaskAsyncVoid) },
-            {(MethodType.Unary, ResultKind.Task, VoidKind.None), nameof(Reshape.UnaryTaskAsync) },
-            {(MethodType.Unary, ResultKind.Task, VoidKind.Response), nameof(Reshape.UnaryTaskAsync) }, // Task<T> works as Task
-            {(MethodType.Unary, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.UnaryValueTaskAsync) },
-            {(MethodType.Unary, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.UnaryValueTaskAsyncVoid) },
-            {(MethodType.Unary, ResultKind.Sync, VoidKind.None), nameof(Reshape.UnarySync) },
-            {(MethodType.Unary, ResultKind.Sync, VoidKind.Response), nameof(Reshape.UnarySyncVoid) },
+            {(MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.DuplexAsync) },
+            {(MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None), nameof(Reshape.DuplexObservable) },
+            {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.ServerStreamingAsync) },
+            {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.Observable, VoidKind.None), nameof(Reshape.ServerStreamingObservable) },
+            {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.None), nameof(Reshape.ClientStreamingTaskAsync) },
+            {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientStreamingTaskAsync) }, // Task<T> works as Task
+            {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientStreamingValueTaskAsync) },
+            {(MethodType.ClientStreaming, ResultKind.AsyncEnumerable, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.ClientStreamingValueTaskAsyncVoid) },
+            {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.None), nameof(Reshape.ClientStreamingObservableTaskAsync) },
+            {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientStreamingObservableTaskAsync) }, // Task<T> works as Task
+            {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientStreamingObservableValueTaskAsync) },
+            {(MethodType.ClientStreaming, ResultKind.Observable, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.ClientStreamingObservableValueTaskAsyncVoid) },
+            {(MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.None), nameof(Reshape.UnaryTaskAsync) },
+            {(MethodType.Unary, ResultKind.Sync, ResultKind.Task, VoidKind.Response), nameof(Reshape.UnaryTaskAsync) }, // Task<T> works as Task
+            {(MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.UnaryValueTaskAsync) },
+            {(MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.UnaryValueTaskAsyncVoid) },
+            {(MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.None), nameof(Reshape.UnarySync) },
+            {(MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Response), nameof(Reshape.UnarySyncVoid) },
         };
 #pragma warning restore CS0618
 
@@ -332,7 +372,7 @@ namespace ProtoBuf.Grpc.Internal
                 case ContextKind.CallContext:
                 case ContextKind.NoContext:
                 case ContextKind.CancellationToken:
-                    return _clientResponseMap.TryGetValue((MethodType, Result, Void & VoidKind.Response), out var helper) ? helper : null;
+                    return _clientResponseMap.TryGetValue((MethodType, Arg, Result, Void & VoidKind.Response), out var helper) ? helper : null;
                 default:
                     return null;
             };
@@ -361,6 +401,47 @@ namespace ProtoBuf.Grpc.Internal
             if (type.IsInterface) set.Add(type);
             return set;
         }
+
+        /// <summary>
+        /// Collect all the types to be used for extracting methods for a specific Service Contract
+        /// </summary>
+        /// <param name="serviceBinder"></param>
+        /// <param name="serviceContract">Must be a service contract</param>
+        /// <returns>types to be used for extracting methods</returns>
+        internal static ISet<Type> ExpandWithInterfacesMarkedAsSubService(ServiceBinder serviceBinder,
+            Type serviceContract)
+        {
+            var set = new HashSet<Type>();
+            
+            // first add the service contract by itself 
+            set.Add(serviceContract); 
+
+            // now add all inherited interfaces which are marked as sub-services
+            foreach (var t in serviceContract.GetInterfaces())
+            {
+                if (t.IsDefined(typeof(SubServiceAttribute)))
+                {
+                    set.Add(t);
+                }
+            }
+
+            ValidateServiceContracts(serviceBinder, set);
+            return set;
+        }
+
+        private static void ValidateServiceContracts(ServiceBinder serviceBinder, HashSet<Type> set)
+        {
+            foreach (var item in set)
+            {
+                if (item.IsDefined(typeof(SubServiceAttribute)))
+                {
+                    if (serviceBinder.IsServiceContract(item, out var serviceName))
+                        throw new ArgumentException(
+                            $"Bad definition for service {serviceName}: " +
+                            $"A service contract cannot be marked as a sub-service as well");
+                }
+            }
+        }
     }
 
     internal enum ContextKind
@@ -380,6 +461,7 @@ namespace ProtoBuf.Grpc.Internal
         ValueTask,
         AsyncEnumerable,
         Grpc,
+        Observable,
     }
 
     [Flags]

@@ -178,7 +178,7 @@ namespace protobuf_net.Grpc.Test.Integration.Issues
             }
         }
 
-#if !(NET461 || NET472)
+#if !(NET462 || NET472)
         [Fact]
         public async Task ManagedClient_Vanilla_Fault()
         {

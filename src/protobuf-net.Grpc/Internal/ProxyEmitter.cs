@@ -1,4 +1,5 @@
 using Grpc.Core;
+using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
@@ -135,7 +136,7 @@ namespace ProtoBuf.Grpc.Internal
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig)
         {
-            Type baseType = typeof(ClientBase);
+            Type baseType = GrpcClientFactory.ClientBaseType;
 
             var callInvoker = baseType.GetProperty("CallInvoker", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetGetMethod(true);
             if (callInvoker == null || callInvoker.ReturnType != typeof(CallInvoker) || callInvoker.GetParameters().Length != 0)
@@ -184,7 +185,9 @@ namespace ProtoBuf.Grpc.Internal
                 }
 
                 int fieldIndex = 0;
-                foreach (var iType in ContractOperation.ExpandInterfaces(typeof(TService)))
+                var contractExpandInterfaces = ContractOperation.ExpandInterfaces(typeof(TService))
+                    .ToArray();
+                foreach (var iType in contractExpandInterfaces)
                 {
                     bool isService = binderConfig.Binder.IsServiceContract(iType, out var serviceName);
 
@@ -202,7 +205,12 @@ namespace ProtoBuf.Grpc.Internal
                         type.DefineMethodOverride(impl, iMethod);
 
                         var il = impl.GetILGenerator();
-                        if (!(isService && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op, null)))
+                        
+                        // check whether the method belongs to [ServiceInherited] interface
+                        var isMethodInherited =
+                            iMethod.DeclaringType?.IsDefined(typeof(SubServiceAttribute)) ?? false;
+                        var shallMethodBeImplemented = isService || isMethodInherited;
+                        if (!(shallMethodBeImplemented && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op, null)))
                         {
                             // it is frequent for some infrastructure code to always call Dispose() on IDisposable,
                             // for instance Asp.Net Core dependency injection, so we don't want to throw in this case
@@ -211,6 +219,16 @@ namespace ProtoBuf.Grpc.Internal
                             else
                                 il.ThrowException(typeof(NotSupportedException));
                             continue;
+                        }
+                        
+                        // in case method belongs to an sub-service interface, we have to find the service contract name inheriting it
+                        if (isMethodInherited)
+                        {
+                            if (!binderConfig.Binder.TryFindInheritedService(iType, contractExpandInterfaces, out serviceName))
+                            {
+                                il.ThrowException(typeof(NotSupportedException));
+                                continue;
+                            }
                         }
 
                         Type[] fromTo = new Type[] { op.From, op.To };

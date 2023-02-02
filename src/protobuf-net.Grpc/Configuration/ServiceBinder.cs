@@ -1,7 +1,8 @@
-﻿using System;
+﻿using ProtoBuf.Grpc.Internal;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
-using ProtoBuf.Grpc.Internal;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -19,13 +20,14 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected ServiceBinder() { }
 
-        private readonly Dictionary<Type, InterfaceMapping> _map = new Dictionary<Type, InterfaceMapping>();
-        private InterfaceMapping GetMap(Type contractType, Type serviceType)
+        private static readonly ConcurrentDictionary<Type, InterfaceMapping> s_map = new ConcurrentDictionary<Type, InterfaceMapping>();
+        private static InterfaceMapping GetMap(Type contractType, Type serviceType)
         {
-            if (!_map.TryGetValue(contractType, out var interfaceMapping))
-            {
+            if (!s_map.TryGetValue(contractType, out var interfaceMapping))
+            {   // note: it doesn't matter if this ends up getting called more than once
+                // in a race condition - we don't need to block etc (the result will be compatible)
                 interfaceMapping = serviceType.GetInterfaceMap(contractType);
-                _map[contractType] = interfaceMapping;
+                s_map[contractType] = interfaceMapping;
             }
             return interfaceMapping;
         }
@@ -219,6 +221,29 @@ namespace ProtoBuf.Grpc.Configuration
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Attempt to resolve a sub-service
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="typesToSearchIn"></param>
+        /// <param name="serviceName"></param>
+        /// <returns></returns>
+        internal bool TryFindInheritedService(Type type, IEnumerable<Type> typesToSearchIn, out string? serviceName)
+        {
+            foreach (var potentialServiceContract in typesToSearchIn)
+            {
+                if (potentialServiceContract != type
+                    && type.IsAssignableFrom(potentialServiceContract)
+                    && IsServiceContract(potentialServiceContract, out serviceName))
+                {
+                    return true;
+                }
+            }
+
+            serviceName = null;
+            return false;
         }
     }
 }

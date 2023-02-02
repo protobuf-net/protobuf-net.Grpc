@@ -1,18 +1,18 @@
-﻿using System;
+﻿using Grpc.Core;
+using ProtoBuf.Grpc.Internal;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
-using Grpc.Core;
-using ProtoBuf.Grpc.Internal;
 
 namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
     /// Helper API for binding servers; this is an advanced API that would only be used if you are implementing a new transport provider
     /// </summary>
-    public abstract class ServerBinder : IBindContext
+    public partial class ServerBinder : IBindContext
     {
         /*
          warning: this code is reflection hell - lots of switching from Type to <T>; it isn't pretty,
@@ -24,57 +24,77 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
-        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null, TService? service = null)
+        public int Bind<TService>(object state, BinderConfiguration? binderConfiguration = null,
+            TService? service = null)
             where TService : class
             => Bind(state, typeof(TService), binderConfiguration, service);
 
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
-        public int Bind(object state, Type serviceType, BinderConfiguration? binderConfiguration = null, object? service = null)
+        public int Bind(object state, Type serviceType, BinderConfiguration? binderConfiguration = null,
+            object? service = null)
         {
             int totalCount = 0;
             object?[]? argsBuffer = null;
             Type[] typesBuffer = Array.Empty<Type>();
-            string? serviceName;
-            if (binderConfiguration == null) binderConfiguration = BinderConfiguration.Default;
-            var serviceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
-                ? new HashSet<Type> { serviceType }
+            binderConfiguration ??= BinderConfiguration.Default;
+            var potentialServiceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
+                ? new HashSet<Type> {serviceType}
                 : ContractOperation.ExpandInterfaces(serviceType);
 
             bool serviceImplSimplifiedExceptions = serviceType.IsDefined(typeof(SimpleRpcExceptionsAttribute));
-            foreach (var serviceContract in serviceContracts)
+            foreach (var potentialServiceContract in potentialServiceContracts)
             {
-                if (!binderConfiguration.Binder.IsServiceContract(serviceContract, out serviceName)) continue;
+                if (!binderConfiguration.Binder.IsServiceContract(potentialServiceContract, out var serviceName)) continue;
 
-                var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions || serviceContract.IsDefined(typeof(SimpleRpcExceptionsAttribute));
+                // now that we know it is a service contract type for sure
+                var serviceContract = potentialServiceContract;
+                
+                var typesToBeIncludedInMethodsBinding =
+                    ContractOperation.ExpandWithInterfacesMarkedAsSubService(binderConfiguration.Binder, serviceContract);
+
+                // Per service contract, we will collect all the methods of sub-service interfaces
+                // and bind them as they were defined in the service contract itself.
+                // (their binding key will be based on the service contract and not based on the base-interfaces).
+
                 int svcOpCount = 0;
-                var bindCtx = new ServiceBindContext(serviceContract, serviceType, state, binderConfiguration.Binder);
-                foreach (var op in ContractOperation.FindOperations(binderConfiguration, serviceContract, this))
+                foreach (var typeToBindItsMethods in typesToBeIncludedInMethodsBinding)
                 {
-                    if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Result, op.Void, out var invoker)
-                        && AddMethod(op.From, op.To, op.Name, op.Method, op.MethodType, invoker, bindCtx,
-                        serviceContractSimplifiedExceptions || op.Method.IsDefined(typeof(SimpleRpcExceptionsAttribute))
-                        ))
+                    var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions ||
+                                                              typeToBindItsMethods.IsDefined(
+                                                                  typeof(SimpleRpcExceptionsAttribute));
+                    var bindCtx = new ServiceBindContext(serviceContract, serviceType, state, binderConfiguration.Binder);
+                    foreach (var op in ContractOperation.FindOperations(binderConfiguration, typeToBindItsMethods, this))
                     {
-                        // yay!
-                        totalCount++;
-                        svcOpCount++;
+                        if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Arg, op.Result, op.Void, out var invoker)
+                            && AddMethod(serviceName, op.From, op.To, op.Name, op.Method, op.MethodType, invoker, bindCtx,
+                                serviceContractSimplifiedExceptions || op.Method.IsDefined(typeof(SimpleRpcExceptionsAttribute))
+                            ))
+                        {
+                            // yay!
+                            totalCount++;
+                            svcOpCount++;
+                        }
                     }
                 }
+
                 OnServiceBound(state, serviceName!, serviceType, serviceContract, svcOpCount);
             }
+
             return totalCount;
 
-            bool AddMethod(Type @in, Type @out, string on, MethodInfo m, MethodType t,
-                Func<MethodInfo, ParameterExpression[], Expression>? invoker, ServiceBindContext bindContext, bool simplifiedExceptionHandling)
+            bool AddMethod(string? serviceName, Type @in, Type @out, string on, MethodInfo m, MethodType t,
+                Func<MethodInfo, ParameterExpression[], Expression>? invoker, ServiceBindContext bindContext,
+                bool simplifiedExceptionHandling)
             {
                 try
                 {
                     if (typesBuffer.Length == 0)
                     {
-                        typesBuffer = new Type[] { serviceType, typeof(void), typeof(void) };
+                        typesBuffer = new Type[] {serviceType, typeof(void), typeof(void)};
                     }
+
                     typesBuffer[1] = @in;
                     typesBuffer[2] = @out;
 
@@ -84,6 +104,7 @@ namespace ProtoBuf.Grpc.Configuration
                         argsBuffer[6] = binderConfiguration!.MarshallerCache;
                         argsBuffer[7] = service is null ? null : Expression.Constant(service, serviceType);
                     }
+
                     argsBuffer[0] = serviceName;
                     argsBuffer[1] = on;
                     argsBuffer[2] = m;
@@ -93,7 +114,7 @@ namespace ProtoBuf.Grpc.Configuration
                     // 6, 7 set during array initialization
                     argsBuffer[8] = simplifiedExceptionHandling;
 
-                    return (bool)s_addMethod.MakeGenericMethod(typesBuffer).Invoke(this, argsBuffer)!;
+                    return (bool) s_addMethod.MakeGenericMethod(typesBuffer).Invoke(this, argsBuffer)!;
                 }
                 catch (Exception fail)
                 {
@@ -102,11 +123,6 @@ namespace ProtoBuf.Grpc.Configuration
                 }
             }
         }
-
-        /// <summary>
-        /// Reports the number of operations available for a service
-        /// </summary>
-        protected virtual void OnServiceBound(object state, string serviceName, Type serviceType, Type serviceContract, int operationCount) { }
 
         private static readonly MethodInfo s_addMethod = typeof(ServerBinder).GetMethod(
             nameof(AddMethod), BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -133,7 +149,8 @@ namespace ProtoBuf.Grpc.Configuration
             /// </summary>
             public MethodInfo Method { get; }
 
-            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method, ConstantExpression? service, bool simpleExceptionHandling)
+            internal MethodStub(Func<MethodInfo, Expression[], Expression>? invoker, MethodInfo method,
+                ConstantExpression? service, bool simpleExceptionHandling)
             {
                 _simpleExceptionHandling = simpleExceptionHandling;
                 _invoker = invoker;
@@ -163,7 +180,7 @@ namespace ProtoBuf.Grpc.Configuration
                     else
                     {
                         // basic - direct call
-                        return (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
+                        return (TDelegate) Delegate.CreateDelegate(typeof(TDelegate), _service, Method);
                     }
                 }
                 else
@@ -172,7 +189,8 @@ namespace ProtoBuf.Grpc.Configuration
 
                     Expression[] mapArgs;
                     if (_service is null)
-                    {   // if no service object, then the service is part of the signature, i.e. (svc, req) => svc.Blah();
+                    {
+                        // if no service object, then the service is part of the signature, i.e. (svc, req) => svc.Blah();
                         mapArgs = lambdaArgs;
                     }
                     else
@@ -189,6 +207,7 @@ namespace ProtoBuf.Grpc.Configuration
                     {
                         body = ApplySimpleExceptionHandling(body);
                     }
+
                     var lambda = Expression.Lambda<TDelegate>(body, lambdaArgs);
 
                     return lambda.Compile();
@@ -204,8 +223,10 @@ namespace ProtoBuf.Grpc.Configuration
                 }
                 else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Task<>))
                 {
-                    body = Expression.Call(s_ReshapeWithSimpleExceptionHandling[1].MakeGenericMethod(type.GetGenericArguments()), body);
+                    body = Expression.Call(
+                        s_ReshapeWithSimpleExceptionHandling[1].MakeGenericMethod(type.GetGenericArguments()), body);
                 }
+
                 return body;
             }
         }
@@ -213,8 +234,8 @@ namespace ProtoBuf.Grpc.Configuration
 #pragma warning disable CS0618
         private static readonly Dictionary<int, MethodInfo> s_ReshapeWithSimpleExceptionHandling =
             (from method in typeof(Reshape).GetMethods(BindingFlags.Public | BindingFlags.Static)
-             where method.Name is nameof(Reshape.WithSimpleExceptionHandling)
-             select method)
+                where method.Name is nameof(Reshape.WithSimpleExceptionHandling)
+                select method)
             .ToDictionary(method => method.IsGenericMethodDefinition ? method.GetGenericArguments().Length : 0);
 #pragma warning restore CS0618
 
@@ -227,40 +248,24 @@ namespace ProtoBuf.Grpc.Configuration
             where TRequest : class
             where TResponse : class
         {
-            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName, marshallerCache.GetMarshaller<TRequest>(), marshallerCache.GetMarshaller<TResponse>());
+            var grpcMethod = new Method<TRequest, TResponse>(methodType, serviceName, operationName,
+                marshallerCache.GetMarshaller<TRequest>(), marshallerCache.GetMarshaller<TResponse>());
             var stub = new MethodStub<TService>(invoker, method, service, simplfiedExceptionHandling);
             try
             {
-                return TryBind<TService, TRequest, TResponse>(bindContext, grpcMethod, stub);
+                var success = TryBind<TService, TRequest, TResponse>(bindContext, grpcMethod, stub);
+                if (success) _log?.WriteLine($"{grpcMethod.ServiceName} / {grpcMethod.Name} ({grpcMethod.Type}) bound to {stub.Method.DeclaringType?.Name}.{stub.Method.Name}");
+                return success;
             }
             catch (Exception ex)
             {
                 OnError(ex.Message);
                 return false;
             }
-
         }
-
-        /// <summary>
-        /// The implementing binder should bind the method to the bind-state
-        /// </summary>
-        protected abstract bool TryBind<TService, TRequest, TResponse>(ServiceBindContext bindContext, Method<TRequest, TResponse> method, MethodStub<TService> stub)
-            where TService : class
-            where TRequest : class
-            where TResponse : class;
 
         void IBindContext.LogWarning(string message, object?[]? args) => OnWarn(message, args);
         void IBindContext.LogError(string message, object?[]? args) => OnError(message, args);
-
-        /// <summary>
-        /// Publish a warning message
-        /// </summary>
-        protected internal virtual void OnWarn(string message, object?[]? args = null) { }
-
-        /// <summary>
-        /// Publish a warning message
-        /// </summary>
-        protected internal virtual void OnError(string message, object?[]? args = null) { }
 
         /// <summary>
         /// Describes the relationship between a service contract and a service definition

@@ -43,7 +43,7 @@ reports problems at build-time.
 ### 1: define your data contracts and service contracts
 
 Your service and data contracts can be placed directly in the client/server (see later), or can be in a separate class library. If you use
-a separate library, make sure you target `netcoreapp3.0` or above.
+a separate library, make sure you target `net6.0` or above.
 
 As for what they look like: think "WCF". Data contracts are classes marked with either `[ProtoContract]` or `[DataContract]`, with individual members
 annotated with either `[ProtoMember]` or `[DataMember]`. The `[Proto*]` options are protobuf-net specific and offer fine-grained
@@ -74,9 +74,63 @@ public class MultiplyResult
 Object models can be arbitrarily deep and complex (including lists, arrays, etc), but should be trees (not graphs).
 
 
-Service contracts are interfaces marked with `[ServiceContract]`. You can optionally specify the gRPC service name, otherwise it'll use
-reasonable convention-based defaults. Individual RPC calls are methods, which can optionally be marked with `[OperationContract]` to control
-the name.
+Service contracts are interfaces marked with `[ServiceContract]` (from `System.ServiceModel`) or `[Service]` (protobuf-net.Grpc inbuilt). You can optionally specify the gRPC service name, otherwise it'll use
+reasonable convention-based defaults. Individual RPC calls are methods, which can optionally be marked with `[OperationContract]` (from `System.ServiceModel`) or `[Operation]` (protobuf-net.Grpc inbuilt) to control
+the name. There is also `[SubService]`, which is used as below.
+
+#### Interface inheritance works, with 2 possible scenarios:
+
+1. Inherited interfaces as distinct routable services
+
+Consider:
+
+``` c#
+[Service("foo")]
+interface IFoo : IBar
+{
+    Task A();
+}
+[Service("bar")]
+interface IBar
+{
+    Task B();
+}
+```
+
+Here, the bindings are `/foo/A` and `/bar/B`. A client can be constructed for `IBar` by itself, since `IBar` is routable (via `/bar/`) - or a client can be constructed for `IFoo`, which will route `A()` via `/foo/A` and `B()` via `/bar/B`.
+If there were additional services that *also* inherited `IBar`, they could not be configured as side-by-side independent implementations of `B`, since all uses would want to route via `/bar/`.
+
+2. Inherited interfaces as composition
+
+Consider:
+
+``` c#
+[Service("foo")]
+interface IFoo : IBar
+{
+    Task A();
+}
+[SubService]
+interface IBar
+{
+    Task B();
+}
+```
+
+Here, the bindings are `/foo/A`, `/foo/B`. The methods from `IBar` are lifted upwards and form part of the `IFoo` service. As a consequence, a client **cannot** be constructed for `IBar` in isolation, as
+`IBar` is not routable without knowing the top-level service to use. The upside of this, however, is that we can add additional services with the same common API, and route them independently. For example, we can add:
+
+``` c#
+[Service("blap")]
+interface IBlap : IBar
+{
+    Task C();
+}
+```
+
+This adds the bindings `/blap/C` and `/blap/B`, so now we have two completely independent routable implementations of `B()`. This is especially useful for generic scenarios, common service-level infrastructure APIs, repository APIs, etc.
+
+#### Call types
 
 In gRPC, there are 4 types of call available:
 
@@ -88,7 +142,7 @@ In gRPC, there are 4 types of call available:
 Let's start with unary; a simple example there might be:
 
 ``` c#
-[ServiceContract(Name = "Hyper.Calculator")]
+[ServiceContract(Name = "Hyper.Calculator")] // or [Service("Hyper.Calculator")]
 public interface ICalculator
 {
     ValueTask<MultiplyResult> MultiplyAsync(MultiplyRequest request);
@@ -146,7 +200,7 @@ introduction of `.google.protobuf.Timestamp`). It is recommended to use `DataFor
 
 ### 2: implement the server
 
-1. Create an ASP.NET Core Web Application targeting `netcoreapp3.0`, and add a package references to [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore)
+1. Create an ASP.NET Core Web Application targeting `net7.0`, and add a package references to [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore)
 (and a project/package reference to your data/service contracts if necessary). Note that the gRPC tooling can run alongside other services/sites that your ASP.NET application is providing.
 2. in `CreateHostBuilder`, make sure you are using `WebHost`, and enable listening on `HttpProtocols.Http2`; see [`Program.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Program.cs)
 3. in `ConfigureServices`, call `services.AddCodeFirstGrpc()`; see [`Startup.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Startup.cs)
@@ -208,7 +262,7 @@ Now listening on: http://localhost:10042
 
 ### 2: implement the client
 
-OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET Core console application targeting `netcoreapp3.0`,
+OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET console application targeting `net7.0`,
 and add a package reference to [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
 need to twist it's arm a little; then we can very easily create a client to our services at our base address; let's start by doing some maths:
 

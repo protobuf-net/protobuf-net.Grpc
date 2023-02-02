@@ -25,11 +25,11 @@ namespace ProtoBuf.Grpc.Internal
 
         private readonly ConcurrentDictionary<Type, object?> _marshallers
             = new ConcurrentDictionary<Type, object?>
-        {
+            {
 #pragma warning disable CS0618 // Empty
-            [typeof(Empty)] = Empty.Marshaller
+                [typeof(Empty)] = Empty.Marshaller
 #pragma warning restore CS0618
-        };
+            };
 
         internal Marshaller<T> GetMarshaller<T>()
         {
@@ -55,7 +55,7 @@ namespace ProtoBuf.Grpc.Internal
         private Marshaller<T>? CreateAndAdd<T>()
         {
             object? obj = CreateMarshaller<T>();
-            if (!_marshallers.TryAdd(typeof(T), obj)) obj= _marshallers[typeof(T)];
+            if (!_marshallers.TryAdd(typeof(T), obj)) obj = _marshallers[typeof(T)];
             return obj as Marshaller<T>;
         }
         private Marshaller<T>? CreateMarshaller<T>()
@@ -63,11 +63,10 @@ namespace ProtoBuf.Grpc.Internal
             foreach (var factory in _factories)
             {
                 if (factory.CanSerialize(typeof(T)))
-                    return factory.CreateMarshaller<T>(); 
+                    return factory.CreateMarshaller<T>();
             }
             return null;
         }
-
         internal MarshallerFactory? TryGetFactory(Type type)
         {
             foreach (var factory in _factories)
@@ -79,7 +78,7 @@ namespace ProtoBuf.Grpc.Internal
         }
 
         internal TFactory? TryGetFactory<TFactory>()
-            where TFactory : MarshallerFactory
+        where TFactory : MarshallerFactory
         {
             foreach (var factory in _factories)
             {

@@ -1,4 +1,4 @@
-#if !(NET461 || NET472)
+#if !(NET462 || NET472)
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
@@ -291,7 +291,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
 
         [Fact]
-        public void CanCallAdocService()
+        public void CanCallAdhocService()
         {
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
             using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");

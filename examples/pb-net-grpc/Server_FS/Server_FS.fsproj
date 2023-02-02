@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <SignAssembly>false</SignAssembly>
     <LangVersion>4.7</LangVersion>
   </PropertyGroup>
@@ -15,14 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
-    <PackageReference Include="TaskBuilder.fs" Version="2.1.0" />
+    <PackageReference Include="TaskBuilder.fs" />
 
     <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" />
-    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc.AspNetCore" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="FSharp.Core" Version="5.0.1" />
-  </ItemGroup>
-
 </Project>

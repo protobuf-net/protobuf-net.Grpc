@@ -68,7 +68,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// The request headers associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public Metadata RequestHeaders
+        public Metadata? RequestHeaders
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => CallOptions.Headers;
@@ -95,7 +95,7 @@ namespace ProtoBuf.Grpc
         /// <summary>
         /// The write options associated with the operation; this will be valid for both server and client operations
         /// </summary>
-        public WriteOptions WriteOptions
+        public WriteOptions? WriteOptions
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => CallOptions.WriteOptions;
