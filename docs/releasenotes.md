@@ -1,9 +1,10 @@
 # Release Notes
 
-## unreleased
+## 1.1.0
 
 - update library references
-- drop net461 (moving to net462 as lower bound); drop netcoreapp3.1 and net5.0 (moving to net6.0 as lower bound)
+- drop net461 (moving to net462 as lower bound); drop netcoreapp3.1 and net5.0 (moving to net6.0/netstandard2.1 as lower bound)
+- improve handling of `IDisposable` and delegates in services (#199 by lanfeust69)
 
 ## 1.0.177
 
