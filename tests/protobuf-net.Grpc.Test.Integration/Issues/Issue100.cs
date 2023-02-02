@@ -130,7 +130,7 @@ As sub-object :
             }
         }
 
-#if !(NET461 || NET472)
+#if !(NET462 || NET472)
         [Fact]
         public async Task Issue100_ManagedClient()
         {

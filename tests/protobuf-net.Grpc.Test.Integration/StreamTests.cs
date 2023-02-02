@@ -398,7 +398,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
     }
 
-#if !(NET461 || NET472)
+#if !(NET462 || NET472)
     public class ManagedStreamTests : StreamTests
     {
         public override bool IsManagedClient => true;

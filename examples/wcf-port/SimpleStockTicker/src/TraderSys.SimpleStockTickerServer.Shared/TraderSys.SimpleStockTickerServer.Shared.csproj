@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.ServiceModel.Primitives" Version="4.8.1" />
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="5.0.0" />
-    <PackageReference Include="protobuf-net" Version="$(ProtoBufNet3Version)" />
+    <PackageReference Include="System.ServiceModel.Primitives" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+    <PackageReference Include="protobuf-net" />
   </ItemGroup>
 
   <ItemGroup>

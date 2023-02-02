@@ -2,6 +2,9 @@
 
 ## unreleased
 
+- update library references
+- drop net461 (moving to net462 as lower bound); drop netcoreapp3.1 and net5.0 (moving to net6.0 as lower bound)
+
 ## 1.0.177
 
 - support sub`[SubService]` (imports one interface inside another top-level service interface) (#206 via meirkr; also protobuf-net #859)

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <SignAssembly>false</SignAssembly>
     <LangVersion>4.7</LangVersion>
   </PropertyGroup>
@@ -13,15 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc" Version="$(PBGRPCLibVersion)" />
+    <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc" />
     <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
-    <PackageReference Include="Grpc.Net.Client" Version="$(GrpcDotNetVersion)" />
+    <PackageReference Include="Grpc.Net.Client" />
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
-    <PackageReference Include="TaskBuilder.fs" Version="2.1.0" />
+    <PackageReference Include="TaskBuilder.fs" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="FSharp.Core" Version="5.0.1" />
-  </ItemGroup>
-
 </Project>

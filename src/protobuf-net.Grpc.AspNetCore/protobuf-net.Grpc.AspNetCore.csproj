@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
+    <TargetFrameworks>net6.0</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc.Server</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
-    <PackageReference Include="Grpc.AspNetCore.Server" Version="$(GrpcDotNetVersion)" />
+    <PackageReference Include="Grpc.AspNetCore.Server" />
   </ItemGroup>
 </Project>

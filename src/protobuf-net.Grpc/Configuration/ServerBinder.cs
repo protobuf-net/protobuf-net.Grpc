@@ -267,6 +267,7 @@ namespace ProtoBuf.Grpc.Configuration
         void IBindContext.LogWarning(string message, object?[]? args) => OnWarn(message, args);
         void IBindContext.LogError(string message, object?[]? args) => OnError(message, args);
 
+        /// <summary>
         /// Describes the relationship between a service contract and a service definition
         /// </summary>
         protected internal sealed class ServiceBindContext

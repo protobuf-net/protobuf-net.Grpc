@@ -43,7 +43,7 @@ reports problems at build-time.
 ### 1: define your data contracts and service contracts
 
 Your service and data contracts can be placed directly in the client/server (see later), or can be in a separate class library. If you use
-a separate library, make sure you target `netcoreapp3.0` or above.
+a separate library, make sure you target `net6.0` or above.
 
 As for what they look like: think "WCF". Data contracts are classes marked with either `[ProtoContract]` or `[DataContract]`, with individual members
 annotated with either `[ProtoMember]` or `[DataMember]`. The `[Proto*]` options are protobuf-net specific and offer fine-grained
@@ -200,7 +200,7 @@ introduction of `.google.protobuf.Timestamp`). It is recommended to use `DataFor
 
 ### 2: implement the server
 
-1. Create an ASP.NET Core Web Application targeting `netcoreapp3.0`, and add a package references to [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore)
+1. Create an ASP.NET Core Web Application targeting `net7.0`, and add a package references to [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore)
 (and a project/package reference to your data/service contracts if necessary). Note that the gRPC tooling can run alongside other services/sites that your ASP.NET application is providing.
 2. in `CreateHostBuilder`, make sure you are using `WebHost`, and enable listening on `HttpProtocols.Http2`; see [`Program.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Program.cs)
 3. in `ConfigureServices`, call `services.AddCodeFirstGrpc()`; see [`Startup.cs`](https://github.com/protobuf-net/protobuf-net.Grpc/blob/main/examples/pb-net-grpc/Server_CS/Startup.cs)
@@ -262,7 +262,7 @@ Now listening on: http://localhost:10042
 
 ### 2: implement the client
 
-OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET Core console application targeting `netcoreapp3.0`,
+OK, we have a working server; now let's write a client. This is much easier, in fact. Let's create a .NET console application targeting `net7.0`,
 and add a package reference to [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc). Note that by default, `HttpClient` only wants to talk HTTP/2 over TLS, so we first
 need to twist it's arm a little; then we can very easily create a client to our services at our base address; let's start by doing some maths:
 

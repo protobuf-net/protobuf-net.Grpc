@@ -2,30 +2,30 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFrameworks>net461;net472;netcoreapp5.0;netcoreapp3.1</TargetFrameworks>
+    <TargetFrameworks>net462;net472;net6.0;net7.0</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);CA1822</NoWarn>
+    <NoWarn>$(NoWarn);CA1822;CS8981</NoWarn>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net462' and '$(TargetFramework)' != 'net472'">
     <DefineConstants>$(DefineConstants);CLIENT_FACTORY</DefineConstants>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.21.3" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.9.1" />
-    <PackageReference Include="xunit" Version="2.4.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
-    <PackageReference Include="Grpc.Core.Api" Version="$(GrpcVersion)" />
+    <PackageReference Include="Grpc.Core.Api" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' != 'net461' and '$(TargetFramework)' != 'net472'">
+  <ItemGroup Condition="'$(TargetFramework)' != 'net462' and '$(TargetFramework)' != 'net472'">
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
 </Project>
