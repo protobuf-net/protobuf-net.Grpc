@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Grpc.Core;
@@ -211,8 +211,6 @@ namespace ProtoBuf.Grpc.Internal
                 if (genType == typeof(AsyncDuplexStreamingCall<,>)) return TypeCategory.AsyncDuplexStreamingCall;
                 if (genType == typeof(AsyncServerStreamingCall<>)) return TypeCategory.AsyncServerStreamingCall;
             }
-
-            if (typeof(Delegate).IsAssignableFrom(type)) return TypeCategory.None; // yeah, that's not going to happen
 
             if (marshallerCache.CanSerializeType(type)) return TypeCategory.Data;
             bindContext?.LogWarning("Type cannot be serialized; ignoring: {0}", type.FullName);

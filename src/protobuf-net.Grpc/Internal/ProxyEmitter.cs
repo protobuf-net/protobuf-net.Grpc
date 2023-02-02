@@ -1,4 +1,4 @@
-﻿using Grpc.Core;
+using Grpc.Core;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using System;
@@ -212,7 +212,12 @@ namespace ProtoBuf.Grpc.Internal
                         var shallMethodBeImplemented = isService || isMethodInherited;
                         if (!(shallMethodBeImplemented && ContractOperation.TryIdentifySignature(iMethod, binderConfig, out var op, null)))
                         {
-                            il.ThrowException(typeof(NotSupportedException));
+                            // it is frequent for some infrastructure code to always call Dispose() on IDisposable,
+                            // for instance Asp.Net Core dependency injection, so we don't want to throw in this case
+                            if (iType == typeof(IDisposable) && iMethod.Name == nameof(IDisposable.Dispose))
+                                il.Emit(OpCodes.Ret);
+                            else
+                                il.ThrowException(typeof(NotSupportedException));
                             continue;
                         }
                         
