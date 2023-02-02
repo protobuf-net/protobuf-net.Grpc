@@ -1,6 +1,6 @@
 # Release Notes
 
-## 1.1.0
+## 1.1.1
 
 - update library references
 - drop net461 (moving to net462 as lower bound); drop netcoreapp3.1 and net5.0 (moving to net6.0/netstandard2.1 as lower bound)
