@@ -15,6 +15,12 @@
 
 - try to improve blazor linker support (i.e. avoid removal of necessary APIs)
 
+## 1.0.147
+
+- fix race condition in cancellation cleanup (#144)
+- fix ordering of descriptors in reflection respone (#143, #153)
+- add support for custom metadata lookup in service-binder (#121, #138)
+
 ## 1.0.136
 
 - add .NET 5 target
