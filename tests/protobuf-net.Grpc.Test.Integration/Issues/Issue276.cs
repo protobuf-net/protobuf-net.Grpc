@@ -34,13 +34,6 @@ namespace protobuf_net.Grpc.Test.Issues
             Assert.True(CanSerialize(type));
         }
 
-        private static bool CanSerialize(Type type, MarshallerFactory? marshaller = null)
-            => (bool)_canSerialize.Invoke(marshaller ?? ProtoBufMarshallerFactory.Default, new object[] { type })!;
-
-        private static readonly MethodInfo _canSerialize = typeof(MarshallerFactory)
-            .GetMethod("CanSerialize", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("CanSerialize not found");
-
         [ProtoContract(SkipConstructor = true)]
         public record Foo2([property: ProtoMember(1)] Bar2 Bar, [property: ProtoMember(2)] Baz2 Baz);
         [ProtoContract(SkipConstructor = true)]
@@ -48,6 +41,15 @@ namespace protobuf_net.Grpc.Test.Issues
 
         [ProtoContract(SkipConstructor = true)]
         public record Baz2([property: ProtoMember(1)]int Z);
+
+
+        // sneaky look under the covers to see what we can serialize
+        private static bool CanSerialize(Type type, MarshallerFactory? marshaller = null)
+    => (bool)_canSerialize.Invoke(marshaller ?? ProtoBufMarshallerFactory.Default, new object[] { type })!;
+
+        private static readonly MethodInfo _canSerialize = typeof(MarshallerFactory)
+            .GetMethod("CanSerialize", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("CanSerialize not found");
     }
 #endif
 }
