@@ -43,7 +43,7 @@ namespace ProtoBuf.Grpc.Server
             void IServiceMethodProvider<TService>.OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
             {
                 int count = new Binder(_logger).Bind<TService>(context, _binderConfiguration);
-                if (count != 0) _logger.Log(LogLevel.Information, "RPC services being provided by {0}: {1}", typeof(TService), count);
+                if (count != 0) _logger.Log(LogLevel.Information, "RPC services being provided by {Service}: {Count}", typeof(TService), count);
             }
         }
         private sealed class Binder : ServerBinder
