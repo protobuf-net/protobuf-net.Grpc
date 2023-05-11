@@ -1,18 +1,21 @@
 #if !(NET462 || NET472)
 using Grpc.Core;
-using ProtoBuf.Grpc.Server;
-using System;
-using System.Reflection;
-using System.Runtime.Serialization;
-using System.Threading.Tasks;
+using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
+using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
-using Xunit;
-using Grpc.Core.Interceptors;
-using Xunit.Abstractions;
-using System.Runtime.CompilerServices;
+using ProtoBuf.Grpc.Server;
 using ProtoBuf.Meta;
+using System;
+using System.Buffers;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
+using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -59,6 +62,99 @@ namespace protobuf_net.Grpc.Test.Integration
     public class InterceptedService : IInterceptedService
     {
         public ValueTask<ApplyResponse> Add(Apply request) => new ValueTask<ApplyResponse>(new ApplyResponse(request.X + request.Y));
+    }
+
+    [Service]
+    public interface IOwnedMemoryService
+    {
+        ValueTask<WriteOnce> RoundTripZeroCopy(WriteOnce payload);
+        ValueTask<WriteOnce> RoundTripClone(WriteOnce payload);
+    }
+
+    public class OwnedMemoryService : IOwnedMemoryService
+    {
+        public ValueTask<WriteOnce> RoundTripClone(WriteOnce payload)
+        {
+            using (payload) // we are responsible for cleaning this up
+            {
+                // lease a separate payload to return
+                var copy = WriteOnce.Create(payload.Length);
+                payload.Memory.CopyTo(copy.Memory);
+                return new(copy);
+            }
+        }
+
+        public ValueTask<WriteOnce> RoundTripZeroCopy(WriteOnce payload)
+        {
+            // return the same data *without disposing the original*
+            return new(payload); 
+        }
+    }
+
+    public sealed partial class WriteOnce : IMemoryOwner<byte>
+    {
+#if DEBUG
+        
+        private static long s_totalBytesInUse;
+        public static long TotalBytesInUse => Volatile.Read(ref s_totalBytesInUse);
+        public static void Reset() => Volatile.Write(ref s_totalBytesInUse, 0);
+
+        static partial void AddTotalBytes(int delta) => Interlocked.Add(ref s_totalBytesInUse, delta);
+
+#endif
+
+        static partial void AddTotalBytes(int delta); // DEBUG only
+
+        public int Length => _length;
+        private byte[] _oversized;
+        private int _length;
+
+        public static WriteOnce Empty { get; } = new WriteOnce(Array.Empty<byte>(), 0);
+        public static WriteOnce Create(int length)
+        {
+            if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
+            if (length == 0) return Empty;
+            var arr = ArrayPool<byte>.Shared.Rent(length);
+            AddTotalBytes(arr.Length);
+            return new WriteOnce(arr, length);
+        }
+
+        private WriteOnce(byte[] oversized, int length)
+        {
+            _oversized = oversized;
+            _length = length;
+        }
+
+        public Memory<byte> Memory => new Memory<byte>(_oversized, 0, _length);
+
+        public static Marshaller<WriteOnce> Marshaller { get; } = Marshallers.Create<WriteOnce>(
+            Serialize, Deserialize);
+
+        private static void Serialize(WriteOnce value, SerializationContext context)
+        {
+            // write then dispose; this is not a mistake - we want values to be recycled
+            context.SetPayloadLength(value.Length);
+            context.GetBufferWriter().Write(value.Memory.Span); // handles chunking internally
+            context.Complete();
+            value.Dispose();
+        }
+
+        public void Dispose()
+        {
+            var arr = Interlocked.Exchange(ref _oversized, Array.Empty<byte>());
+            if (arr.Length != 0)
+            {
+                ArrayPool<byte>.Shared.Return(arr);
+                AddTotalBytes(-arr.Length);
+            }
+        }
+
+        private static WriteOnce Deserialize(DeserializationContext context)
+        {
+            var value = Create(context.PayloadLength);
+            context.PayloadAsReadOnlySequence().CopyTo(value.Memory.Span);
+            return value;
+        }
     }
 
     [Serializable]
@@ -108,12 +204,13 @@ namespace protobuf_net.Grpc.Test.Integration
         public void Log(string message) => Output?.WriteLine(message);
         public GrpcServiceFixture()
         {
+            BinderConfiguration bc = AdhocConfig.ClientFactory; // could also be BinderConfiguration.Default
+            bc.SetMarshaller(WriteOnce.Marshaller);
             _interceptor = new TestInterceptor(this);
 #pragma warning disable CS0618 // Type or member is obsolete
             BinaryFormatterMarshallerFactory.I_Have_Read_The_Notes_On_Not_Using_BinaryFormatter = true;
             BinaryFormatterMarshallerFactory.I_Promise_Not_To_Do_This = true; // signed: Marc Gravell
 #pragma warning restore CS0618 // Type or member is obsolete
-
             _server = new Server
             {
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
@@ -122,6 +219,7 @@ namespace protobuf_net.Grpc.Test.Integration
             _server.Services.AddCodeFirst(nonGeneric);
             _server.Services.AddCodeFirst(new AdhocService(), AdhocConfig.ClientFactory);
             _server.Services.AddCodeFirst(new InterceptedService(), interceptors: new[] { _interceptor });
+            _server.Services.AddCodeFirst(new OwnedMemoryService(), AdhocConfig.ClientFactory); // since we configured this
             _server.Start();
         }
 
@@ -168,6 +266,46 @@ namespace protobuf_net.Grpc.Test.Integration
         private static readonly ProtoBufMarshallerFactory
             EnableContextualSerializer = (ProtoBufMarshallerFactory)ProtoBufMarshallerFactory.Create(userState: new object()),
             DisableContextualSerializer = (ProtoBufMarshallerFactory)ProtoBufMarshallerFactory.Create(options: ProtoBufMarshallerFactory.Options.DisableContextualSerializer, userState: new object());
+
+        [Fact]
+        public async Task CanUseWriteOnceMemory()
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = GrpcChannel.ForAddress($"http://localhost:{Port}");
+            var svc = http.CreateGrpcService<IOwnedMemoryService>(AdhocConfig.ClientFactory);
+
+#if DEBUG
+            WriteOnce.Reset();
+#endif
+            using (var payload = WriteOnce.Create(114))
+            {
+                Assert.Equal(114, payload.Length);
+#if DEBUG
+                Assert.True(WriteOnce.TotalBytesInUse >= 114);
+#endif
+                using (var clone = await svc.RoundTripClone(payload))
+                {
+                    Assert.Equal(114, clone.Length);
+                }
+            }
+#if DEBUG
+            Assert.Equal(0, WriteOnce.TotalBytesInUse);
+#endif
+            using (var payload = WriteOnce.Create(114))
+            {
+                Assert.Equal(114, payload.Length);
+#if DEBUG
+                Assert.True(WriteOnce.TotalBytesInUse >= 114);
+#endif
+                using (var clone = await svc.RoundTripZeroCopy(payload))
+                {
+                    Assert.Equal(114, clone.Length);
+                }
+            }
+#if DEBUG
+            Assert.Equal(0, WriteOnce.TotalBytesInUse);
+#endif
+        }
 
         [Theory]
         [InlineData(true)]
