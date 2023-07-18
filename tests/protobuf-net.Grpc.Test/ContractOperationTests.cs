@@ -22,7 +22,7 @@ namespace protobuf_net.Grpc.Test
         public void SimpleInterface()
         {
             var all = ContractOperation.ExpandInterfaces(typeof(IC));
-            Assert.Equal(1, all.Count);
+            Assert.Single(all);
             Assert.Contains(typeof(IC), all);
         }
         [Fact]

@@ -12,7 +12,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="protobuf-net.MSBuild" />
+    <AdditionalFiles Include="Descriptor.proto" />
+    <AdditionalFiles Include="MyContracts.proto" />
+    <AdditionalFiles Include="TimeService.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+      <PackageReference Include="protobuf-net.Core" />
+      <PackageReference Include="protobuf-net.BuildTools">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+      </PackageReference>
   </ItemGroup>
 
 </Project>
