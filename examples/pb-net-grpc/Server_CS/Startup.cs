@@ -1,3 +1,4 @@
+using CVGrpcCppSharpService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Server;
 using Shared_CS;
+using System;
+using System.Diagnostics;
 
 namespace Server_CS
 {
@@ -25,7 +28,11 @@ namespace Server_CS
                 .AddScheme<FakeAuthOptions, FakeAuthHandler>(FakeAuthHandler.SchemeName, options => options.AlwaysAuthenticate = true);
             services.AddAuthorization();
             services.AddSingleton<ICounter, MyCounter>();
+            services.AddSingleton<ICVDotNetLogger, DummyService>();
+            services.AddSingleton<INativeObjectsMemoryAddressManager, DummyService>();
         }
+
+        class DummyService : ICVDotNetLogger, INativeObjectsMemoryAddressManager { }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment _)
@@ -40,6 +47,17 @@ namespace Server_CS
                 endpoints.MapGrpcService<ICounter>();
                 endpoints.MapGrpcService<MyCalculator>();
                 endpoints.MapGrpcService<MyTimeService>();
+
+                var watch = Stopwatch.StartNew();
+                endpoints.MapGrpcService<EvSecurityCheckManagedCppSharpService>();
+                watch.Stop();
+                Console.WriteLine($"1: {watch.ElapsedMilliseconds}ms");
+
+                watch.Restart();
+                endpoints.MapGrpcService<EvSecurityNewManagedCppSharpService>();
+                watch.Stop();
+                Console.WriteLine($"2: {watch.ElapsedMilliseconds}ms");
+
                 endpoints.MapCodeFirstGrpcReflectionService();
             });
         }

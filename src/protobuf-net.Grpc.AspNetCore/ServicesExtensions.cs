@@ -6,9 +6,15 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Configuration;
 using System;
+using System.Reflection;
 
 namespace ProtoBuf.Grpc.Server
 {
+    public abstract class CodeFirstBinderBaseAttribute<TService> : Attribute where TService : class
+    {
+        public abstract int Bind(ILogger logger, ServiceMethodProviderContext<TService> context, BinderConfiguration binderConfiguration);
+    }
+
     /// <summary>
     /// Provides extension methods to the IServiceCollection API
     /// </summary>
@@ -42,7 +48,16 @@ namespace ProtoBuf.Grpc.Server
 
             void IServiceMethodProvider<TService>.OnServiceMethodDiscovery(ServiceMethodProviderContext<TService> context)
             {
-                int count = new Binder(_logger).Bind<TService>(context, _binderConfiguration);
+                var attrib = typeof(TService).GetCustomAttribute<CodeFirstBinderBaseAttribute<TService>>();
+                int count;
+                if (attrib is not null)
+                {
+                    count = attrib.Bind(_logger, context, _binderConfiguration ?? BinderConfiguration.Default);
+                }
+                else
+                {
+                    count = new Binder(_logger).Bind<TService>(context, _binderConfiguration);
+                }
                 if (count != 0) _logger.Log(LogLevel.Information, "RPC services being provided by {Service}: {Count}", typeof(TService), count);
             }
         }
