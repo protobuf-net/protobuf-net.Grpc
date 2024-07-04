@@ -77,7 +77,7 @@ namespace ProtoBuf.Grpc.Configuration
             }
             catch (Exception ex)
             {
-                OnError(ex.Message);
+                OnError("When binding method \"{0}\". Message: {1}", [method.Name, ex.Message]);
                 return false;
             }
         }
