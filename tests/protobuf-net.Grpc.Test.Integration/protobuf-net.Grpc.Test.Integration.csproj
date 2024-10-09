@@ -5,6 +5,7 @@
     <RootNamespace>protobuf_net.Grpc.Test.Integration</RootNamespace>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
   </PropertyGroup>
 
   <ItemGroup>
