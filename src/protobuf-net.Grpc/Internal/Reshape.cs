@@ -138,6 +138,7 @@ namespace ProtoBuf.Grpc.Internal
             private readonly IAsyncStreamReader<T> _reader;
             private IObserver<T>? _observer;
 
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "Clarity")]
             public ReaderObservable(IAsyncStreamReader<T> reader)
             {
                 _reader = reader;
@@ -203,7 +204,11 @@ namespace ProtoBuf.Grpc.Internal
         {
             await foreach (var value in reader.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
+#pragma warning disable IDE0079 // because TFM-specific
+#pragma warning disable CA2016 // write-cancellation is not supported by default, is not testable, and is TFM-specific
                 await writer.WriteAsync(value).ConfigureAwait(false);
+#pragma warning restore CA2016
+#pragma warning restore IDE0079
             }
         }
 
@@ -626,7 +631,8 @@ namespace ProtoBuf.Grpc.Internal
         private sealed class ServerStreamingObservableImpl<TResponse> : ReaderObservable<TResponse>
         {
             private AsyncServerStreamingCall<TResponse>? _call;
-            private MetadataContext? _metadata;
+            private readonly MetadataContext? _metadata;
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "Clarity")]
             public ServerStreamingObservableImpl(AsyncServerStreamingCall<TResponse> call, MetadataContext? metadata) : base(call.ResponseStream)
             {
                 _call = call;
@@ -885,8 +891,9 @@ namespace ProtoBuf.Grpc.Internal
         private sealed class DuplexObservableImpl<TRequest, TResponse> : ReaderObservable<TResponse>
         {
             private AsyncDuplexStreamingCall<TRequest, TResponse>? _call;
-            private MetadataContext? _metadata;
+            private readonly MetadataContext? _metadata;
             private readonly Task _sendAll;
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "Clarity")]
             public DuplexObservableImpl(AsyncDuplexStreamingCall<TRequest, TResponse> call, MetadataContext? metadata, IObservable<TRequest> request) : base(call.ResponseStream)
             {
                 _call = call;
@@ -957,6 +964,7 @@ namespace ProtoBuf.Grpc.Internal
     }
     internal sealed class IncompleteSendRpcException : Exception
     {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "Clarity")]
         public IncompleteSendRpcException(Exception fault) : base(
             $"A message could not be sent because the server had already terminated the connection; this exception can be suppressed by specifying the {nameof(CallContextFlags.IgnoreStreamTermination)} flag when creating the {nameof(CallContext)}", fault)
         { }
