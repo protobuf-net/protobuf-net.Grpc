@@ -14,10 +14,10 @@ using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test
 {
-    public class ContractOperationTests
+    public class ContractOperationTests(ITestOutputHelper output)
     {
-        private readonly ITestOutputHelper _output;
-        public ContractOperationTests(ITestOutputHelper output) => _output = output;
+        private readonly ITestOutputHelper _output = output;
+
         [Fact]
         public void SimpleInterface()
         {
@@ -263,7 +263,7 @@ namespace protobuf_net.Grpc.Test
             if (!ContractOperation.TryIdentifySignature(method!, config, out var operation, null))
             {
                 var sig = ContractOperation.GetSignature(config.MarshallerCache, method!, null);
-                Assert.True(false, sig.ToString());
+                Assert.Fail(sig.ToString());
             }
             Assert.Equal(method, operation.Method);
             Assert.Equal(methodType, operation.MethodType);

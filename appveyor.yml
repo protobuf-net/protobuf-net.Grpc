@@ -4,7 +4,7 @@ install:
 - cmd: >-
     choco install dotnet-6.0-sdk
 
-    choco install dotnet-7.0-sdk
+    choco install dotnet-8.0-sdk
 
 skip_branch_with_pr: true
 skip_tags: true
@@ -25,7 +25,7 @@ build_script:
   - cmd: dotnet test Build.csproj -c Release /p:CI=true
   - cmd: dotnet pack Build.csproj --no-build -c Release /p:Packing=true /p:PackageOutputPath=%CD%\.nupkgs /p:CI=true
 
-test: off
+test: false
 artifacts:
 - path: .\.nupkgs\*.nupkg
 

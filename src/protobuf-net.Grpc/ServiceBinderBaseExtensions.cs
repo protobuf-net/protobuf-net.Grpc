@@ -42,8 +42,8 @@ namespace ProtoBuf.Grpc
         /// </summary>
         public static void Bind<T>(this ServiceBinderBase binder, T? server = null) where T : class
         {
-            var binderAttrib = typeof(T).GetCustomAttribute<BindServiceMethodAttribute>(true);
-            if (binderAttrib is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + " found");
+            var binderAttrib = typeof(T).GetCustomAttribute<BindServiceMethodAttribute>(true)
+                ?? throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + " found");
             if (binderAttrib.BindType is null) throw new InvalidOperationException("No " + nameof(BindServiceMethodAttribute) + "." + nameof(BindServiceMethodAttribute.BindType) + " found");
 
             var method = binderAttrib.BindType.FindMembers(MemberTypes.Method, BindingFlags.Public | BindingFlags.Static,
@@ -59,11 +59,10 @@ namespace ProtoBuf.Grpc
                     if (!args[1].ParameterType.IsAssignableFrom(typeof(T))) return false;
                     return true;
 
-                }, binderAttrib.BindMethodName).OfType<MethodInfo>().SingleOrDefault();
-            if (method is null) throw new InvalidOperationException("No suitable " + binderAttrib.BindType.Name + "." + binderAttrib.BindMethodName + " method found");
-
+                }, binderAttrib.BindMethodName).OfType<MethodInfo>().SingleOrDefault()
+                ?? throw new InvalidOperationException("No suitable " + binderAttrib.BindType.Name + "." + binderAttrib.BindMethodName + " method found");
             server ??= Activator.CreateInstance<T>();
-            method.Invoke(null, new object[] { binder, server });
+            method.Invoke(null, [binder, server]);
         }
 
 
@@ -100,17 +99,20 @@ namespace ProtoBuf.Grpc
                 _singleOrArray = interceptors;
             }
 
-            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ClientStreamingServerMethod<TRequest, TResponse> handler)
+            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ClientStreamingServerMethod<TRequest, TResponse>? handler)
             {
-                if (_singleOrArray is Interceptor single)
+                if (handler is not null)
                 {
-                    handler = WrapIfNeeded(single, handler);
-                }
-                else if (_singleOrArray is Interceptor[] arr)
-                {
-                    for (int i = 0; i < arr.Length; i++)
+                    if (_singleOrArray is Interceptor single)
                     {
-                        handler = WrapIfNeeded(arr[i], handler);
+                        handler = WrapIfNeeded(single, handler);
+                    }
+                    else if (_singleOrArray is Interceptor[] arr)
+                    {
+                        for (int i = 0; i < arr.Length; i++)
+                        {
+                            handler = WrapIfNeeded(arr[i], handler);
+                        }
                     }
                 }
                 _tail.AddMethod(method, handler);
@@ -120,17 +122,20 @@ namespace ProtoBuf.Grpc
                 static ClientStreamingServerMethod<TRequest, TResponse> Wrap(Interceptor interceptor, ClientStreamingServerMethod<TRequest, TResponse> handler)
                     => (requestStream, context) => interceptor.ClientStreamingServerHandler(requestStream, context, handler);
             }
-            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TRequest, TResponse> handler)
+            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TRequest, TResponse>? handler)
             {
-                if (_singleOrArray is Interceptor single)
+                if (handler is not null)
                 {
-                    handler = WrapIfNeeded(single, handler);
-                }
-                else if (_singleOrArray is Interceptor[] arr)
-                {
-                    for (int i = 0; i < arr.Length; i++)
+                    if (_singleOrArray is Interceptor single)
                     {
-                        handler = WrapIfNeeded(arr[i], handler);
+                        handler = WrapIfNeeded(single, handler);
+                    }
+                    else if (_singleOrArray is Interceptor[] arr)
+                    {
+                        for (int i = 0; i < arr.Length; i++)
+                        {
+                            handler = WrapIfNeeded(arr[i], handler);
+                        }
                     }
                 }
                 _tail.AddMethod(method, handler);
@@ -140,17 +145,20 @@ namespace ProtoBuf.Grpc
                 static DuplexStreamingServerMethod<TRequest, TResponse> Wrap(Interceptor interceptor, DuplexStreamingServerMethod<TRequest, TResponse> handler)
                     => (requestStream, responseStream, context) => interceptor.DuplexStreamingServerHandler(requestStream, responseStream, context, handler);
             }
-            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ServerStreamingServerMethod<TRequest, TResponse> handler)
+            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ServerStreamingServerMethod<TRequest, TResponse>? handler)
             {
-                if (_singleOrArray is Interceptor single)
+                if (handler is not null)
                 {
-                    handler = WrapIfNeeded(single, handler);
-                }
-                else if (_singleOrArray is Interceptor[] arr)
-                {
-                    for (int i = 0; i < arr.Length; i++)
+                    if (_singleOrArray is Interceptor single)
                     {
-                        handler = WrapIfNeeded(arr[i], handler);
+                        handler = WrapIfNeeded(single, handler);
+                    }
+                    else if (_singleOrArray is Interceptor[] arr)
+                    {
+                        for (int i = 0; i < arr.Length; i++)
+                        {
+                            handler = WrapIfNeeded(arr[i], handler);
+                        }
                     }
                 }
                 _tail.AddMethod(method, handler);
@@ -160,17 +168,20 @@ namespace ProtoBuf.Grpc
                 static ServerStreamingServerMethod<TRequest, TResponse> Wrap(Interceptor interceptor, ServerStreamingServerMethod<TRequest, TResponse> handler)
                     => (request, responseStream, context) => interceptor.ServerStreamingServerHandler(request, responseStream, context, handler);
             }
-            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
+            public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse>? handler)
             {
-                if (_singleOrArray is Interceptor single)
+                if (handler is not null)
                 {
-                    handler = WrapIfNeeded(single, handler);
-                }
-                else if (_singleOrArray is Interceptor[] arr)
-                {
-                    for (int i = 0; i < arr.Length; i++)
+                    if (_singleOrArray is Interceptor single)
                     {
-                        handler = WrapIfNeeded(arr[i], handler);
+                        handler = WrapIfNeeded(single, handler);
+                    }
+                    else if (_singleOrArray is Interceptor[] arr)
+                    {
+                        for (int i = 0; i < arr.Length; i++)
+                        {
+                            handler = WrapIfNeeded(arr[i], handler);
+                        }
                     }
                 }
                 _tail.AddMethod(method, handler);

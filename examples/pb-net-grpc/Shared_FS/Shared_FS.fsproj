@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>$(DefaultTFM)</TargetFramework>
     <SignAssembly>false</SignAssembly>
     <LangVersion>4.7</LangVersion>
   </PropertyGroup>
@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
     <PackageReference Include="System.ServiceModel.Primitives" />
   </ItemGroup>
 </Project>

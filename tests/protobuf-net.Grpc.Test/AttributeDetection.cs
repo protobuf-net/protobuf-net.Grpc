@@ -10,11 +10,9 @@ namespace protobuf_net.Grpc.Test
 {
 
     [AttributeUsage(AttributeTargets.All, Inherited = true, AllowMultiple = true)]
-    public class SomethingAttribute : Attribute
+    public class SomethingAttribute(string value) : Attribute
     {
-        public string Value { get; }
-        public SomethingAttribute(string value)
-            => Value = value;
+        public string Value { get; } = value;
     }
 
     [Something("Interface")]
@@ -64,9 +62,9 @@ namespace protobuf_net.Grpc.Test
         [InlineData(typeof(SomeBaseType), false, "base", "base bar")]
         [InlineData(typeof(SomeMiddleType), false, "middle", null)]
         [InlineData(typeof(SomeLeafType), false, "leaf", null)]
-        public void CheckTypeAttributes(Type type, bool inherit, string expectedFoo, string expectedBar)
+        public void CheckTypeAttributes(Type type, bool inherit, string? expectedFoo, string? expectedBar)
             => CheckResults(AttributeHelper.For(type, inherit), expectedFoo, expectedBar);
-        private static void CheckResults(AttributeHelper attribs, string expectedFoo, string expectedBar)
+        private static void CheckResults(AttributeHelper attribs, string? expectedFoo, string? expectedBar)
         {
             var fooResult = attribs.TryGetAnyNonWhitespaceString(typeof(FooAttribute).FullName!, "Name", out var actualFoo);
             var barResult = attribs.TryGetAnyNonWhitespaceString(typeof(BarAttribute).FullName!, "Name", out var actualBar);
@@ -119,7 +117,7 @@ namespace protobuf_net.Grpc.Test
         [InlineData(typeof(SomeMiddleType), "D", false, null, null)]
         [InlineData(typeof(SomeLeafType), "D", false, null, null)]
 
-        public void CheckMethodAttributes(Type type, string method, bool inherit, string expectedFoo, string expectedBar)
+        public void CheckMethodAttributes(Type type, string method, bool inherit, string? expectedFoo, string? expectedBar)
             => CheckResults(AttributeHelper.For(type.GetMethod(method)!, inherit), expectedFoo, expectedBar);
 
         [Foo("base")]
