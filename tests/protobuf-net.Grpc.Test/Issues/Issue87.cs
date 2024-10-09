@@ -7,11 +7,9 @@ namespace protobuf_net.Grpc.Test.Issues
 {
 
 
-    public class Issue87
+    public class Issue87(ITestOutputHelper log)
     {
-        public Issue87(ITestOutputHelper log)
-            => _log = log;
-        private readonly ITestOutputHelper _log;
+        private readonly ITestOutputHelper _log = log;
         private void Log(string message) => _log?.WriteLine(message);
 
         [Theory]
@@ -25,7 +23,7 @@ namespace protobuf_net.Grpc.Test.Issues
         [InlineData(typeof(IBaseService), "protobuf_net.Grpc.Test.Issues.BaseService")]
         [InlineData(typeof(INotDerivedService), null)]
         [InlineData(typeof(INotBaseService), null)]
-        public void IsService(Type type, string name)
+        public void IsService(Type type, string? name)
         {
             if (string.IsNullOrWhiteSpace(name))
             {

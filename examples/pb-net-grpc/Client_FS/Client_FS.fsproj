@@ -3,7 +3,7 @@
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>$(DefaultTFM)</TargetFramework>
     <SignAssembly>false</SignAssembly>
     <LangVersion>4.7</LangVersion>
   </PropertyGroup>
@@ -17,6 +17,7 @@
     <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
     <PackageReference Include="Grpc.Net.Client" />
     <ProjectReference Include="..\Shared_FS\Shared_FS.fsproj" />
+    <PackageReference Include="FSharp.Core" />
     <PackageReference Include="TaskBuilder.fs" />
   </ItemGroup>
 </Project>

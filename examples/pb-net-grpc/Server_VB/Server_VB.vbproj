@@ -4,7 +4,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
     <RootNamespace>Server_VB</RootNamespace>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>$(DefaultTFM)</TargetFramework>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 

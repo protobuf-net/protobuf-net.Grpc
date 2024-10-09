@@ -1,15 +1,15 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace TraderSys.StockMarket
 {
-    public class StockPriceSubscriber : IStockPriceSubscriber
+    public sealed class StockPriceSubscriber : IStockPriceSubscriber
     {
         private readonly StockPrice[] _prices;
         private readonly CancellationTokenSource _cancellationTokenSource;
-        private readonly Task _task;
         private readonly Random _random;
 
         public StockPriceSubscriber(string[] symbols)
@@ -17,7 +17,7 @@ namespace TraderSys.StockMarket
             _random = new Random(42);
             _prices = symbols.Select(s => new StockPrice(s, _random.Next(99999) / 10m)).ToArray();
             _cancellationTokenSource = new CancellationTokenSource();
-            _task = RunAsync(_cancellationTokenSource.Token);
+            _ = RunAsync(_cancellationTokenSource.Token);
         }
 
         public event EventHandler<StockPriceUpdateEventArgs> Update;
@@ -45,7 +45,8 @@ namespace TraderSys.StockMarket
             }
             catch (Exception e)
             {
-                throw e;
+                Debug.WriteLine(e.Message);
+                throw;
             }
         }
 
