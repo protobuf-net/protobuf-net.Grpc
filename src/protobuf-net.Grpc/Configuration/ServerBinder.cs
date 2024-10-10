@@ -92,7 +92,7 @@ namespace ProtoBuf.Grpc.Configuration
                 {
                     if (typesBuffer.Length == 0)
                     {
-                        typesBuffer = new Type[] {serviceType, typeof(void), typeof(void)};
+                        typesBuffer = [serviceType, typeof(void), typeof(void)];
                     }
 
                     typesBuffer[1] = @in;

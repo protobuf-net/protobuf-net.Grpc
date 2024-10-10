@@ -41,7 +41,7 @@ namespace ProtoBuf.Grpc.Reflection
         /// this method need to remain for backward compatibility for client which will get this updated version, without recompilation.
         /// Thus, this method mustn't be deleted.</remarks>
         public string GetSchema(Type contractType)
-            => GetSchema(new [] {contractType});
+            => GetSchema([contractType]);
 
         /// <summary>
         /// Get the .proto schema associated with multiple service contracts

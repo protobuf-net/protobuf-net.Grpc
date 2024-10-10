@@ -21,10 +21,12 @@
         <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
         <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
         <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.143" />
+        <PackageVersion Include="System.IO.Pipelines" Version="8.0.0" />
         <PackageVersion Include="System.Reactive" Version="6.0.1" />
-        <PackageVersion Include="System.Threading.Channels" Version="8.0.0" />
-        <PackageVersion Include="System.ServiceModel.Primitives" Version="8.0.0" />
         <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+        <PackageVersion Include="System.ServiceModel.Primitives" Version="8.0.0" />
+        <PackageVersion Include="System.Threading.Channels" Version="8.0.0" />
+        <PackageVersion Include="System.ValueTuple" Version="4.5.0" />
         <PackageVersion Include="xunit" Version="2.9.2" />
         <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
         <PackageVersion Include="TaskBuilder.fs" Version="2.1.0" />

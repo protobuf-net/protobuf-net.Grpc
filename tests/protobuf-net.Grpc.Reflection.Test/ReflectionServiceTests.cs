@@ -42,7 +42,7 @@ namespace protobuf_net.Grpc.Reflection.Test
                     {
                         // Use reflection.
                         var addImportMethod = AddImportMethod.Value;
-                        addImportMethod.Invoke(fileDescriptor, new object?[] {dependency, true, default});
+                        addImportMethod.Invoke(fileDescriptor, [dependency, true, default]);
                     }
 
                     fileDescriptorSet.Files.Add(fileDescriptor);
@@ -90,8 +90,7 @@ namespace protobuf_net.Grpc.Reflection.Test
                     ".ReflectionTest.BclMessage",
                 }
             },
-            new object[]
-            {
+            [
                 typeof(ReflectionTest.Service.Nested),
                 ".ReflectionTest.Service.Nested",
                 new[]
@@ -105,7 +104,7 @@ namespace protobuf_net.Grpc.Reflection.Test
                     ".ReflectionTest.Service.Three",
                     ".ReflectionTest.Service.Two",
                 }
-            },
+            ],
         };
     }
 }

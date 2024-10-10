@@ -131,7 +131,7 @@ namespace ProtoBuf.Grpc.Internal
                         type,
                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                         null,
-                        new object[] { channel },
+                        [channel],
                         null)!;
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -243,7 +243,7 @@ namespace ProtoBuf.Grpc.Internal
                             }
                         }
 
-                        Type[] fromTo = new Type[] { op.From, op.To };
+                        Type[] fromTo = [op.From, op.To];
                         // private static Method<from, to> s_{i}
                         var field = type.DefineField("s_op_" + fieldIndex++, typeof(Method<,>).MakeGenericType(fromTo),
                             FieldAttributes.Static | FieldAttributes.Private);
@@ -339,7 +339,7 @@ namespace ProtoBuf.Grpc.Internal
                 // return the factory
                 var p = Expression.Parameter(typeof(CallInvoker), "channel");
                 return Expression.Lambda<Func<CallInvoker, TService>>(
-                    Expression.New(finalType.GetConstructor(new[] { typeof(CallInvoker) })!, p), p).Compile();
+                    Expression.New(finalType.GetConstructor([typeof(CallInvoker)])!, p), p).Compile();
 
                 ConstructorBuilder? WritePassThruCtor<T>(MethodAttributes accessibility)
                 {
@@ -364,7 +364,7 @@ namespace ProtoBuf.Grpc.Internal
             s_Empty_InstaneTask= typeof(Empty).GetField(nameof(Empty.InstanceTask))!;
 #pragma warning restore CS0618
 
-        internal static readonly MethodInfo s_CallContext_FromCancellationToken = typeof(CallContext).GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(CancellationToken) }, null)!;
+        internal static readonly MethodInfo s_CallContext_FromCancellationToken = typeof(CallContext).GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, null, [typeof(CancellationToken)], null)!;
 
         internal const string FactoryName = "Create";
     }

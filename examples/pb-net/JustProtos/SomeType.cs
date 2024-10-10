@@ -12,11 +12,11 @@ namespace JustProtos
         {
             // the point here being: these types *exist*, despite
             // not appearing as local .cs files
-            Type[] types = {
+            Type[] types = [
                 typeof(DescriptorProto),
                 typeof(TimeResult),
                 typeof(MultiplyRequest),
-            };
+            ];
             _ = types;
         }
     }

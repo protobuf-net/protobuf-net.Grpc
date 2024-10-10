@@ -7,10 +7,15 @@
     <ItemGroup>
         <PackageReference Include="Grpc.Core.Api" />
         <PackageReference Include="protobuf-net" VersionOverride="$(ProtoBufNet2Version)" />
+        <PackageReference Include="System.IO.Pipelines" />
     </ItemGroup>
     <ItemGroup Condition="'$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'netstandard2.0'">
         <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
         <PackageReference Include="System.Threading.Channels" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
+        <!-- need to be explicit to avoid fight with System.IO.Pipelines -->
+        <PackageReference Include="System.ValueTuple" />
     </ItemGroup>
     <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
         <PackageReference Include="System.Threading.Channels" />
