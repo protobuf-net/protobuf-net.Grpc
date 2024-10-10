@@ -3,6 +3,7 @@ using ProtoBuf;
 using ProtoBuf.Grpc;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,7 +25,7 @@ namespace protobuf_net.Grpc.Test
 
 
     [ServiceContract]
-    interface IAllOptions
+    public interface IAllOptions
     {
         // google client patterns
         HelloReply Client_BlockingUnary(HelloRequest request, CallOptions options);
@@ -145,5 +146,21 @@ namespace protobuf_net.Grpc.Test
         IObservable<HelloReply> Shared_Duplex_NoContext_Observable(IObservable<HelloRequest> request);
         IObservable<HelloReply> Shared_Duplex_Context_Observable(IObservable<HelloRequest> request, CallContext context);
         IObservable<HelloReply> Shared_Duplex_CancellationToken_Observable(IObservable<HelloRequest> request, CancellationToken cancellationToken);
+
+        // server-streaming via Stream
+        Task<Stream> Shared_ServerStreaming_T_Stream_NoContext();
+        Task<Stream> Shared_ServerStreaming_T_Stream_Context(CallContext context);
+        Task<Stream> Shared_ServerStreaming_T_Stream_CancellationToken(CancellationToken cancellationToken);
+        Task<Stream> Shared_ServerStreaming_T_Stream_Arg_NoContext(HelloRequest request);
+        Task<Stream> Shared_ServerStreaming_T_Stream_Arg_Context(HelloRequest request, CallContext context);
+        Task<Stream> Shared_ServerStreaming_T_Stream_Arg_CancellationToken(HelloRequest request, CancellationToken cancellationToken);
+
+        ValueTask<Stream> Shared_ServerStreaming_VT_Stream_NoContext();
+        ValueTask<Stream> Shared_ServerStreaming_VT_Stream_Context(CallContext context);
+        ValueTask<Stream> Shared_ServerStreaming_VT_Stream_CancellationToken(CancellationToken cancellationToken);
+        ValueTask<Stream> Shared_ServerStreaming_VT_Stream_Arg_NoContext(HelloRequest request);
+        ValueTask<Stream> Shared_ServerStreaming_VT_Stream_Arg_Context(HelloRequest request, CallContext context);
+        ValueTask<Stream> Shared_ServerStreaming_VT_Stream_Arg_CancellationToken(HelloRequest request, CancellationToken cancellationToken);
+
     }
 }

@@ -65,6 +65,11 @@ namespace ProtoBuf.Grpc.Internal
                 typeArguments: value.Type.GetGenericArguments(),
                 arguments: [value, writer]);
 
+        static Expression WriteStream(Expression value, Expression writer, Expression context)
+            => Expression.Call(typeof(Reshape), nameof(Reshape.WriteStream),
+                typeArguments: null,
+                arguments: [ToTaskT(value), writer, ToCancellationToken(context)]);
+
         internal static bool TryGetValue(MethodType MethodType, ContextKind Context, ResultKind Arg, ResultKind Result, VoidKind Void, out Func<MethodInfo, Expression[], Expression>? invoker)
             => _invokers.TryGetValue((MethodType, Context, Arg, Result, Void), out invoker);
 
@@ -198,6 +203,22 @@ namespace ProtoBuf.Grpc.Internal
                 {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.Observable, ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.Observable,ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.Observable, ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1]), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1]), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
         };
     }
 }

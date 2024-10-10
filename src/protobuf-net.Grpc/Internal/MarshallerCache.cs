@@ -7,18 +7,17 @@ using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Internal
 {
-    internal sealed class MarshallerCache
+    internal sealed class MarshallerCache(MarshallerFactory[] factories)
     {
-        private readonly MarshallerFactory[] _factories;
-        public MarshallerCache(MarshallerFactory[] factories)
-            => _factories = factories ?? throw new ArgumentNullException(nameof(factories));
+        private readonly MarshallerFactory[] _factories = factories ?? throw new ArgumentNullException(nameof(factories));
+
         internal bool CanSerializeType(Type type)
         {
             if (_marshallers.TryGetValue(type, out var obj)) return obj != null;
             return SlowImpl(this, type);
 
             static bool SlowImpl(MarshallerCache obj, Type type)
-                => _createAndAdd.MakeGenericMethod(type).Invoke(obj, Array.Empty<object>()) != null;
+                => _createAndAdd.MakeGenericMethod(type).Invoke(obj, []) != null;
         }
         static readonly MethodInfo _createAndAdd = typeof(MarshallerCache).GetMethod(
             nameof(CreateAndAdd), BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -26,8 +25,9 @@ namespace ProtoBuf.Grpc.Internal
         private readonly ConcurrentDictionary<Type, object?> _marshallers
             = new ConcurrentDictionary<Type, object?>
             {
-#pragma warning disable CS0618 // Empty
-                [typeof(Empty)] = Empty.Marshaller
+#pragma warning disable CS0618 // Empty, BytesValue
+                [typeof(Empty)] = Empty.Marshaller,
+                [typeof(BytesValue)] = BytesValue.Marshaller,
 #pragma warning restore CS0618
             };
 

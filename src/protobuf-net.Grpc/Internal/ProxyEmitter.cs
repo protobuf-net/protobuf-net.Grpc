@@ -109,7 +109,7 @@ namespace ProtoBuf.Grpc.Internal
         static int _typeIndex;
         private static readonly MethodInfo s_marshallerCacheGenericMethodDef
             = typeof(MarshallerCache).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
-        internal static Func<CallInvoker, TService> CreateFactory<TService>(BinderConfiguration binderConfig)
+        internal static Func<CallInvoker, TService> CreateFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
            where TService : class
         {
             // front-load reflection discovery
@@ -119,10 +119,13 @@ namespace ProtoBuf.Grpc.Internal
             if (binderConfig == BinderConfiguration.Default) // only use ProxyAttribute for default binder
             {
                 var proxy = (typeof(TService).GetCustomAttribute(typeof(ProxyAttribute)) as ProxyAttribute)?.Type;
-                if (proxy is object) return CreateViaActivator<TService>(proxy);
+                if (proxy is not null)
+                {
+                    return CreateViaActivator<TService>(proxy);
+                }
             }
 
-            return EmitFactory<TService>(binderConfig);
+            return EmitFactory<TService>(binderConfig, log);
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Func<CallInvoker, TService> CreateViaActivator<TService>(Type type)
@@ -135,7 +138,7 @@ namespace ProtoBuf.Grpc.Internal
                         null)!;
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig)
+        internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
         {
             Type baseType = GrpcClientFactory.ClientBaseType;
 
@@ -172,12 +175,12 @@ namespace ProtoBuf.Grpc.Internal
                 var ops = ContractOperation.FindOperations(binderConfig, typeof(TService), null);
 
                 int marshallerIndex = 0;
-                Dictionary<Type, (FieldBuilder Field, string Name, object Instance)> marshallers = new Dictionary<Type, (FieldBuilder, string, object)>();
+                Dictionary<Type, (FieldBuilder Field, string Name, object Instance)> marshallers = [];
                 FieldBuilder Marshaller(Type forType)
                 {
                     if (marshallers.TryGetValue(forType, out var val)) return val.Field;
 
-                    var instance = s_marshallerCacheGenericMethodDef.MakeGenericMethod(forType).Invoke(binderConfig.MarshallerCache, Array.Empty<object>())!;
+                    var instance = s_marshallerCacheGenericMethodDef.MakeGenericMethod(forType).Invoke(binderConfig.MarshallerCache, [])!;
                     var name = "_m" + marshallerIndex++;
                     var field = type.DefineField(name, typeof(Marshaller<>).MakeGenericType(forType), FieldAttributes.Static | FieldAttributes.Private); // **not** readonly, we need to set it afterwards!
                     marshallers.Add(forType, (field, name, instance));
@@ -229,7 +232,10 @@ namespace ProtoBuf.Grpc.Internal
                                 il.Emit(OpCodes.Ret);
                             }
                             else
+                            {
+                                log?.Invoke($"Unclear method: {iType.Name}.{iMethod.Name}");
                                 il.ThrowException(typeof(NotSupportedException));
+                            }
                             continue;
                         }
                         
@@ -238,6 +244,7 @@ namespace ProtoBuf.Grpc.Internal
                         {
                             if (!binderConfig.Binder.TryFindInheritedService(iType, contractExpandInterfaces, out serviceName))
                             {
+                                log?.Invoke($"Inherited method is not a service: {iType.Name}.{iMethod.Name}");
                                 il.ThrowException(typeof(NotSupportedException));
                                 continue;
                             }
@@ -261,8 +268,9 @@ namespace ProtoBuf.Grpc.Internal
                         switch (op.Context)
                         {
                             case ContextKind.CallOptions:
-                                // we only support this for signatures that match the exat google pattern, but:
+                                // we only support this for signatures that match the exact google pattern, but:
                                 // defer for now
+                                log?.Invoke($"Call options not supported: {iType.Name}.{iMethod.Name}");
                                 il.ThrowException(typeof(NotImplementedException));
                                 break;
                             case ContextKind.NoContext:
@@ -274,6 +282,7 @@ namespace ProtoBuf.Grpc.Internal
                                 if (method == null)
                                 {
                                     // unexpected, but...
+                                    log?.Invoke($"No client helper: {iType.Name}.{iMethod.Name}");
                                     il.ThrowException(typeof(NotSupportedException));
                                 }
                                 else
@@ -316,6 +325,7 @@ namespace ProtoBuf.Grpc.Internal
                                 break;
                             case ContextKind.ServerCallContext: // server call? we're writing a client!
                             default: // who knows!
+                                log?.Invoke($"Unexpected context kind: {iType.Name}.{iMethod.Name}");
                                 il.ThrowException(typeof(NotSupportedException));
                                 break;
                         }
@@ -334,7 +344,7 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     finalType.GetField(name, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.SetValue(null, instance);
                 }
-                finalType.GetMethod(InitMethodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.Invoke(null, Array.Empty<object>());
+                finalType.GetMethod(InitMethodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.Invoke(null, []);
 
                 // return the factory
                 var p = Expression.Parameter(typeof(CallInvoker), "channel");
