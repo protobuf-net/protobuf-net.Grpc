@@ -145,6 +145,6 @@ namespace protobuf_net.Grpc.Test.Integration
             });
         }
 #endif
-    }        
+    }
 
 }

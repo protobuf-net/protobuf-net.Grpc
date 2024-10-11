@@ -111,24 +111,32 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
 
     private static BytesValue Deserialize(DeserializationContext context)
     {
-        var payload = context.PayloadAsReadOnlySequence();
-        var totalLen = payload.Length;
-        BytesValue? result;
-
-        if (payload.First.Length >= 4)
+        try
         {
-            // enough bytes in the first segment
-            result = TryFastParse(payload.First.Span, payload);
-        }
-        else
-        {
-            // copy up-to 4 bytes into a buffer, handling multi-segment concerns
-            Span<byte> buffer = stackalloc byte[4];
-            payload.Slice(0, (int)Math.Min(totalLen, 4)).CopyTo(buffer);
-            result = TryFastParse(buffer, payload);
-        }
+            var payload = context.PayloadAsReadOnlySequence();
+            var totalLen = payload.Length;
+            BytesValue? result;
 
-        return result ?? SlowParse(payload);
+            if (payload.First.Length >= 4)
+            {
+                // enough bytes in the first segment
+                result = TryFastParse(payload.First.Span, payload);
+            }
+            else
+            {
+                // copy up-to 4 bytes into a buffer, handling multi-segment concerns
+                Span<byte> buffer = stackalloc byte[4];
+                payload.Slice(0, (int)Math.Min(totalLen, 4)).CopyTo(buffer);
+                result = TryFastParse(buffer, payload);
+            }
+
+            return result ?? SlowParse(payload);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex.Message);
+            throw;
+        }
     }
 
     static BytesValue SlowParse(in ReadOnlySequence<byte> payload)
@@ -236,7 +244,7 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         // double-check our math using the less efficient library functions
         var arr = start.Slice(0, 4).ToArray();
         Debug.Assert(start[0] == 0x0A, "field 1, string");
-        Debug.Assert(Serializer.TryReadLengthPrefix(arr, 1, 3, PrefixStyle.None, out int checkLen)
+        Debug.Assert(Serializer.TryReadLengthPrefix(arr, 1, 3, PrefixStyle.Base128, out int checkLen)
             && checkLen == byteLen, $"length mismatch; {byteLen} vs {checkLen}");
 #endif
 
@@ -298,7 +306,7 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
             writer.Advance(headerLen);
             writer.Write(value.Span);
         }
-
         value.Recycle();
+        context.Complete();
     }
 }

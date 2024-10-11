@@ -8,10 +8,12 @@ using ProtoBuf.Meta;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -74,6 +76,12 @@ namespace protobuf_net.Grpc.Test.Integration
         ValueTask TakeFive(CancellationToken cancellationToken = default);
     }
 
+    [Service]
+    public interface IStreamRewrite
+    {
+        ValueTask<Stream> MagicStream(Foo foo, CallContext ctx = default);
+    }
+
     public enum Scenario
     {
         RunToCompletion,
@@ -88,7 +96,7 @@ namespace protobuf_net.Grpc.Test.Integration
         FaultSuccessGoodProducer, // observes cancellation
     }
 
-    class StreamServer : IStreamAPI
+    class StreamServer : IStreamAPI, IStreamRewrite
     {
         readonly StreamTestsFixture _fixture;
         internal StreamServer(StreamTestsFixture fixture)
@@ -370,6 +378,22 @@ namespace protobuf_net.Grpc.Test.Integration
                 await Task.Delay(10, ctx.CancellationToken);
             }
         }
+
+        async ValueTask<Stream> IStreamRewrite.MagicStream(Foo foo, CallContext ctx)
+        {
+            var scenario = GetScenario(ctx);
+            if (scenario is Scenario.FaultBeforeHeaders)
+            {
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "oops"));
+            }
+            var headers = new Metadata()
+            {
+                {"resp-header", 42 },
+            };
+            await ctx.ServerCallContext!.WriteResponseHeadersAsync(headers);
+
+            return new MemoryStream(Encoding.UTF8.GetBytes("hello, world"));
+        }
     }
 
     [ProtoContract]
@@ -383,10 +407,10 @@ namespace protobuf_net.Grpc.Test.Integration
     public class NativeStreamTests : StreamTests
     {
         public NativeStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(fixture, log) { }
-        protected override IAsyncDisposable CreateClient(out IStreamAPI client)
+        protected override IAsyncDisposable CreateClient<TService>(out TService client)
         {
             var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
-            client = channel.CreateGrpcService<IStreamAPI>();
+            client = channel.CreateGrpcService<TService>();
             return new DisposableChannel(channel);
         }
         sealed class DisposableChannel : IAsyncDisposable
@@ -403,10 +427,10 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         public override bool IsManagedClient => true;
         public ManagedStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(fixture, log) { }
-        protected override IAsyncDisposable CreateClient(out IStreamAPI client)
+        protected override IAsyncDisposable CreateClient<TService>(out TService client)
         {
             var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
-            client = http.CreateGrpcService<IStreamAPI>();
+            client = http.CreateGrpcService<TService>();
             return new DisposableChannel(http);
         }
         sealed class DisposableChannel : IAsyncDisposable
@@ -474,7 +498,9 @@ namespace protobuf_net.Grpc.Test.Integration
             GC.SuppressFinalize(this);
         }
 
-        protected abstract IAsyncDisposable CreateClient(out IStreamAPI client);
+        protected IAsyncDisposable CreateClient(out IStreamAPI client) => CreateClient<IStreamAPI>(out client);
+
+        protected abstract IAsyncDisposable CreateClient<TService>(out TService client) where TService : class;
 
         const int DEFAULT_SIZE = 20;
 
@@ -743,6 +769,61 @@ namespace protobuf_net.Grpc.Test.Integration
             finally
             {
                 Log("exiting producer");
+            }
+        }
+
+        [Theory]
+        [InlineData(Scenario.RunToCompletion)]
+        [InlineData(Scenario.FaultBeforeHeaders)]
+        public async Task StreamRewriteBasicTest(Scenario scenario)
+        {
+            await using var svc = CreateClient<IStreamRewrite>(out var client);
+
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), CallContextFlags.CaptureMetadata);
+
+            switch (scenario)
+            {
+                case Scenario.FaultBeforeHeaders:
+                    // expect a custom RPC fault from the server
+                    var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.MagicStream(new Foo { Bar = 1 }, ctx));
+                    WriteMetadata("header", ctx.RequestHeaders);
+                    Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
+                    Assert.Equal("oops", ex.Status.Detail);
+                    break;
+                default:
+                    {
+                        using var stream = await client.MagicStream(new Foo { Bar = 1 }, ctx);
+                        WriteMetadata("header", ctx.RequestHeaders);
+
+                        using var sr = new StreamReader(stream);
+                        string s = sr.ReadToEnd();
+                        WriteMetadata("trailer", ctx.ResponseTrailers());
+
+                        Assert.Equal("hello, world", s);
+                    }
+                    break;
+            }
+        }
+
+        private void WriteMetadata(string label, Metadata? value)
+        {
+            if (value is null)
+            {
+                _fixture.Output?.WriteLine($"(no {label} metadata)");
+            }
+            else
+            {
+                foreach (var pair in value)
+                {
+                    if (pair.IsBinary)
+                    {
+                        _fixture.Output?.WriteLine($"{label} {pair.Key}={BitConverter.ToString(pair.ValueBytes)}");
+                    }
+                    else
+                    {
+                        _fixture.Output?.WriteLine($"{label} {pair.Key}='{pair.Value}'");
+                    }
+                }
             }
         }
 

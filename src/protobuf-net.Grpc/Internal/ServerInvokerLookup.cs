@@ -68,7 +68,7 @@ namespace ProtoBuf.Grpc.Internal
         static Expression WriteStream(Expression value, Expression writer, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.WriteStream),
                 typeArguments: null,
-                arguments: [ToTaskT(value), writer, ToCancellationToken(context)]);
+                arguments: [ToTaskT(value), writer, context]);
 
         internal static bool TryGetValue(MethodType MethodType, ContextKind Context, ResultKind Arg, ResultKind Result, VoidKind Void, out Func<MethodInfo, Expression[], Expression>? invoker)
             => _invokers.TryGetValue((MethodType, Context, Arg, Result, Void), out invoker);

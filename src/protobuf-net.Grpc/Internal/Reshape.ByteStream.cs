@@ -1,4 +1,5 @@
 ﻿using Grpc.Core;
+using ProtoBuf.Grpc.Experimental;
 using System;
 using System.Buffers;
 using System.ComponentModel;
@@ -90,6 +91,7 @@ partial class Reshape
                         break;
                     }
                 }
+                metadata?.SetTrailers(call);
             }
             catch (Exception ex)
             {
@@ -111,6 +113,7 @@ partial class Reshape
                 {
                     Debug.WriteLine(ex.Message);
                 }
+
                 try
                 {
                     call.Dispose();
@@ -128,40 +131,55 @@ partial class Reshape
     /// </summary>
     [Obsolete(WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-    public static async Task WriteStream(Task<Stream> source, IAsyncStreamWriter<BytesValue> writer, CancellationToken cancellationToken)
+    public static async Task WriteStream(Task<Stream> source, IAsyncStreamWriter<BytesValue> writer, ServerCallContext context)
     {
+        try
+        {
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_0_OR_GREATER
         await // IDisposable is up-level
 #endif
-        using var stream = await source;
+            using var stream = await source;
 
-        // read from the stream and write to writer
-        int size = 512; // start modest and increase
+            // read from the stream and write to writer
+            int size = 512; // start modest and increase
 
-        while (true)
+#if DEBUG
+            int debugChunk = 0;
+#endif
+
+            while (true)
+            {
+                byte[] leased = ArrayPool<byte>.Shared.Rent(size);
+
+                var maxRead = Math.Min(leased.Length, BytesValue.MaxLength);
+                var bytes = await stream.ReadAsync(leased, 0, maxRead, context.CancellationToken).ConfigureAwait(false);
+                if (bytes <= 0) // EOF
+                {
+                    ArrayPool<byte>.Shared.Return(leased);
+                    break;
+                }
+                if (bytes == maxRead)
+                {
+                    // allow more next time
+                    size = Math.Min(size * 2, BytesValue.MaxLength);
+                }
+                else
+                {
+                    // allow less next time, down to whatever we read
+                    size = Math.Max(maxRead, 128);
+                }
+
+                var chunk = new BytesValue(leased, bytes, pooled: true);
+#if DEBUG
+                context.ResponseTrailers.Add($"pbn_chunk{debugChunk}", bytes);
+#endif
+                await writer.WriteAsync(chunk).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
         {
-            byte[] leased = ArrayPool<byte>.Shared.Rent(size);
-
-            var maxRead = Math.Min(leased.Length, BytesValue.MaxLength);
-            var bytes = await stream.ReadAsync(leased, 0, maxRead, cancellationToken).ConfigureAwait(false);
-            if (bytes <= 0) // EOF
-            {
-                ArrayPool<byte>.Shared.Return(leased);
-                return;
-            }
-            if (bytes == maxRead)
-            {
-                // allow more next time
-                size = Math.Min(size * 2, BytesValue.MaxLength);
-            }
-            else
-            {
-                // allow less next time, down to whatever we read
-                size = Math.Max(maxRead, 128);
-            }
-
-            var chunk = new BytesValue(leased, bytes, pooled: true);
-            await writer.WriteAsync(chunk).ConfigureAwait(false);
+            Debug.WriteLine(ex.Message);
+            throw;
         }
     }
 
