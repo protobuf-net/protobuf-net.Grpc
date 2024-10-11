@@ -208,7 +208,7 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         Debug.Assert(start.Length >= 4, "optimized for at least 4 bytes available");
 
         // note: optimized for little-endian CPUs, but safe anywhere (big-endian has an extra reverse)
-        ulong raw = BinaryPrimitives.ReadUInt32LittleEndian(start);
+        int raw = BinaryPrimitives.ReadInt32LittleEndian(start);
         int byteLen, headerLen;
         switch (raw & 0x808080FF) // test the entire first byte, and the MSBs of the rest
         {
@@ -218,19 +218,18 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
             case 0x0080000A:
             case 0x8080000A:
                 headerLen = 2;
-                byteLen = start[1];
+                byteLen = (raw & 0x7F00) >> 8;
                 break;
             // two-byte length, with anything after (0A8000*, backwards)
             case 0x0000800A:
             case 0x8000800A:
                 headerLen = 3;
-                byteLen = (start[1] & 0x7F) | (start[2] << 7);
+                byteLen = ((raw & 0x7F00) >> 8) | ((raw & 0x7F0000) >> 9);
                 break;
             // three-byte length (0A808000, backwards)
-            case 0x0A808000:
             case 0x0080800A:
                 headerLen = 4;
-                byteLen = (start[1] & 0x7F) | ((start[2] & 0x7F) << 7) | (start[3] << 14);
+                byteLen = ((raw & 0x7F00) >> 8) | ((raw & 0x7F0000) >> 9) | ((raw & 0x7F000000) >> 10);
                 break;
             default:
                 return null; // not optimized
