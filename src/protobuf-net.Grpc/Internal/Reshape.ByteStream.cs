@@ -4,6 +4,7 @@ using System;
 using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
@@ -39,10 +40,11 @@ partial class Reshape
     {
 
         context.CallOptions.CancellationToken.ThrowIfCancellationRequested();
-        return Chunkify(invoker.AsyncServerStreamingCall(Assert<TRequest, BytesValue>(method), host, context.CallOptions, request), context.Prepare(), context.CancellationToken);
+        return ReadByteValueSequenceAsStream(invoker.AsyncServerStreamingCall(Assert<TRequest, BytesValue>(method), host, context.CallOptions, request), context.Prepare(), context.CancellationToken);
 
-        async static Task<Stream> Chunkify(AsyncServerStreamingCall<BytesValue> call, MetadataContext? metadata, CancellationToken cancellationToken)
+        async static Task<Stream> ReadByteValueSequenceAsStream(AsyncServerStreamingCall<BytesValue> call, MetadataContext? metadata, CancellationToken cancellationToken)
         {
+            const bool DemandTrailer = true;
             try
             {
                 // wait for headers, even if not available; that means we're in a state to start spoofing the stream
@@ -56,10 +58,31 @@ partial class Reshape
                     //
                     await call.ResponseHeadersAsync.ConfigureAwait(false);
                 }
+                var firstRead = call.ResponseStream.MoveNext(CancellationToken.None);
+                if (firstRead.IsCompleted)
+                {
+                    // probably an error in the call; fetch eagerly, so we can fail *before*
+                    // providing a stream that needs reading to expose the fault; we'll
+                    // touch the .Result, which is fine - we know it is completed, and this is
+                    // Task, not ValueTask, so it is repeatable; if it throws: server fault;
+                    // if it returns false, empty stream
+                    if (!firstRead.GetAwaiter().GetResult())
+                    {
+                        // empty stream, which could be valid zero-length, or could be
+                        // a server fault; we'll find out
+                        metadata?.SetTrailers(call);
+                        call.Dispose();
+                        return Stream.Null;
+                    }
+
+                    // if we get here, the first read was success - that just means
+                    // the server is fast; we'll just let the main path await the already-completed
+                    // first read, like normal
+                }
 
                 // so if we got this far, we think the server is happy - start spinning up infrastructure to be the stream
                 Pipe pipe = new();
-                _ = Task.Run(() => PushAsync(call, pipe.Writer, metadata, cancellationToken), CancellationToken.None);
+                _ = Task.Run(() => ReadByteValueSequenceToPipeWriter(call, firstRead, pipe.Writer, metadata, DemandTrailer, cancellationToken), CancellationToken.None);
                 return pipe.Reader.AsStream(leaveOpen: false);
             }
             catch (RpcException fault)
@@ -70,26 +93,56 @@ partial class Reshape
             }
         }
 
-        async static Task PushAsync(AsyncServerStreamingCall<BytesValue> call, PipeWriter destination, MetadataContext? metadata, CancellationToken cancellationToken)
+        async static Task ReadByteValueSequenceToPipeWriter(AsyncServerStreamingCall<BytesValue> call, Task<bool> pendingRead, PipeWriter destination, MetadataContext? metadata, bool demandTrailer, CancellationToken cancellationToken)
         {
             Exception? fault = null;
             try
             {
                 var source = call.ResponseStream;
-                while (await source.MoveNext(CancellationToken.None).ConfigureAwait(false)) // note that the context's cancellation is already baked in
+                long actualLength = 0;
+                bool clientTerminated = false;
+                while (await pendingRead.ConfigureAwait(false)) // note that the context's cancellation is already baked in
                 {
                     var chunk = source.Current;
                     var result = await destination.WriteAsync(chunk.Memory, cancellationToken).ConfigureAwait(false);
+                    actualLength += chunk.Length;
+
                     if (result.IsCanceled)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         FallbackThrowCanceled();
                     }
+
                     if (result.IsCompleted)
                     {
                         // reader has shut down; stop copying (we'll tell the server by disposing the call)
+                        clientTerminated = true;
+                        demandTrailer = false;
                         break;
                     }
+
+                    pendingRead = source.MoveNext(CancellationToken.None);
+                }
+                string? lenTrailer;
+                try
+                {
+                    lenTrailer = call.GetTrailers().GetString(TrailerStreamLength);
+                }
+                catch (InvalidOperationException) when (clientTerminated)
+                {
+                    // we didn't let the stream get to the end; the trailers simply might not be there
+                    lenTrailer = null;
+                    metadata = null;
+                }
+
+                if (string.IsNullOrWhiteSpace(lenTrailer))
+                {
+                    if (demandTrailer) throw new InvalidOperationException($"Missing trailer: '{TrailerStreamLength}'");
+                }
+                else if (!long.TryParse(lenTrailer, NumberStyles.Integer, CultureInfo.InvariantCulture, out var expectedLength)
+                    || expectedLength != actualLength)
+                {
+                    throw new InvalidOperationException($"Invalid trailer or length mismatch: '{TrailerStreamLength}'");
                 }
                 metadata?.SetTrailers(call);
             }
@@ -131,7 +184,7 @@ partial class Reshape
     /// </summary>
     [Obsolete(WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-    public static async Task WriteStream(Task<Stream> source, IAsyncStreamWriter<BytesValue> writer, ServerCallContext context)
+    public static async Task WriteStream(Task<Stream> source, IAsyncStreamWriter<BytesValue> writer, ServerCallContext context, bool writeTrailer)
     {
         try
         {
@@ -142,7 +195,7 @@ partial class Reshape
 
             // read from the stream and write to writer
             int size = 512; // start modest and increase
-
+            long totalLength = 0;
 #if DEBUG
             int debugChunk = 0;
 #endif
@@ -166,14 +219,20 @@ partial class Reshape
                 else
                 {
                     // allow less next time, down to whatever we read
-                    size = Math.Max(maxRead, 128);
+                    size = Math.Max(bytes, 128);
                 }
 
                 var chunk = new BytesValue(leased, bytes, pooled: true);
 #if DEBUG
                 context.ResponseTrailers.Add($"pbn_chunk{debugChunk}", bytes);
 #endif
+                totalLength += bytes;
                 await writer.WriteAsync(chunk).ConfigureAwait(false);
+            }
+
+            if (writeTrailer)
+            {
+                context.ResponseTrailers.Add(TrailerStreamLength, totalLength.ToString(CultureInfo.InvariantCulture));
             }
         }
         catch (Exception ex)
@@ -182,6 +241,9 @@ partial class Reshape
             throw;
         }
     }
+
+    // more idiomatic labels like content-length are reserved, and are not transmitted/received
+    internal const string TrailerStreamLength = "stream-length";
 
     static void FallbackThrowCanceled() => throw new OperationCanceledException();
 

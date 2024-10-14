@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -384,15 +385,60 @@ namespace protobuf_net.Grpc.Test.Integration
             var scenario = GetScenario(ctx);
             if (scenario is Scenario.FaultBeforeHeaders)
             {
-                throw new RpcException(new Status(StatusCode.PermissionDenied, "oops"));
+                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultBeforeHeaders)));
             }
+
             var headers = new Metadata()
             {
-                {"resp-header", 42 },
+                {"resp-header", scenario.ToString() },
             };
+
             await ctx.ServerCallContext!.WriteResponseHeadersAsync(headers);
 
-            return new MemoryStream(Encoding.UTF8.GetBytes("hello, world"));
+            switch (scenario)
+            {
+                case Scenario.YieldNothing:
+                    return Stream.Null;
+                case Scenario.RunToCompletion:
+                    return new MemoryStream(Encoding.UTF8.GetBytes("hello, world"));
+                case Scenario.FaultBeforeTrailers:
+                case Scenario.FaultBeforeYield:
+                case Scenario.FaultAfterYield:
+                    var pipe = new Pipe();
+                    _ = Task.Run(async () =>
+                    {
+                        Exception? fault = null;
+                        await Task.Delay(50);
+                        try
+                        {
+                            if (scenario == Scenario.FaultBeforeYield)
+                            {
+                                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultBeforeYield)));
+                            }
+                            await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("hello, "), CancellationToken.None);
+                            if (scenario == Scenario.FaultAfterYield)
+                            {
+                                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultAfterYield)));
+                            }
+                            await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("world"), CancellationToken.None);
+                            if (scenario == Scenario.FaultBeforeTrailers)
+                            {
+                                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultBeforeTrailers)));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            fault = ex;
+                        }
+                        finally
+                        {
+                            await pipe.Writer.CompleteAsync(fault);
+                        }
+                    }, CancellationToken.None);
+                    return pipe.Reader.AsStream();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(scenario));
+            }
         }
     }
 
@@ -774,7 +820,11 @@ namespace protobuf_net.Grpc.Test.Integration
 
         [Theory]
         [InlineData(Scenario.RunToCompletion)]
+        [InlineData(Scenario.YieldNothing)]
         [InlineData(Scenario.FaultBeforeHeaders)]
+        [InlineData(Scenario.FaultBeforeYield)]
+        [InlineData(Scenario.FaultAfterYield)]
+        [InlineData(Scenario.FaultBeforeTrailers)]
         public async Task StreamRewriteBasicTest(Scenario scenario)
         {
             await using var svc = CreateClient<IStreamRewrite>(out var client);
@@ -788,7 +838,7 @@ namespace protobuf_net.Grpc.Test.Integration
                     var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.MagicStream(new Foo { Bar = 1 }, ctx));
                     WriteMetadata("header", ctx.RequestHeaders);
                     Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
-                    Assert.Equal("oops", ex.Status.Detail);
+                    Assert.Equal(nameof(Scenario.FaultBeforeHeaders), ex.Status.Detail);
                     break;
                 default:
                     {
@@ -796,13 +846,27 @@ namespace protobuf_net.Grpc.Test.Integration
                         WriteMetadata("header", ctx.RequestHeaders);
 
                         using var sr = new StreamReader(stream);
-                        string s = sr.ReadToEnd();
-                        WriteMetadata("trailer", ctx.ResponseTrailers());
 
-                        Assert.Equal("hello, world", s);
+                        switch (scenario)
+                        {
+                            case Scenario.RunToCompletion:
+                                string s = await sr.ReadToEndAsync();
+                                Assert.Equal("hello, world", s);
+                                break;
+                            case Scenario.YieldNothing:
+                                s = await sr.ReadToEndAsync();
+                                Assert.Equal("", s);
+                                break;
+                            default:
+                                ex = await Assert.ThrowsAsync<RpcException>(sr.ReadToEndAsync);
+                                Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
+                                Assert.Equal(scenario.ToString(), ex.Status.Detail);
+                                break;
+                        }
                     }
                     break;
             }
+            WriteMetadata("trailer", ctx.ResponseTrailers());
         }
 
         private void WriteMetadata(string label, Metadata? value)

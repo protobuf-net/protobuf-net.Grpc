@@ -65,10 +65,13 @@ namespace ProtoBuf.Grpc.Internal
                 typeArguments: value.Type.GetGenericArguments(),
                 arguments: [value, writer]);
 
-        static Expression WriteStream(Expression value, Expression writer, Expression context)
+        static Expression WriteStream(Expression value, Expression writer, Expression context, bool writeTrailer = true)
             => Expression.Call(typeof(Reshape), nameof(Reshape.WriteStream),
                 typeArguments: null,
-                arguments: [ToTaskT(value), writer, context]);
+                arguments: [ToTaskT(value), writer, context, ConstantBoolean(writeTrailer)]);
+
+        private static Expression ConstantBoolean(bool value) => value ? True : False;
+        private static Expression True = Expression.Constant(true, typeof(bool)), False = Expression.Constant(false, typeof(bool));
 
         internal static bool TryGetValue(MethodType MethodType, ContextKind Context, ResultKind Arg, ResultKind Result, VoidKind Void, out Func<MethodInfo, Expression[], Expression>? invoker)
             => _invokers.TryGetValue((MethodType, Context, Arg, Result, Void), out invoker);
