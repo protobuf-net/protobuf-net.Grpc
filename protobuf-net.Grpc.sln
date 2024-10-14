@@ -26,6 +26,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{8D5FDB6F-6111-4604-8EDF-6A59F8B12D7E}"
 	ProjectSection(SolutionItems) = preProject
 		appveyor.yml = appveyor.yml
+		Build.csproj = Build.csproj
 		Directory.build.props = Directory.build.props
 		Directory.Build.targets = Directory.Build.targets
 		Directory.Packages.props = Directory.Packages.props
@@ -70,15 +71,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "managed", "managed", "{39491A90-84A2-4E13-B867-CFC3D4592084}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "native", "native", "{BE48D1A2-CE10-4AEE-B370-ED8E373B082B}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{6065C30D-7C5D-4C54-97B4-F407B56C7A89}"
-	ProjectSection(SolutionItems) = preProject
-		docs\configuration.md = docs\configuration.md
-		docs\gettingstarted.md = docs\gettingstarted.md
-		docs\index.md = docs\index.md
-		docs\projects.md = docs\projects.md
-		docs\releasenotes.md = docs\releasenotes.md
-	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client", "examples\grpc\Client\Client.csproj", "{301A0DD5-0300-4B6B-BEE7-65DB6604DD2F}"
 EndProject
@@ -148,6 +140,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.Portfolios.ClientConsole", "examples\wcf-port\TraderSys\src\TraderSys.Portfolios.ClientConsole\TraderSys.Portfolios.ClientConsole.csproj", "{AC65761B-5CF5-4F3E-AF60-41F977E8070D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TraderSys.Portfolios.Shared", "examples\wcf-port\TraderSys\src\TraderSys.Portfolios.Shared\TraderSys.Portfolios.Shared.csproj", "{80479131-FE55-473E-AE68-55601AD96668}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "docs", "docs\docs.csproj", "{9479D65D-A0E8-4520-99EC-93774A217EF6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -402,6 +396,12 @@ Global
 		{80479131-FE55-473E-AE68-55601AD96668}.Release|Any CPU.Build.0 = Release|Any CPU
 		{80479131-FE55-473E-AE68-55601AD96668}.VS|Any CPU.ActiveCfg = Debug|Any CPU
 		{80479131-FE55-473E-AE68-55601AD96668}.VS|Any CPU.Build.0 = Debug|Any CPU
+		{9479D65D-A0E8-4520-99EC-93774A217EF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9479D65D-A0E8-4520-99EC-93774A217EF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9479D65D-A0E8-4520-99EC-93774A217EF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9479D65D-A0E8-4520-99EC-93774A217EF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9479D65D-A0E8-4520-99EC-93774A217EF6}.VS|Any CPU.ActiveCfg = Debug|Any CPU
+		{9479D65D-A0E8-4520-99EC-93774A217EF6}.VS|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -462,6 +462,7 @@ Global
 		{87D27844-3A62-431A-9B53-92AFC09A1C3C} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
 		{AC65761B-5CF5-4F3E-AF60-41F977E8070D} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
 		{80479131-FE55-473E-AE68-55601AD96668} = {2B3F5AED-24B3-4915-900E-EFC58414EA29}
+		{9479D65D-A0E8-4520-99EC-93774A217EF6} = {8D5FDB6F-6111-4604-8EDF-6A59F8B12D7E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA14B07C-CA29-430D-A600-F37A050636D3}

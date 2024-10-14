@@ -1,0 +1,6 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+      <!-- this file exists only to make it easy to work with the folder in devenv -->
+    <TargetFramework>$(DefaultTFM)</TargetFramework>
+  </PropertyGroup>
+</Project>

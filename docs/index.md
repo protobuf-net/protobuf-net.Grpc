@@ -7,6 +7,7 @@
 - [Build Tools ("contract-first" focus)](https://protobuf-net.github.io/protobuf-net/contract_first)
 - [Create Proto File](createProtoFile)
 - [Register Client Service in Startup.cs](registerClientService)
+- [.NET Streams](streams)
 
 Other Content
 
