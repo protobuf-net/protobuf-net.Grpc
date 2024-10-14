@@ -4,7 +4,8 @@ gRPC has a `stream` concept that allows client-streaming, server-streaming, and 
 protobuf-net.Grpc, this is typically exposed via the `IAsyncEnumerable<T>` API, which is an asynchronous sequence of messages of type `T`. For example,
 
 ```
-public async IAsyncEnumerable<SomeResponse> SomeDuplexMethod(IAsyncEnumerable<SomeRequest> requests)
+public async IAsyncEnumerable<SomeResponse> SomeDuplexMethod(
+    IAsyncEnumerable<SomeRequest> requests)
 {
     // very basic request/response server using streaming
     await foreach (var req in requests)
@@ -18,25 +19,35 @@ This is *fine*, but .NET has another "stream", i.e. `System.IO.Stream` - a seque
 
 As of 1.2.2, protobuf-net.Grpc has limited (and growing) support for `Stream` as an exchange mechanism. Currently supported scenarios:
 
-- `Task<Stream> SomeMethod(/* optional single request message, optional context/cancellation */);`
-- `ValueTask<Stream> SomeMethod(/* optional single request message, optional context/cancellation */);`
+- ```
+  Task<Stream> SomeMethod(/* optional single request message,
+      optional context/cancellation */);
+  ```
+- ```
+  ValueTask<Stream> SomeMethod(/* optional single request message,
+      optional context/cancellation */);
+  ```
 
 For example:
 
 ``` c#
 public async Task<Stream> GetFileContents(SomeRequest request)
 {
-    var localPath = await CheckAccessAndMapToLocalPath(request.Path);
+    // validation, etc
+    var localPath = await CheckAccessAndMapToLocalPathAsync(request.Path);
 
+    // return an existing .NET Stream, via gRPC
     return File.OpenRead(localPath);
 }
 ```
 
-This hands a `Stream` back to the library, with the library assuming control of how to transmit that, disposing the stream when done (as an implementation detail: it
+This hands a `Stream` back to the library, with the library assuming control of how to transmit that, disposing the stream when done, and
+handling faults in the expected ways (as an implementation detail: it
 is sent as a `stream` of [`BytesValue`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/wrappers.proto) messages,
 with bespoke marshalling). As you would expect, the client can access this data trivially:
 
 ``` c#
+// write Stream data from gRPC server to a local file
 await using var data = proxy.GetFileContents(request);
 await using var localFile = File.Create(localCachePath);
 await data.CopyToAsync(localFile);
