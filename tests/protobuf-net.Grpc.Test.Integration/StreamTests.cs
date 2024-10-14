@@ -825,48 +825,62 @@ namespace protobuf_net.Grpc.Test.Integration
         [InlineData(Scenario.FaultBeforeYield)]
         [InlineData(Scenario.FaultAfterYield)]
         [InlineData(Scenario.FaultBeforeTrailers)]
-        public async Task StreamRewriteBasicTest(Scenario scenario)
+
+        [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.YieldNothing, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeYield, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultAfterYield, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.CaptureMetadata)]
+        public async Task StreamRewriteBasicTest(Scenario scenario, CallContextFlags flags = CallContextFlags.None)
         {
+            // note that depending on timing, FaultBeforeYield may be exposed as *either* a failed Stream
+            // fetch, *or* an unreadable stream
+
             await using var svc = CreateClient<IStreamRewrite>(out var client);
+            bool withMetadata = (flags & CallContextFlags.CaptureMetadata) != 0;
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
 
-            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), CallContextFlags.CaptureMetadata);
-
-            switch (scenario)
+            try
             {
-                case Scenario.FaultBeforeHeaders:
-                    // expect a custom RPC fault from the server
-                    var ex = await Assert.ThrowsAsync<RpcException>(async () => await client.MagicStream(new Foo { Bar = 1 }, ctx));
-                    WriteMetadata("header", ctx.RequestHeaders);
-                    Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
-                    Assert.Equal(nameof(Scenario.FaultBeforeHeaders), ex.Status.Detail);
-                    break;
-                default:
-                    {
-                        using var stream = await client.MagicStream(new Foo { Bar = 1 }, ctx);
-                        WriteMetadata("header", ctx.RequestHeaders);
+                using var stream = await client.MagicStream(new Foo { Bar = 1 }, ctx);
+                if (withMetadata)
+                {
+                    WriteMetadata("header", await ctx.ResponseHeadersAsync());
+                }
 
-                        using var sr = new StreamReader(stream);
+                using var sr = new StreamReader(stream);
 
-                        switch (scenario)
-                        {
-                            case Scenario.RunToCompletion:
-                                string s = await sr.ReadToEndAsync();
-                                Assert.Equal("hello, world", s);
-                                break;
-                            case Scenario.YieldNothing:
-                                s = await sr.ReadToEndAsync();
-                                Assert.Equal("", s);
-                                break;
-                            default:
-                                ex = await Assert.ThrowsAsync<RpcException>(sr.ReadToEndAsync);
-                                Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
-                                Assert.Equal(scenario.ToString(), ex.Status.Detail);
-                                break;
-                        }
-                    }
-                    break;
+                switch (scenario)
+                {
+                    case Scenario.RunToCompletion:
+                        string s = await sr.ReadToEndAsync();
+                        Assert.Equal("hello, world", s);
+                        break;
+                    case Scenario.YieldNothing:
+                        s = await sr.ReadToEndAsync();
+                        Assert.Equal("", s);
+                        break;
+                    default:
+                        var ex = await Assert.ThrowsAsync<RpcException>(sr.ReadToEndAsync);
+                        Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
+                        Assert.Equal(scenario.ToString(), ex.Status.Detail);
+                        break;
+                }
             }
-            WriteMetadata("trailer", ctx.ResponseTrailers());
+            catch (RpcException ex) when (scenario is Scenario.FaultBeforeHeaders or Scenario.FaultBeforeYield)
+            {
+                if (withMetadata)
+                {
+                    WriteMetadata("header", await ctx.ResponseHeadersAsync());
+                }
+                Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
+                Assert.Equal(scenario.ToString(), ex.Status.Detail);
+            }
+            if (withMetadata)
+            {
+                WriteMetadata("trailer", ctx.ResponseTrailers());
+            }
         }
 
         private void WriteMetadata(string label, Metadata? value)
