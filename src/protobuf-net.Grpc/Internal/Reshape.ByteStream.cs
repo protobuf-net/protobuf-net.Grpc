@@ -44,7 +44,7 @@ partial class Reshape
 
         async static Task<Stream> ReadByteValueSequenceAsStream(AsyncServerStreamingCall<BytesValue> call, MetadataContext? metadata, CancellationToken cancellationToken)
         {
-            const bool DemandTrailer = true;
+            const bool DemandTrailer = false; // don't *demand* the trailer indicating total length, but enforce it if we find it (we always send it, currently)
             try
             {
                 // wait for headers, even if not available; that means we're in a state to start spoofing the stream
