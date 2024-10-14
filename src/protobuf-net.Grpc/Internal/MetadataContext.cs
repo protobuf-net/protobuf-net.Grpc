@@ -73,7 +73,20 @@ namespace ProtoBuf.Grpc.Internal
             }
         }
 
-        internal void SetTrailers<T>(T? call, Func<T, Status> getStatus, Func<T, Metadata> getMetadata)
+        internal void SetTrailers<TResponse>(AsyncUnaryCall<TResponse>? call)
+            => SetTrailers(call, static c => c.GetStatus(), static c => c.GetTrailers());
+
+        internal void SetTrailers<TRequest, TResponse>(AsyncClientStreamingCall<TRequest, TResponse>? call)
+            => SetTrailers(call, static c => c.GetStatus(), static c => c.GetTrailers());
+
+        internal void SetTrailers<TResponse>(AsyncServerStreamingCall<TResponse>? call)
+            => SetTrailers(call, static c => c.GetStatus(), static c => c.GetTrailers());
+
+        internal void SetTrailers<TRequest, TResponse>(AsyncDuplexStreamingCall<TRequest, TResponse>? call)
+            => SetTrailers(call, static c => c.GetStatus(), static c => c.GetTrailers());
+
+
+        private void SetTrailers<T>(T? call, Func<T, Status> getStatus, Func<T, Metadata> getMetadata)
             where T : class
         {
             if (call is null) return;

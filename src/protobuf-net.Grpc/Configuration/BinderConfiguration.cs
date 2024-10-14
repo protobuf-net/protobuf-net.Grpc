@@ -12,7 +12,7 @@ namespace ProtoBuf.Grpc.Configuration
     public sealed class BinderConfiguration
     {
         // this *must* stay above Default - .cctor order is file order
-        static readonly MarshallerFactory[] s_defaultFactories = new MarshallerFactory[] { ProtoBufMarshallerFactory.Default, ProtoBufMarshallerFactory.GoogleProtobuf };
+        static readonly MarshallerFactory[] s_defaultFactories = [ProtoBufMarshallerFactory.Default, ProtoBufMarshallerFactory.GoogleProtobuf];
 
         /// <summary>
         /// Use the default MarshallerFactory and ServiceBinder

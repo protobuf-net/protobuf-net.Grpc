@@ -8,10 +8,13 @@ using ProtoBuf.Meta;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -74,6 +77,12 @@ namespace protobuf_net.Grpc.Test.Integration
         ValueTask TakeFive(CancellationToken cancellationToken = default);
     }
 
+    [Service]
+    public interface IStreamRewrite
+    {
+        ValueTask<Stream> MagicStream(Foo foo, CallContext ctx = default);
+    }
+
     public enum Scenario
     {
         RunToCompletion,
@@ -88,7 +97,7 @@ namespace protobuf_net.Grpc.Test.Integration
         FaultSuccessGoodProducer, // observes cancellation
     }
 
-    class StreamServer : IStreamAPI
+    class StreamServer : IStreamAPI, IStreamRewrite
     {
         readonly StreamTestsFixture _fixture;
         internal StreamServer(StreamTestsFixture fixture)
@@ -370,6 +379,67 @@ namespace protobuf_net.Grpc.Test.Integration
                 await Task.Delay(10, ctx.CancellationToken);
             }
         }
+
+        async ValueTask<Stream> IStreamRewrite.MagicStream(Foo foo, CallContext ctx)
+        {
+            var scenario = GetScenario(ctx);
+            if (scenario is Scenario.FaultBeforeHeaders)
+            {
+                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultBeforeHeaders)));
+            }
+
+            var headers = new Metadata()
+            {
+                {"resp-header", scenario.ToString() },
+            };
+
+            await ctx.ServerCallContext!.WriteResponseHeadersAsync(headers);
+
+            switch (scenario)
+            {
+                case Scenario.YieldNothing:
+                    return Stream.Null;
+                case Scenario.RunToCompletion:
+                    return new MemoryStream(Encoding.UTF8.GetBytes("hello, world"));
+                case Scenario.FaultBeforeTrailers:
+                case Scenario.FaultBeforeYield:
+                case Scenario.FaultAfterYield:
+                    var pipe = new Pipe();
+                    _ = Task.Run(async () =>
+                    {
+                        Exception? fault = null;
+                        await Task.Delay(50);
+                        try
+                        {
+                            if (scenario == Scenario.FaultBeforeYield)
+                            {
+                                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultBeforeYield)));
+                            }
+                            await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("hello, "), CancellationToken.None);
+                            if (scenario == Scenario.FaultAfterYield)
+                            {
+                                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultAfterYield)));
+                            }
+                            await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("world"), CancellationToken.None);
+                            if (scenario == Scenario.FaultBeforeTrailers)
+                            {
+                                throw new RpcException(new Status(StatusCode.PermissionDenied, nameof(Scenario.FaultBeforeTrailers)));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            fault = ex;
+                        }
+                        finally
+                        {
+                            await pipe.Writer.CompleteAsync(fault);
+                        }
+                    }, CancellationToken.None);
+                    return pipe.Reader.AsStream();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(scenario));
+            }
+        }
     }
 
     [ProtoContract]
@@ -383,10 +453,10 @@ namespace protobuf_net.Grpc.Test.Integration
     public class NativeStreamTests : StreamTests
     {
         public NativeStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(fixture, log) { }
-        protected override IAsyncDisposable CreateClient(out IStreamAPI client)
+        protected override IAsyncDisposable CreateClient<TService>(out TService client)
         {
             var channel = new Channel("localhost", Port, ChannelCredentials.Insecure);
-            client = channel.CreateGrpcService<IStreamAPI>();
+            client = channel.CreateGrpcService<TService>();
             return new DisposableChannel(channel);
         }
         sealed class DisposableChannel : IAsyncDisposable
@@ -403,10 +473,10 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         public override bool IsManagedClient => true;
         public ManagedStreamTests(StreamTestsFixture fixture, ITestOutputHelper log) : base(fixture, log) { }
-        protected override IAsyncDisposable CreateClient(out IStreamAPI client)
+        protected override IAsyncDisposable CreateClient<TService>(out TService client)
         {
             var http = global::Grpc.Net.Client.GrpcChannel.ForAddress($"http://localhost:{Port}");
-            client = http.CreateGrpcService<IStreamAPI>();
+            client = http.CreateGrpcService<TService>();
             return new DisposableChannel(http);
         }
         sealed class DisposableChannel : IAsyncDisposable
@@ -474,7 +544,9 @@ namespace protobuf_net.Grpc.Test.Integration
             GC.SuppressFinalize(this);
         }
 
-        protected abstract IAsyncDisposable CreateClient(out IStreamAPI client);
+        protected IAsyncDisposable CreateClient(out IStreamAPI client) => CreateClient<IStreamAPI>(out client);
+
+        protected abstract IAsyncDisposable CreateClient<TService>(out TService client) where TService : class;
 
         const int DEFAULT_SIZE = 20;
 
@@ -743,6 +815,93 @@ namespace protobuf_net.Grpc.Test.Integration
             finally
             {
                 Log("exiting producer");
+            }
+        }
+
+        [Theory]
+        [InlineData(Scenario.RunToCompletion)]
+        [InlineData(Scenario.YieldNothing)]
+        [InlineData(Scenario.FaultBeforeHeaders)]
+        [InlineData(Scenario.FaultBeforeYield)]
+        [InlineData(Scenario.FaultAfterYield)]
+        [InlineData(Scenario.FaultBeforeTrailers)]
+
+        [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.YieldNothing, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeHeaders, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeYield, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultAfterYield, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultBeforeTrailers, CallContextFlags.CaptureMetadata)]
+        public async Task StreamRewriteBasicTest(Scenario scenario, CallContextFlags flags = CallContextFlags.None)
+        {
+            // note that depending on timing, FaultBeforeYield may be exposed as *either* a failed Stream
+            // fetch, *or* an unreadable stream
+
+            await using var svc = CreateClient<IStreamRewrite>(out var client);
+            bool withMetadata = (flags & CallContextFlags.CaptureMetadata) != 0;
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            try
+            {
+                using var stream = await client.MagicStream(new Foo { Bar = 1 }, ctx);
+                if (withMetadata)
+                {
+                    WriteMetadata("header", await ctx.ResponseHeadersAsync());
+                }
+
+                using var sr = new StreamReader(stream);
+
+                switch (scenario)
+                {
+                    case Scenario.RunToCompletion:
+                        string s = await sr.ReadToEndAsync();
+                        Assert.Equal("hello, world", s);
+                        break;
+                    case Scenario.YieldNothing:
+                        s = await sr.ReadToEndAsync();
+                        Assert.Equal("", s);
+                        break;
+                    default:
+                        var ex = await Assert.ThrowsAsync<RpcException>(sr.ReadToEndAsync);
+                        Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
+                        Assert.Equal(scenario.ToString(), ex.Status.Detail);
+                        break;
+                }
+            }
+            catch (RpcException ex) when (scenario is Scenario.FaultBeforeHeaders or Scenario.FaultBeforeYield)
+            {
+                if (withMetadata)
+                {
+                    WriteMetadata("header", await ctx.ResponseHeadersAsync());
+                }
+                Assert.Equal(StatusCode.PermissionDenied, ex.StatusCode);
+                Assert.Equal(scenario.ToString(), ex.Status.Detail);
+            }
+            if (withMetadata)
+            {
+                WriteMetadata("trailer", ctx.ResponseTrailers());
+            }
+        }
+
+        private void WriteMetadata(string label, Metadata? value)
+        {
+            if (value is null)
+            {
+                _fixture.Output?.WriteLine($"(no {label} metadata)");
+            }
+            else
+            {
+                foreach (var pair in value)
+                {
+                    if (pair.IsBinary)
+                    {
+                        _fixture.Output?.WriteLine($"{label} {pair.Key}={BitConverter.ToString(pair.ValueBytes)}");
+                    }
+                    else
+                    {
+                        _fixture.Output?.WriteLine($"{label} {pair.Key}='{pair.Value}'");
+                    }
+                }
             }
         }
 

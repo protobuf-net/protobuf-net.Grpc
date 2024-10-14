@@ -16,7 +16,7 @@ namespace ProtoBuf.Grpc.Internal
     /// </summary>
     [Obsolete(WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
-    public static class Reshape
+    public static partial class Reshape
     {
         internal const string WarningMessage = "This API is intended for use by runtime-generated code; all types and methods can be changed without notice - it is only guaranteed to work with the internally generated code";
 
@@ -558,7 +558,7 @@ namespace ProtoBuf.Grpc.Internal
                     metadata?.SetTrailers(fault);
                     throw;
                 }
-                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                metadata?.SetTrailers(call);
 
                 return value;
             }
@@ -624,7 +624,7 @@ namespace ProtoBuf.Grpc.Internal
                     }
                 } while (haveMore);
 
-                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                metadata?.SetTrailers(call);
             }
         }
 
@@ -655,7 +655,7 @@ namespace ProtoBuf.Grpc.Internal
 
             protected override ValueTask OnAfterAsync()
             {
-                _metadata?.SetTrailers(_call, c => c.GetStatus(), c => c.GetTrailers());
+                _metadata?.SetTrailers(_call);
                 return default;
             }
 
@@ -724,7 +724,7 @@ namespace ProtoBuf.Grpc.Internal
                     allDone.Token.ThrowIfCancellationRequested();
                     var result = await call.ResponseAsync.ConfigureAwait(false);
 
-                    metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                    metadata?.SetTrailers(call);
                     return result;
                 }
                 catch (RpcException fault)
@@ -789,7 +789,7 @@ namespace ProtoBuf.Grpc.Internal
 
                     var result = await call.ResponseAsync.ConfigureAwait(false);
 
-                    metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                    metadata?.SetTrailers(call);
                     return result;
                 }
                 catch (RpcException fault)
@@ -884,7 +884,7 @@ namespace ProtoBuf.Grpc.Internal
                     metadata?.SetTrailers(fault);
                     throw;
                 }
-                metadata?.SetTrailers(call, c => c.GetStatus(), c => c.GetTrailers());
+                metadata?.SetTrailers(call);
             }
         }
 
@@ -918,7 +918,7 @@ namespace ProtoBuf.Grpc.Internal
             protected override async ValueTask OnAfterAsync()
             {
                 await _sendAll;
-                _metadata?.SetTrailers(_call, c => c.GetStatus(), c => c.GetTrailers());
+                _metadata?.SetTrailers(_call);
             }
 
             protected override void OnFault(RpcException fault)

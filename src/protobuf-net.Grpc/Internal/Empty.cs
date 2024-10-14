@@ -33,9 +33,9 @@ namespace ProtoBuf.Grpc.Internal
         /// Compares two instances for equality
         /// </summary>
         public override int GetHashCode() => 42;
-        bool IEquatable<Empty>.Equals(Empty? other) => other is object;
+        bool IEquatable<Empty>.Equals(Empty? other) => other is not null;
 
         internal static readonly Marshaller<Empty> Marshaller
-            = new Marshaller<Empty>((Empty _)=> Array.Empty<byte>(), (byte[] _) => Instance);
+            = new Marshaller<Empty>((Empty _) => [], (byte[] _) => Instance);
     }
 }

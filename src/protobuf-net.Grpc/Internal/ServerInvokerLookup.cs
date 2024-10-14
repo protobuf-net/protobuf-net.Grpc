@@ -35,10 +35,10 @@ namespace ProtoBuf.Grpc.Internal
                 if (type.GetGenericTypeDefinition() == typeof(ValueTask<>))
                     return Expression.Call(expression, nameof(ValueTask<int>.AsTask), null);
             }
-            return Expression.Call(typeof(Task), nameof(Task.FromResult), new Type[] { expression.Type }, expression);
+            return Expression.Call(typeof(Task), nameof(Task.FromResult), [expression.Type], expression);
         }
 
-        internal static readonly ConstructorInfo s_CallContext_FromServerContext = typeof(CallContext).GetConstructor(new[] { typeof(object), typeof(ServerCallContext) })!;
+        internal static readonly ConstructorInfo s_CallContext_FromServerContext = typeof(CallContext).GetConstructor([typeof(object), typeof(ServerCallContext)])!;
         internal static readonly PropertyInfo s_ServerContext_CancellationToken = typeof(ServerCallContext).GetProperty(nameof(ServerCallContext.CancellationToken))!;
 
         static Expression ToCallContext(Expression server, Expression context) => Expression.New(s_CallContext_FromServerContext, server, context);
@@ -48,22 +48,30 @@ namespace ProtoBuf.Grpc.Internal
         static Expression AsAsyncEnumerable(Expression value, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.AsAsyncEnumerable),
                 typeArguments: value.Type.GetGenericArguments(),
-                arguments: new Expression[] { value, Expression.Property(context, nameof(ServerCallContext.CancellationToken)) });
+                arguments: [value, Expression.Property(context, nameof(ServerCallContext.CancellationToken))]);
 
         static Expression AsObservable(Expression value, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.AsObservable),
                 typeArguments: value.Type.GetGenericArguments(),
-                arguments: new Expression[] { value });
+                arguments: [value]);
 
         static Expression WriteTo(Expression value, Expression writer, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.WriteTo),
                 typeArguments: value.Type.GetGenericArguments(),
-                arguments: new Expression[] { value, writer, Expression.Property(context, nameof(ServerCallContext.CancellationToken)) });
+                arguments: [value, writer, Expression.Property(context, nameof(ServerCallContext.CancellationToken))]);
 
         static Expression WriteObservableTo(Expression value, Expression writer, Expression context)
             => Expression.Call(typeof(Reshape), nameof(Reshape.WriteObservableTo),
                 typeArguments: value.Type.GetGenericArguments(),
-                arguments: new Expression[] { value, writer });
+                arguments: [value, writer]);
+
+        static Expression WriteStream(Expression value, Expression writer, Expression context, bool writeTrailer = true)
+            => Expression.Call(typeof(Reshape), nameof(Reshape.WriteStream),
+                typeArguments: null,
+                arguments: [ToTaskT(value), writer, context, ConstantBoolean(writeTrailer)]);
+
+        private static Expression ConstantBoolean(bool value) => value ? True : False;
+        private static Expression True = Expression.Constant(true, typeof(bool)), False = Expression.Constant(false, typeof(bool));
 
         internal static bool TryGetValue(MethodType MethodType, ContextKind Context, ResultKind Arg, ResultKind Result, VoidKind Void, out Func<MethodInfo, Expression[], Expression>? invoker)
             => _invokers.TryGetValue((MethodType, Context, Arg, Result, Void), out invoker);
@@ -198,6 +206,22 @@ namespace ProtoBuf.Grpc.Internal
                 {(MethodType.DuplexStreaming, ContextKind.NoContext, ResultKind.Observable, ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.Observable,ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.Observable, ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1]), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
+
+                {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1]), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
+                {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
         };
     }
 }

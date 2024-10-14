@@ -37,7 +37,7 @@ namespace ProtoBuf.Grpc.Configuration
         {
             int totalCount = 0;
             object?[]? argsBuffer = null;
-            Type[] typesBuffer = Array.Empty<Type>();
+            Type[] typesBuffer = [];
             binderConfiguration ??= BinderConfiguration.Default;
             var potentialServiceContracts = typeof(IGrpcService).IsAssignableFrom(serviceType)
                 ? new HashSet<Type> {serviceType}
@@ -92,7 +92,7 @@ namespace ProtoBuf.Grpc.Configuration
                 {
                     if (typesBuffer.Length == 0)
                     {
-                        typesBuffer = new Type[] {serviceType, typeof(void), typeof(void)};
+                        typesBuffer = [serviceType, typeof(void), typeof(void)];
                     }
 
                     typesBuffer[1] = @in;

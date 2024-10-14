@@ -55,7 +55,9 @@ namespace ProtoBuf.Grpc.Configuration
         // note: these are the same *object*, but pre-checked for optional API support, for efficiency
         // (the minimum .NET object size means that the extra fields don't cost anything)
         private readonly IMeasuredProtoOutput<IBufferWriter<byte>>? _measuredWriterModel;
+#pragma warning disable CA1859 // change type of field for performance - but actually this is a speculative test
         private readonly IProtoInput<ReadOnlySequence<byte>>? _squenceReaderModel;
+#pragma warning restore CA1859
 
         /// <summary>
         /// Create a new factory using a specific protobuf-net model

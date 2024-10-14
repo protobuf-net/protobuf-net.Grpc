@@ -6,43 +6,33 @@ using ProtoBuf.Grpc.Configuration;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Threading;
+using System.IO;
 
 namespace ProtoBuf.Grpc.Internal
 {
-    internal readonly struct ContractOperation
+    internal readonly struct ContractOperation(string name, Type from, Type to, MethodInfo method,
+        MethodType methodType, ContextKind contextKind, ResultKind arg, ResultKind resultKind, VoidKind @void)
     {
-        public string Name { get; }
-        public Type From { get; }
-        public Type To { get; }
-        public MethodInfo Method { get; }
-        public MethodType MethodType { get; }
-        public ContextKind Context { get; }
-        public ResultKind Arg { get; }
-        public ResultKind Result { get; }
-        public VoidKind Void { get; }
+        public string Name { get; } = name;
+        public Type From { get; } = from;
+        public Type To { get; } = to;
+        public MethodInfo Method { get; } = method;
+        public MethodType MethodType { get; } = methodType;
+        public ContextKind Context { get; } = contextKind;
+        public ResultKind Arg { get; } = arg;
+        public ResultKind Result { get; } = resultKind;
+        public VoidKind Void { get; } = @void;
         public bool VoidRequest => (Void & VoidKind.Request) != 0;
         public bool VoidResponse => (Void & VoidKind.Response) != 0;
 
         public override string ToString() => $"{Name}: {From.Name}=>{To.Name}, {MethodType}, {Result}, {Context}, {Void}";
 
-        public ContractOperation(string name, Type from, Type to, MethodInfo method,
-            MethodType methodType, ContextKind contextKind, ResultKind arg, ResultKind resultKind, VoidKind @void)
-        {
-            Name = name;
-            From = from;
-            To = to;
-            Method = method;
-            MethodType = methodType;
-            Context = contextKind;
-            Arg = arg;
-            Result = resultKind;
-            Void = @void;
-        }
-
         internal enum TypeCategory
         {
             None,
             Void,
+            Data,
+
             UntypedTask,
             UntypedValueTask,
             TypedTask,
@@ -59,7 +49,10 @@ namespace ProtoBuf.Grpc.Internal
             AsyncClientStreamingCall,
             AsyncDuplexStreamingCall,
             AsyncServerStreamingCall,
-            Data,
+            Stream,
+            TaskStream,
+            ValueTaskStream,
+
             Invalid,
         }
 
@@ -181,6 +174,21 @@ namespace ProtoBuf.Grpc.Internal
                 { (TypeCategory.IObservable, TypeCategory.None, TypeCategory.None, TypeCategory.IObservable), (ContextKind.NoContext, MethodType.DuplexStreaming, ResultKind.Observable,ResultKind.Observable, VoidKind.None, 0, RET) },
                 { (TypeCategory.IObservable, TypeCategory.CallContext, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CallContext, MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None, 0, RET) },
                 { (TypeCategory.IObservable, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.IObservable), (ContextKind.CancellationToken, MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None, 0, RET) },
+
+                // server streaming via Stream, with/without arg
+                {(TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.TaskStream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request, VOID, RET) },
+                {(TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.TaskStream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request, VOID, RET) },
+                {(TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.None, TypeCategory.TaskStream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request, VOID, RET) },
+                {(TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.TaskStream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None, 0, RET) },
+                {(TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TaskStream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None, 0, RET) },
+                {(TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TaskStream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None, 0, RET) },
+
+                {(TypeCategory.None, TypeCategory.None, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request, VOID, RET) },
+                {(TypeCategory.CallContext, TypeCategory.None, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request, VOID, RET) },
+                {(TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.Request, VOID, RET) },
+                {(TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None, 0, RET) },
+                {(TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None, 0, RET) },
+                {(TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None, 0, RET) },
         };
         internal static int SignatureCount => s_signaturePatterns.Count;
 
@@ -196,6 +204,9 @@ namespace ProtoBuf.Grpc.Internal
             if (type == typeof(CallOptions)) return TypeCategory.CallOptions;
             if (type == typeof(CallContext)) return TypeCategory.CallContext;
             if (type == typeof(CancellationToken)) return TypeCategory.CancellationToken;
+            if (type == typeof(Stream)) return TypeCategory.Stream;
+            if (type == typeof(Task<Stream>)) return TypeCategory.TaskStream;
+            if (type == typeof(ValueTask<Stream>)) return TypeCategory.ValueTaskStream;
 
             if (type.IsGenericType)
             {
@@ -229,6 +240,7 @@ namespace ProtoBuf.Grpc.Internal
             signature.Ret = GetCategory(marshallerCache, returnType, bindContext);
             return signature;
         }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0066:Convert switch statement to expression", Justification = "Clarity")]
         internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation, IBindContext? bindContext)
         {
             operation = default;
@@ -244,7 +256,10 @@ namespace ProtoBuf.Grpc.Internal
 
             var signature = GetSignature(binderConfig.MarshallerCache, args, method.ReturnType, bindContext);
 
-            if (!s_signaturePatterns.TryGetValue(signature, out var config)) return false;
+            if (!s_signaturePatterns.TryGetValue(signature, out var config))
+            {
+                return false;
+            }
 
             (Type type, TypeCategory category) GetTypeByIndex(int index)
             {
@@ -271,6 +286,12 @@ namespace ProtoBuf.Grpc.Internal
                     case TypeCategory.UntypedValueTask:
 #pragma warning disable CS0618 // Empty
                         return typeof(Empty);
+#pragma warning restore CS0618
+                    case TypeCategory.TaskStream:
+                    case TypeCategory.ValueTaskStream:
+                    case TypeCategory.Stream:
+#pragma warning disable CS0618 // BytesValue
+                        return typeof(BytesValue);
 #pragma warning restore CS0618
                     case TypeCategory.TypedTask:
                     case TypeCategory.TypedValueTask:
@@ -341,7 +362,7 @@ namespace ProtoBuf.Grpc.Internal
              && parameters[0].ParameterType == typeof(CallContext).MakeByRefType()
              select method).ToDictionary(x => x.Name);
 
-        static readonly Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string> _clientResponseMap = new Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string>
+        static readonly Dictionary<(MethodType Method, ResultKind Arg, ResultKind Result, VoidKind Void), string> _clientResponseMap = new Dictionary<(MethodType, ResultKind, ResultKind, VoidKind), string>
         {
             {(MethodType.DuplexStreaming, ResultKind.AsyncEnumerable, ResultKind.AsyncEnumerable, VoidKind.None), nameof(Reshape.DuplexAsync) },
             {(MethodType.DuplexStreaming, ResultKind.Observable, ResultKind.Observable, VoidKind.None), nameof(Reshape.DuplexObservable) },
@@ -361,6 +382,9 @@ namespace ProtoBuf.Grpc.Internal
             {(MethodType.Unary, ResultKind.Sync, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.UnaryValueTaskAsyncVoid) },
             {(MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.None), nameof(Reshape.UnarySync) },
             {(MethodType.Unary, ResultKind.Sync, ResultKind.Sync, VoidKind.Response), nameof(Reshape.UnarySyncVoid) },
+
+            {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), nameof(Reshape.ServerByteStreamingTaskAsync) },
+            {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), nameof(Reshape.ServerByteStreamingValueTaskAsync) },
         };
 #pragma warning restore CS0618
 
@@ -411,10 +435,11 @@ namespace ProtoBuf.Grpc.Internal
         internal static ISet<Type> ExpandWithInterfacesMarkedAsSubService(ServiceBinder serviceBinder,
             Type serviceContract)
         {
-            var set = new HashSet<Type>();
-            
-            // first add the service contract by itself 
-            set.Add(serviceContract); 
+            var set = new HashSet<Type>
+            {
+                // first add the service contract by itself 
+                serviceContract
+            };
 
             // now add all inherited interfaces which are marked as sub-services
             foreach (var t in serviceContract.GetInterfaces())
@@ -462,6 +487,9 @@ namespace ProtoBuf.Grpc.Internal
         AsyncEnumerable,
         Grpc,
         Observable,
+        Stream,
+        TaskStream,
+        ValueTaskStream,
     }
 
     [Flags]

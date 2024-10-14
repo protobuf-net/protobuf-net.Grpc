@@ -18,9 +18,9 @@ namespace protobuf_net.Grpc.Reflection.Test
             var fileDescriptorSet = FileDescriptorSetFactory.Create(new[] { typeof(GreeterService) });
 
             Assert.Empty(fileDescriptorSet.GetErrors());
-            Assert.Equal(new[] { "GreeterService" },
+            Assert.Equal(["GreeterService"],
                 fileDescriptorSet.Files.SelectMany(x => x.Services).Select(x => x.Name).ToArray());
-            Assert.Equal(new[] { "HelloReply", "HelloRequest" },
+            Assert.Equal(["HelloReply", "HelloRequest"],
                 fileDescriptorSet.Files.SelectMany(x => x.MessageTypes).Select(x => x.Name).ToArray());
         }
     }

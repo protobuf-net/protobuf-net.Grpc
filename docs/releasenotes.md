@@ -2,7 +2,13 @@
 
 ## unreleased
 
+## 1.2.0
+
+- support `[Value]Task<Stream>` as a return value, rewriting via [`stream BytesValue`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/wrappers.proto) - first
+  step in [#340](https://github.com/protobuf-net/protobuf-net.Grpc/issues/340)
+- update library references and TFMs
 - improve handling of `IAsyncDisposable`
+- improve error message when binding methods ([#331](https://github.com/protobuf-net/protobuf-net.Grpc/pull/331) via BasConijn)
 
 ## 1.1.1
 

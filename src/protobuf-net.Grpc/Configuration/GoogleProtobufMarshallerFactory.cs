@@ -64,16 +64,16 @@ context.Complete();
 parser.ParseFrom(context.PayloadAsReadOnlySequence()
 */
                         var context = Expression.Parameter(typeof(global::Grpc.Core.DeserializationContext), "context");
-                        var parseFrom = parser.PropertyType.GetMethod("ParseFrom", new Type[] { typeof(ReadOnlySequence<byte>) })!;
+                        var parseFrom = parser.PropertyType.GetMethod("ParseFrom", [typeof(ReadOnlySequence<byte>)])!;
                         Expression body = Expression.Call(Expression.Constant(parser.GetValue(null), parser.PropertyType),
                             parseFrom, Expression.Call(context, nameof(DeserializationContext.PayloadAsReadOnlySequence), Type.EmptyTypes));
                         deserializer = Expression.Lambda<Func<DeserializationContext, T>>(body, context).Compile();
 
                         var message = Expression.Parameter(typeof(T), "message");
                         context = Expression.Parameter(typeof(global::Grpc.Core.SerializationContext), "context");
-                        var setPayloadLength = typeof(global::Grpc.Core.SerializationContext).GetMethod(nameof(global::Grpc.Core.SerializationContext.SetPayloadLength), new Type[] { typeof(int) })!;
+                        var setPayloadLength = typeof(global::Grpc.Core.SerializationContext).GetMethod(nameof(global::Grpc.Core.SerializationContext.SetPayloadLength), [typeof(int)])!;
                         var calculateSize = iMessage.GetMethod("CalculateSize", Type.EmptyTypes)!;
-                        var writeTo = me.GetMethod("WriteTo", new Type[] { iMessage, typeof(IBufferWriter<byte>) })!;
+                        var writeTo = me.GetMethod("WriteTo", [iMessage, typeof(IBufferWriter<byte>)])!;
                         body = Expression.Block(
                             Expression.Call(context, setPayloadLength, Expression.Call(message, calculateSize)),
                             Expression.Call(writeTo, message, Expression.Call(context, "GetBufferWriter", Type.EmptyTypes)),
@@ -92,16 +92,16 @@ parser.ParseFrom(context.PayloadAsNewBuffer());
 */
 
                         var context = Expression.Parameter(typeof(global::Grpc.Core.DeserializationContext), "context");
-                        var parseFrom = parser.PropertyType.GetMethod("ParseFrom", new Type[] { typeof(byte[]) })!;
+                        var parseFrom = parser.PropertyType.GetMethod("ParseFrom", [typeof(byte[])])!;
                         Expression body = Expression.Call(Expression.Constant(parser.GetValue(null), parser.PropertyType),
                             parseFrom, Expression.Call(context, nameof(DeserializationContext.PayloadAsNewBuffer), Type.EmptyTypes));
                         deserializer = Expression.Lambda<Func<DeserializationContext, T>>(body, context).Compile();
 
                         var message = Expression.Parameter(typeof(T), "message");
                         context = Expression.Parameter(typeof(global::Grpc.Core.SerializationContext), "context");
-                        var toByteArray = me.GetMethod("ToByteArray", new Type[] { iMessage })!;
+                        var toByteArray = me.GetMethod("ToByteArray", [iMessage])!;
                         var complete = typeof(global::Grpc.Core.SerializationContext).GetMethod(
-                            nameof(global::Grpc.Core.SerializationContext.Complete), new Type[] { typeof(byte[]) })!;
+                            nameof(global::Grpc.Core.SerializationContext.Complete), [typeof(byte[])])!;
                         body = Expression.Call(context, complete, Expression.Call(toByteArray, message));
                         serializer = Expression.Lambda<Action<T, global::Grpc.Core.SerializationContext>>(body, message, context).Compile();
                     }
