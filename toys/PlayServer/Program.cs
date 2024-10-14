@@ -4,6 +4,8 @@ using ProtoBuf.Grpc.Server;
 using Shared_CS;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -94,5 +96,52 @@ internal class MyServer : ICalculator, IDuplex, IBidiStreamingService
 
         //static bool Always() => true;
         yield break;
+    }
+
+    public ValueTask<Stream> TestStreamAsync(TestStreamRequest request, CallContext options = default)
+    {
+        Console.WriteLine("Creating pipe...");
+        var pipe = new Pipe();
+        _ = Task.Run(async () =>
+        {
+            Exception? ex = null;
+            try
+            {
+                Console.WriteLine($"Starting stream of length {request.Length}...");
+                long remaining = request.Length;
+                var rand = new Random(request.Seed);
+                byte[] buffer = new byte[4096];
+
+                while (remaining > 0)
+                {
+                    int chunkLen = (int)Math.Min(remaining, buffer.Length);
+                    var chunk = new Memory<byte>(buffer, 0, chunkLen);
+                    Console.WriteLine($"Sending {chunkLen}...");
+                    Fill(rand, chunk.Span);
+                    await pipe.Writer.WriteAsync(chunk, options.CancellationToken);
+                    remaining -= chunkLen;
+                }
+            }
+            catch (Exception fault)
+            {
+                Console.WriteLine("Fault: " + fault.Message);
+                ex = fault;
+            }
+            finally
+            {
+                Console.WriteLine("Completing...");
+                await pipe.Writer.CompleteAsync(ex);
+            }
+
+        });
+        return new(pipe.Reader.AsStream());
+
+        static void Fill(Random rand, Span<byte> buffer)
+        {
+            foreach (ref byte b in buffer)
+            {
+                b = (byte)rand.Next(0, 256);
+            }
+        }
     }
 }

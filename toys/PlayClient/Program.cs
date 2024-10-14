@@ -16,10 +16,15 @@ namespace PlayClient
     {
         static async Task Main()
         {
-            await TestChannel();
+            while (true)
+            {
+                long length = 1000000L;
+                int seed = 12345;
+                await TestStreamUnmanagedAsync(length, seed);
 #if HTTPCLIENT
-            await TestHttpClient();
+                await TestStreamManagedAsync(length, seed);
 #endif
+            }
         }
 
         static async Task TestCalculator(ICalculator calculator, [CallerMemberName] string? caller = null)
@@ -79,6 +84,60 @@ namespace PlayClient
                 Console.WriteLine($"[sent] {next.X}, {next.Y}");
             }
             Console.WriteLine("[client all done sending!]");
+        }
+
+
+#if HTTPCLIENT
+        static async Task TestStreamManagedAsync(long length, int seed)
+        {
+            GrpcClientFactory.AllowUnencryptedHttp2 = true;
+            using var http = Grpc.Net.Client.GrpcChannel.ForAddress("http://localhost:10042");
+            await TestStreamAsync(http, length, seed);
+        }
+#endif
+
+        static async Task TestStreamUnmanagedAsync(long length, int seed)
+        {
+            var channel = new Grpc.Core.Channel("localhost", 10042, ChannelCredentials.Insecure);
+            try
+            {
+                await TestStreamAsync(channel, length, seed);
+            }
+            finally
+            {
+                await channel.ShutdownAsync();
+            }
+        }
+        static async Task TestStreamAsync(ChannelBase channel, long length, int seed)
+        {
+            var random = new Random(seed);
+            Console.WriteLine("Creating proxy...");
+            var proxy = channel.CreateGrpcService<IBidiStreamingService>();
+            using var stream = await proxy.TestStreamAsync(new TestStreamRequest { Length = length, Seed = seed });
+
+            byte[] buffer = new byte[1024];
+            long totalRead = 0;
+            int read;
+            Console.WriteLine("Initializing...");
+            while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                totalRead += Check(random, new ReadOnlySpan<byte>(buffer, 0, read));
+                Console.WriteLine($"Bytes communicated: {totalRead}");
+            }
+            if (totalRead != length)
+            {
+                Throw();
+            }
+
+            static int Check(Random random, ReadOnlySpan<byte> buffer)
+            {
+                foreach (byte b in buffer)
+                {
+                    if (b != random.Next(256)) Throw();
+                }
+                return buffer.Length;
+            }
+            static void Throw() => throw new InvalidOperationException("data fail");
         }
 
         static async Task TestChannel()

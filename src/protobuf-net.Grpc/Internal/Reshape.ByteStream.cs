@@ -105,6 +105,7 @@ partial class Reshape
                     var chunk = source.Current;
                     var result = await destination.WriteAsync(chunk.Memory, cancellationToken).ConfigureAwait(false);
                     actualLength += chunk.Length;
+                    chunk.Recycle();
 
                     if (result.IsCanceled)
                     {
