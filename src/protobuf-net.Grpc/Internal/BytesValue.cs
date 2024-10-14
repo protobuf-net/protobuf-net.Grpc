@@ -7,18 +7,30 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ProtoBuf.Grpc.Internal;
 
 
-// see https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/wrappers.proto
+/// <summary>
+/// Represents a single BytesValue chunk (as per <a href="https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/wrappers.proto">wrappers.proto</a>)
+/// </summary>
 [ProtoContract(Name = ".google.protobuf.BytesValue")]
 [Obsolete(Reshape.WarningMessage, false)]
 [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class BytesValue(byte[] oversized, int length, bool pooled)
 {
+    /// <summary>
+    /// Indicates the maximum length supported for individual chunks when using API rewriting.
+    /// </summary>
     public const int MaxLength = 0x1FFFFF; // 21 bits of length prefix; 2,097,151 bytes
                                            // (note we will still *read* buffers larger than that, because of non-"us" endpoints, but we'll never send them)
+
+
+#if DEBUG
+    private static int _fastPassMiss = 0;
+    internal static int FastPassMiss => Volatile.Read(ref _fastPassMiss);
+#endif
 
     [Flags]
     enum Flags : byte
@@ -33,6 +45,13 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
 
     private BytesValue() : this([], 0, false) { } // for deserialization 
 
+    internal bool IsPooled => (_flags & Flags.Pooled) != 0;
+
+    internal bool IsRecycled => (_flags & Flags.Recycled) != 0;
+
+    /// <summary>
+    /// Gets or sets the value as a right-sized array
+    /// </summary>
     [ProtoMember(1)]
     public byte[] RightSized // for deserializer only
     {
@@ -54,6 +73,9 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
     }
 
+    /// <summary>
+    /// Recycles this instance, releasing the buffer (if pooled), and resetting the length to zero.
+    /// </summary>
     public void Recycle()
     {
         var flags = _flags;
@@ -77,9 +99,19 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         static void Throw() => throw new InvalidOperationException("This " + nameof(BytesValue) + " instance has been recycled");
     }
 
+    /// <summary>
+    /// Indicates whether this value is empty (zero bytes)
+    /// </summary>
     public bool IsEmpty => _length == 0;
+
+    /// <summary>
+    /// Gets the size (in bytes) of this value
+    /// </summary>
     public int Length => _length;
 
+    /// <summary>
+    /// Gets the payload as an <see cref="ArraySegment{T}"/>
+    /// </summary>
     public ArraySegment<byte> ArraySegment
     {
         get
@@ -89,6 +121,9 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
     }
 
+    /// <summary>
+    /// Gets the payload as a <see cref="ReadOnlySpan{T}"/>
+    /// </summary>
     public ReadOnlySpan<byte> Span
     {
         get
@@ -98,6 +133,9 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
     }
 
+    /// <summary>
+    /// Gets the payload as a <see cref="ReadOnlyMemory{T}"/>
+    /// </summary>
     public ReadOnlyMemory<byte> Memory
     {
         get
@@ -107,6 +145,10 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
     }
 
+
+    /// <summary>
+    /// Gets the gRPC marshaller for this type.
+    /// </summary>
     public static Marshaller<BytesValue> Marshaller { get; } = new(Serialize, Deserialize);
 
     private static BytesValue Deserialize(DeserializationContext context)
@@ -139,7 +181,7 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
     }
 
-    static BytesValue SlowParse(in ReadOnlySequence<byte> payload)
+    private static BytesValue SlowParse(in ReadOnlySequence<byte> payload)
     {
         IProtoInput<Stream> model = RuntimeTypeModel.Default;
         var len = payload.Length;
@@ -203,10 +245,8 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         return model.Deserialize<BytesValue>(ms);
     }
 
-    static BytesValue? TryFastParse(ReadOnlySpan<byte> start, in ReadOnlySequence<byte> payload)
+    internal static BytesValue? TryFastParse(ReadOnlySpan<byte> start, in ReadOnlySequence<byte> payload)
     {
-        Debug.Assert(start.Length >= 4, "optimized for at least 4 bytes available");
-
         // note: optimized for little-endian CPUs, but safe anywhere (big-endian has an extra reverse)
         int raw = BinaryPrimitives.ReadInt32LittleEndian(start);
         int byteLen, headerLen;
@@ -236,6 +276,9 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
         if (headerLen + byteLen != payload.Length)
         {
+#if DEBUG
+            Interlocked.Increment(ref _fastPassMiss);
+#endif
             return null; // not the exact payload (other fields?)
         }
 

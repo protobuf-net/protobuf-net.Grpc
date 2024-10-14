@@ -22,6 +22,7 @@
         <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
         <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.143" />
         <PackageVersion Include="System.IO.Pipelines" Version="8.0.0" />
+        <PackageVersion Include="System.Memory" Version="4.5.5" />
         <PackageVersion Include="System.Reactive" Version="6.0.1" />
         <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
         <PackageVersion Include="System.ServiceModel.Primitives" Version="8.0.0" />
