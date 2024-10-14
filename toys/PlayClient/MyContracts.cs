@@ -1,7 +1,8 @@
-﻿using Grpc.Core;
+﻿using ProtoBuf;
 using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Configuration;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.Threading.Tasks;
@@ -60,5 +61,17 @@ namespace Shared_CS
     public interface IBidiStreamingService
     {
         IAsyncEnumerable<BidiStreamingResponse> TestAsync(IAsyncEnumerable<BidiStreamingRequest> request, CallContext options);
+
+        ValueTask<Stream> TestStreamAsync(TestStreamRequest request, CallContext options = default);
+    }
+
+    [ProtoContract]
+    public class TestStreamRequest
+    {
+        [ProtoMember(1)]
+        public int Seed { get; set; }
+
+        [ProtoMember(2)]
+        public long Length { get; set; }
     }
 }

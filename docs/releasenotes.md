@@ -2,7 +2,11 @@
 
 ## unreleased
 
-## 1.2.0
+## 1.2.2
+
+- fix missing memory recycling in `Stream` scenario
+
+## 1.2.1
 
 - support `[Value]Task<Stream>` as a return value, rewriting via [`stream BytesValue`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/wrappers.proto) - first
   step in [#340](https://github.com/protobuf-net/protobuf-net.Grpc/issues/340)
