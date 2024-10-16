@@ -162,5 +162,19 @@ namespace protobuf_net.Grpc.Test
         ValueTask<Stream> Shared_ServerStreaming_VT_Stream_Arg_Context(HelloRequest request, CallContext context);
         ValueTask<Stream> Shared_ServerStreaming_VT_Stream_Arg_CancellationToken(HelloRequest request, CancellationToken cancellationToken);
 
+        // client-streaming via Stream
+        Task<HelloReply> Shared_ClientStreaming_TT_Stream_NoContext(Stream stream);
+        ValueTask<HelloReply> Shared_ClientStreaming_VTT_Stream_NoContext(Stream stream);
+        Task<HelloReply> Shared_ClientStreaming_TT_Stream_CallContext(Stream stream, CallContext context);
+        ValueTask<HelloReply> Shared_ClientStreaming_VTT_Stream_CallContext(Stream stream, CallContext context);
+        Task<HelloReply> Shared_ClientStreaming_TT_Stream_CancellationToken(Stream stream, CancellationToken context);
+        ValueTask<HelloReply> Shared_ClientStreaming_VTT_Stream_CancellationToken(Stream stream, CancellationToken context);
+        Task Shared_ClientStreaming_T_Stream_NoContext(Stream stream);
+        ValueTask Shared_ClientStreaming_VT_Stream_NoContext(Stream stream);
+        Task Shared_ClientStreaming_T_Stream_CallContext(Stream stream, CallContext context);
+        ValueTask Shared_ClientStreaming_VT_Stream_CallContext(Stream stream, CallContext context);
+        Task Shared_ClientStreaming_T_Stream_CancellationToken(Stream stream, CancellationToken context);
+        ValueTask Shared_ClientStreaming_VT_Stream_CancellationToken(Stream stream, CancellationToken context);
+
     }
 }

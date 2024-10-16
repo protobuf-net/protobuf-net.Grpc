@@ -1,6 +1,7 @@
 ﻿using Grpc.Core;
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -180,7 +181,120 @@ partial class Reshape
     }
 
     /// <summary>
-    /// Consumes an asynchronous enumerable sequence and writes it to a server stream-writer
+    /// Consumes an asynchronous enumerable sequence and exposes it as a byte-stream
+    /// </summary>
+    [Obsolete(WarningMessage, false)]
+    [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+    public static Stream ReadStream(IAsyncStreamReader<BytesValue> writer, ServerCallContext context)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Performs a gRPC client-streaming call consuming a byte-stream
+    /// </summary>
+    [Obsolete(WarningMessage, false)]
+    [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<TResponse> ClientByteStreamingTaskAsync<TRequest, TResponse>(
+        this in CallContext options,
+        CallInvoker invoker, Method<TRequest, TResponse> method, Stream request, string? host = null)
+        where TRequest : class
+        where TResponse : class
+        => ClientByteStreamingImplAsync(invoker.AsyncClientStreamingCall(Assert<BytesValue, TResponse>(method), host, options.CallOptions), request, options.Prepare(), options.CancellationToken);
+
+    /// <summary>
+    /// Performs a gRPC client-streaming call consuming a byte-stream
+    /// </summary>
+    [Obsolete(WarningMessage, false)]
+    [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTask<TResponse> ClientByteStreamingValueTaskAsync<TRequest, TResponse>(
+        this in CallContext options,
+        CallInvoker invoker, Method<TRequest, TResponse> method, Stream request, string? host = null)
+        where TRequest : class
+        where TResponse : class
+        => new(ClientByteStreamingImplAsync(invoker.AsyncClientStreamingCall(Assert<BytesValue, TResponse>(method), host, options.CallOptions), request, options.Prepare(), options.CancellationToken));
+
+    /// <summary>
+    /// Performs a gRPC client-streaming call consuming a byte-stream
+    /// </summary>
+    [Obsolete(WarningMessage, false)]
+    [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueTask ClientByteStreamingValueTaskAsyncVoid<TRequest, TResponse>(
+        this in CallContext options,
+        CallInvoker invoker, Method<TRequest, TResponse> method, Stream request, string? host = null)
+        where TRequest : class
+        where TResponse : class
+        => new(ClientByteStreamingImplAsync(invoker.AsyncClientStreamingCall(Assert<BytesValue, TResponse>(method), host, options.CallOptions), request, options.Prepare(), options.CancellationToken));
+
+    private static async Task<TResponse> ClientByteStreamingImplAsync<TResponse>(AsyncClientStreamingCall<BytesValue, TResponse> call, Stream stream, MetadataContext? metadata, CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // read from the stream and write to RequestStream
+            int size = 512; // start modest and increase
+
+            if (metadata is not null)
+            {
+                await metadata.SetHeadersAsync(call.ResponseHeadersAsync).ConfigureAwait(false);
+            }
+
+            while (true)
+            {
+                byte[] leased = ArrayPool<byte>.Shared.Rent(size);
+
+                var maxRead = Math.Min(leased.Length, BytesValue.MaxLength);
+                var bytes = await stream.ReadAsync(leased, 0, maxRead, cancellationToken).ConfigureAwait(false);
+                if (bytes <= 0) // EOF
+                {
+                    ArrayPool<byte>.Shared.Return(leased);
+                    break;
+                }
+                if (bytes == maxRead)
+                {
+                    // allow more next time
+                    size = Math.Min(size * 2, BytesValue.MaxLength);
+                }
+                else
+                {
+                    // allow less next time, down to whatever we read
+                    size = Math.Max(bytes, 128);
+                }
+
+                var chunk = new BytesValue(leased, bytes, pooled: true);
+
+                await call.RequestStream.WriteAsync(chunk).ConfigureAwait(false);
+            }
+            await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+
+            var result = await call.ResponseAsync.ConfigureAwait(false);
+            metadata?.SetTrailers(call);
+            return result;
+        }
+        catch (RpcException fault)
+        {
+            metadata?.SetTrailers(fault);
+            throw;
+        }
+        finally
+        {
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_0_OR_GREATER
+            await stream.DisposeAsync().ConfigureAwait(false);
+#else
+            stream.Dispose();
+#endif
+            call.Dispose();
+        }
+    }
+
+
+
+    /// <summary>
+    /// Consumes a byte-stream and writes it to a server stream-writer
     /// </summary>
     [Obsolete(WarningMessage, false)]
     [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]

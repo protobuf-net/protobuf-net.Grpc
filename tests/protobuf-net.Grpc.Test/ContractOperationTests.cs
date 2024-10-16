@@ -54,13 +54,13 @@ namespace protobuf_net.Grpc.Test
         [Fact]
         public void GeneralPurposeSignatureCount()
         {
-            Assert.Equal(90, ContractOperation.GeneralPurposeSignatureCount());
+            Assert.Equal(102, ContractOperation.GeneralPurposeSignatureCount());
         }
 
         [Fact]
         public void ServerSignatureCount()
         {
-            Assert.Equal(90, ServerInvokerLookup.GeneralPurposeSignatureCount());
+            Assert.Equal(102, ServerInvokerLookup.GeneralPurposeSignatureCount());
         }
 
         [Fact]
@@ -271,6 +271,20 @@ namespace protobuf_net.Grpc.Test
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_VT_Stream_Arg_NoContext), typeof(HelloRequest), typeof(BytesValue), MethodType.ServerStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_VT_Stream_Arg_CancellationToken), typeof(HelloRequest), typeof(BytesValue), MethodType.ServerStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.Sync)]
         [InlineData(nameof(IAllOptions.Shared_ServerStreaming_VT_Stream_Arg_Context), typeof(HelloRequest), typeof(BytesValue), MethodType.ServerStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.Sync)]
+
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_TT_Stream_NoContext), typeof(BytesValue), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.Task)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_VTT_Stream_NoContext), typeof(BytesValue), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.ValueTask)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_TT_Stream_CallContext), typeof(BytesValue), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.Task)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_VTT_Stream_CallContext), typeof(BytesValue), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.ValueTask)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_TT_Stream_CancellationToken), typeof(BytesValue), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.Task)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_VTT_Stream_CancellationToken), typeof(BytesValue), typeof(HelloReply), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTaskStream, (int)VoidKind.None, (int)ResultKind.ValueTask)]
+
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_T_Stream_NoContext), typeof(BytesValue), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.Response, (int)ResultKind.Task)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_VT_Stream_NoContext), typeof(BytesValue), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.NoContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.Response, (int)ResultKind.ValueTask)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_T_Stream_CallContext), typeof(BytesValue), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.Response, (int)ResultKind.Task)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_VT_Stream_CallContext), typeof(BytesValue), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CallContext, (int)ResultKind.ValueTaskStream, (int)VoidKind.Response, (int)ResultKind.ValueTask)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_T_Stream_CancellationToken), typeof(BytesValue), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTaskStream, (int)VoidKind.Response, (int)ResultKind.Task)]
+        [InlineData(nameof(IAllOptions.Shared_ClientStreaming_VT_Stream_CancellationToken), typeof(BytesValue), typeof(Empty), MethodType.ClientStreaming, (int)ContextKind.CancellationToken, (int)ResultKind.ValueTaskStream, (int)VoidKind.Response, (int)ResultKind.ValueTask)]
         public void CheckMethodIdentification(string name, Type from, Type to, MethodType methodType, int context, int result, int @void, int arg)
         {
             var method = typeof(IAllOptions).GetMethod(name);
@@ -575,6 +589,66 @@ namespace protobuf_net.Grpc.Test
         }
 
         public void Shared_BlockingUnary_NoContext_VoidVoid()
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<HelloReply> Shared_ClientStreaming_TT_Stream_CallContext(Stream stream, CallContext context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<HelloReply> Shared_ClientStreaming_TT_Stream_CancellationToken(Stream stream, CancellationToken context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<HelloReply> Shared_ClientStreaming_TT_Stream_NoContext(Stream stream)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task Shared_ClientStreaming_T_Stream_CallContext(Stream stream, CallContext context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task Shared_ClientStreaming_T_Stream_CancellationToken(Stream stream, CancellationToken context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task Shared_ClientStreaming_T_Stream_NoContext(Stream stream)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ValueTask<HelloReply> Shared_ClientStreaming_VTT_Stream_CallContext(Stream stream, CallContext context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ValueTask<HelloReply> Shared_ClientStreaming_VTT_Stream_CancellationToken(Stream stream, CancellationToken context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ValueTask<HelloReply> Shared_ClientStreaming_VTT_Stream_NoContext(Stream stream)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ValueTask Shared_ClientStreaming_VT_Stream_CallContext(Stream stream, CallContext context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ValueTask Shared_ClientStreaming_VT_Stream_CancellationToken(Stream stream, CancellationToken context)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ValueTask Shared_ClientStreaming_VT_Stream_NoContext(Stream stream)
         {
             throw new NotSupportedException();
         }

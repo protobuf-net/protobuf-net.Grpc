@@ -189,6 +189,21 @@ namespace ProtoBuf.Grpc.Internal
                 {(TypeCategory.Data, TypeCategory.None, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.NoContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None, 0, RET) },
                 {(TypeCategory.Data, TypeCategory.CallContext, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.CallContext, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None, 0, RET) },
                 {(TypeCategory.Data, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.ValueTaskStream), (ContextKind.CancellationToken, MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None, 0, RET) },
+
+
+                {(TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None, 0, RET)},
+                {(TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None, 0, RET)},
+                {(TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None, 0, RET)},
+                {(TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None, 0, RET)},
+                {(TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None, 0, RET)},
+                {(TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.TypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None, 0, RET)},
+                {(TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response, 0, VOID)},
+                {(TypeCategory.Stream, TypeCategory.None, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.NoContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response, 0, VOID)},
+                {(TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response, 0, VOID)},
+                {(TypeCategory.Stream, TypeCategory.CallContext, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CallContext, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response, 0, VOID)},
+                {(TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response, 0, VOID)},
+                {(TypeCategory.Stream, TypeCategory.CancellationToken, TypeCategory.None, TypeCategory.UntypedValueTask), (ContextKind.CancellationToken, MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response, 0, VOID)},
+
         };
         internal static int SignatureCount => s_signaturePatterns.Count;
 
@@ -385,6 +400,12 @@ namespace ProtoBuf.Grpc.Internal
 
             {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.TaskStream, VoidKind.None), nameof(Reshape.ServerByteStreamingTaskAsync) },
             {(MethodType.ServerStreaming, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), nameof(Reshape.ServerByteStreamingValueTaskAsync) },
+
+
+            {(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.None), nameof(Reshape.ClientByteStreamingTaskAsync) },
+            {(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.Task, VoidKind.Response), nameof(Reshape.ClientByteStreamingTaskAsync) }, // Task<T> works as Task
+            {(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), nameof(Reshape.ClientByteStreamingValueTaskAsync) },
+            {(MethodType.ClientStreaming, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), nameof(Reshape.ClientByteStreamingValueTaskAsyncVoid) },
         };
 #pragma warning restore CS0618
 

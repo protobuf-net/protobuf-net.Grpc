@@ -70,6 +70,11 @@ namespace ProtoBuf.Grpc.Internal
                 typeArguments: null,
                 arguments: [ToTaskT(value), writer, context, ConstantBoolean(writeTrailer)]);
 
+        static Expression ReadStream(Expression reader, Expression context)
+            => Expression.Call(typeof(Reshape), nameof(Reshape.ReadStream),
+                typeArguments: null,
+                arguments: [reader, context]);
+
         private static Expression ConstantBoolean(bool value) => value ? True : False;
         private static Expression True = Expression.Constant(true, typeof(bool)), False = Expression.Constant(false, typeof(bool));
 
@@ -207,6 +212,7 @@ namespace ProtoBuf.Grpc.Internal
                 {(MethodType.DuplexStreaming, ContextKind.CallContext, ResultKind.Observable,ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3]), ToCallContext(args[0], args[3])), args[2], args[3]) },
                 {(MethodType.DuplexStreaming, ContextKind.CancellationToken, ResultKind.Observable, ResultKind.Observable, VoidKind.None), (method, args) => WriteObservableTo(Expression.Call(args[0], method, AsObservable(args[1], args[3]), ToCancellationToken(args[3])), args[2], args[3]) },
 
+                // Stream: server-streaming
                 {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method), args[2], args[3])},
                 {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCallContext(args[0], args[3])), args[2], args[3])},
                 {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.TaskStream, VoidKind.Request), (method, args) => WriteStream(Expression.Call(args[0], method, ToCancellationToken(args[3])), args[2], args[3])},
@@ -222,6 +228,26 @@ namespace ProtoBuf.Grpc.Internal
                 {(MethodType.ServerStreaming, ContextKind.NoContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1]), args[2], args[3])},
                 {(MethodType.ServerStreaming, ContextKind.CallContext, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCallContext(args[0], args[3])), args[2], args[3])},
                 {(MethodType.ServerStreaming, ContextKind.CancellationToken, ResultKind.Sync, ResultKind.ValueTaskStream, VoidKind.None), (method, args) => WriteStream(Expression.Call(args[0], method, args[1], ToCancellationToken(args[3])), args[2], args[3])},
+
+                // Stream: client-streaming
+                // [Value]Task[<T>] Foo(Stream, [context|cancellation])
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.Task, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.ValueTask, VoidKind.None), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.NoContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CallContext, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCallContext(args[0], args[2]))) },
+
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.Task, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCancellationToken(args[2]))) },
+                {(MethodType.ClientStreaming, ContextKind.CancellationToken, ResultKind.Stream, ResultKind.ValueTask, VoidKind.Response), (method, args) => ToTaskT(Expression.Call(args[0], method, ReadStream(args[1], args[2]), ToCancellationToken(args[2]))) },
         };
     }
 }
