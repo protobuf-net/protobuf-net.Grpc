@@ -14,6 +14,7 @@ namespace Server_CS
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
+            AdvancedBuffer.Register();
             services.AddCodeFirstGrpc(config =>
             {
                 config.ResponseCompressionLevel = System.IO.Compression.CompressionLevel.Optimal;
@@ -25,6 +26,7 @@ namespace Server_CS
                 .AddScheme<FakeAuthOptions, FakeAuthHandler>(FakeAuthHandler.SchemeName, options => options.AlwaysAuthenticate = true);
             services.AddAuthorization();
             services.AddSingleton<ICounter, MyCounter>();
+            services.AddSingleton<IBufferScenarios, BufferService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -40,6 +42,7 @@ namespace Server_CS
                 endpoints.MapGrpcService<ICounter>();
                 endpoints.MapGrpcService<MyCalculator>();
                 endpoints.MapGrpcService<MyTimeService>();
+                endpoints.MapGrpcService<BufferService>();
                 endpoints.MapCodeFirstGrpcReflectionService();
             });
         }

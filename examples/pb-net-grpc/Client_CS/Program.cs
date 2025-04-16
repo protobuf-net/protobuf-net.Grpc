@@ -1,12 +1,11 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Grpc.Core;
+﻿#define ADVANCED
+
 using Grpc.Net.Client;
-using MegaCorp;
-using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Client;
 using Shared_CS;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Client_CS
 {
@@ -14,30 +13,63 @@ namespace Client_CS
     {
         static async Task Main()
         {
+            AdvancedBuffer.Register();
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
             using var http = GrpcChannel.ForAddress("http://localhost:10042");
-            var calculator = http.CreateGrpcService<ICalculator>();
-            var result = await calculator.MultiplyAsync(new MultiplyRequest { X = 12, Y = 4 });
-            Console.WriteLine(result.Result); // 48
 
-            var clock = http.CreateGrpcService<ITimeService>();
-            var counter = http.CreateGrpcService<ICounter>();
-            using var cancel = new CancellationTokenSource(TimeSpan.FromMinutes(1));
-            var options = new CallOptions(cancellationToken: cancel.Token);
+            var svc = http.CreateGrpcService<IBufferScenarios>();
+            int[] lengths = [8, 64, 1024, 16 * 1024];
+            const int COUNT = 10000;
 
-            try
+#if SIMPLE
+            foreach (var len in lengths)
             {
-                await foreach (var time in clock.SubscribeAsync(new CallContext(options)))
+                int total = 0;
+                await foreach (var item in svc.Simple(GenerateSimple(len, COUNT)))
                 {
-                    Console.WriteLine($"The time is now: {time.Time}");
-                    var currentInc = await counter.IncrementAsync(new IncrementRequest { Inc = 1 });
-                    Console.WriteLine($"Time received {currentInc.Result} times");
+                    total += item.Data.Length;
                 }
+                Console.WriteLine($"Simple: {len}x{COUNT}: {total}");
             }
-            catch (RpcException ex) { Console.WriteLine(ex); }
-            catch (OperationCanceledException) { }
-            Console.WriteLine("Press [Enter] to exit");
-            Console.ReadLine();
+#endif
+
+#if ADVANCED
+
+            foreach (var len in lengths)
+            {
+                int total = 0;
+                await foreach (var item in svc.Advanced(GenerateAdvanced(len, COUNT)))
+                {
+                    total += item.Length;
+                    item.Dispose(); // inbound lifetime management (outbound is handled by marshaller)
+                }
+                Console.WriteLine($"Advanced: {len}x{COUNT}: {total}");
+            }
+#endif
+        }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+        private static async IAsyncEnumerable<SimpleBuffer> GenerateSimple(int len, int count)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var data = new byte[len];
+                Random.Shared.NextBytes(data);
+                yield return new() { Data = data };
+            }
+        }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+        private static async IAsyncEnumerable<AdvancedBuffer> GenerateAdvanced(int len, int count)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+        {
+            for (int i = 0; i < count; i++)
+            {
+                AdvancedBuffer data = new(len);
+                Random.Shared.NextBytes(data.Span);
+                yield return data;
+            }
         }
     }
 }

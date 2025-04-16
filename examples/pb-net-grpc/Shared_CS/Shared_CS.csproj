@@ -10,6 +10,7 @@
 
     <ProjectReference Condition="'$(ExampleRefs)'=='local'" Include="..\..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
     <PackageReference Condition="'$(ExampleRefs)'=='nuget'" Include="protobuf-net.Grpc" />
+    <PackageReference Include="protobuf-net"/>
   </ItemGroup>
 
 </Project>
