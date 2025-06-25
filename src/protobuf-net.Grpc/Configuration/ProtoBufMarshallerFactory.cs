@@ -127,13 +127,15 @@ namespace ProtoBuf.Grpc.Configuration
 
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
         {
+            long length;
             if (_measuredWriterModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
 
                 RecordUplevelBufferWrite();
 
                 using var measured = _measuredWriterModel.Measure(value, userState: _userState);
-                int len = checked((int)measured.Length);
+                length = measured.Length;
+                int len = checked((int)length);
                 context.SetPayloadLength(len);
 
                 if (TryGetBufferWriter(context, out var writer))
@@ -150,7 +152,13 @@ namespace ProtoBuf.Grpc.Configuration
             }
             else
             {
-                context.Complete(Serialize<T>(value));
+                var buffer = Serialize<T>(value);
+                length = buffer.Length;
+                context.Complete(buffer);
+            }
+            if (value is IPayloadLength withLength)
+            {
+                withLength.SetLength(length);
             }
         }
 
@@ -177,7 +185,12 @@ namespace ProtoBuf.Grpc.Configuration
             try
             {
                 ros.CopyTo(oversized);
-                return segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength), userState: _userState);
+                var obj = segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength), userState: _userState);
+                if (obj is IPayloadLength withLength)
+                {
+                    withLength.SetLength(context.PayloadLength);
+                }
+                return obj;
             }
             finally
             {
