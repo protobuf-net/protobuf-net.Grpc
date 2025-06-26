@@ -127,13 +127,15 @@ namespace ProtoBuf.Grpc.Configuration
 
         private void ContextualSerialize<T>(T value, global::Grpc.Core.SerializationContext context)
         {
+            long length;
             if (_measuredWriterModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
 
                 RecordUplevelBufferWrite();
 
                 using var measured = _measuredWriterModel.Measure(value, userState: _userState);
-                int len = checked((int)measured.Length);
+                length = measured.Length;
+                int len = checked((int)length);
                 context.SetPayloadLength(len);
 
                 if (TryGetBufferWriter(context, out var writer))
@@ -150,39 +152,56 @@ namespace ProtoBuf.Grpc.Configuration
             }
             else
             {
-                context.Complete(Serialize<T>(value));
+                var buffer = Serialize<T>(value);
+                length = buffer.Length;
+                context.Complete(buffer);
+            }
+            if (value is IPayloadLength withLength)
+            {
+                withLength.SetLength(length);
             }
         }
 
         private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
         {
             var ros = context.PayloadAsReadOnlySequence();
+            T result;
             if (_squenceReaderModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
                 RecordUplevelBufferRead();
-                return _squenceReaderModel.Deserialize<T>(ros, userState: _userState);
+                result = _squenceReaderModel.Deserialize<T>(ros, userState: _userState);
             }
-
-            // 2.4.2+ can use array-segments
-            IProtoInput<ArraySegment<byte>> segmentReader = _model;
-
-            // can we go direct to a single segment?
-            if (ros.IsSingleSegment && MemoryMarshal.TryGetArray(ros.First, out var segment))
+            else
             {
-                return segmentReader.Deserialize<T>(segment, userState: _userState);
-            }
 
-            // otherwise; linearize the data
-            var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
-            try
-            {
-                ros.CopyTo(oversized);
-                return segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength), userState: _userState);
+                // 2.4.2+ can use array-segments
+                IProtoInput<ArraySegment<byte>> segmentReader = _model;
+
+                // can we go direct to a single segment?
+                if (ros.IsSingleSegment && MemoryMarshal.TryGetArray(ros.First, out var segment))
+                {
+                    result = segmentReader.Deserialize<T>(segment, userState: _userState);
+                }
+                else
+                {
+                    // otherwise; linearize the data
+                    var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
+                    try
+                    {
+                        ros.CopyTo(oversized);
+                        result = segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength), userState: _userState);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(oversized);
+                    }
+                }
             }
-            finally
+            if (result is IPayloadLength withLength)
             {
-                ArrayPool<byte>.Shared.Return(oversized);
+                withLength.SetLength(context.PayloadLength);
             }
+            return result;
         }
 
         /// <summary>
