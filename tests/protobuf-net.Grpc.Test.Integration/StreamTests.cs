@@ -73,6 +73,8 @@ namespace protobuf_net.Grpc.Test.Integration
 
         ValueTask<Foo> UnaryAsync(Foo value, CallContext ctx = default);
 
+        ValueTask<FooWithLength> UnaryWithLengthAsync(FooWithLength value, CallContext ctx = default);
+
         Foo UnaryBlocking(Foo value, CallContext ctx = default);
         ValueTask TakeFive(CancellationToken cancellationToken = default);
     }
@@ -276,6 +278,29 @@ namespace protobuf_net.Grpc.Test.Integration
             return value;
         }
 
+        async ValueTask<FooWithLength> IStreamAPI.UnaryWithLengthAsync(FooWithLength value, CallContext ctx)
+        {
+            var scenario = GetScenario(ctx);
+            var sCtx = ctx.ServerCallContext!;
+
+            Log($"unary scenario {scenario}, value {value.Bar}");
+
+            if (scenario == Scenario.FaultBeforeHeaders) Throw("before headers");
+            await sCtx.WriteResponseHeadersAsync(new Metadata { { "prekey", "preval" } });
+
+            if (scenario == Scenario.FaultBeforeTrailers) Throw("before trailers");
+            sCtx.ResponseTrailers.Add("postkey", "postval");
+
+            if (scenario == Scenario.FaultSuccessGoodProducer)
+                throw new RpcException(Status.DefaultSuccess);
+
+            Log("server is complete");
+            value.MoveLengthToPrevious();
+            return value;
+        }
+
+
+
         Foo IStreamAPI.UnaryBlocking(Foo value, CallContext ctx)
         {
             try
@@ -447,6 +472,28 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         [ProtoMember(1)]
         public int Bar { get; set; }
+    }
+
+    [ProtoContract]
+    public class FooWithLength : IPayloadLength
+    {
+        [ProtoMember(1)]
+        public int Bar { get; set; }
+
+        [ProtoMember(2)]
+        public int PreviousLength { get; set; }
+
+        [ProtoIgnore]
+        public int CurrentLength { get; private set; }
+
+        internal void MoveLengthToPrevious()
+        {
+            PreviousLength = CurrentLength;
+            CurrentLength = 0;
+        }
+
+        void IPayloadLength.SetLength(long length)
+            => CurrentLength = checked((int)length);
     }
 
 
@@ -1031,6 +1078,37 @@ namespace protobuf_net.Grpc.Test.Integration
 
             var result = await client.UnaryAsync(new Foo { Bar = 42 }, ctx);
             Assert.Equal(42, result.Bar);
+
+            if ((flags & CallContextFlags.CaptureMetadata) != 0)
+            {
+                var status = ctx.ResponseStatus();
+                Assert.Equal(StatusCode.OK, status.StatusCode);
+                Assert.Equal("", status.Detail);
+                Assert.Equal("preval", (await ctx.ResponseHeadersAsync()).GetString("prekey"));
+                Assert.Equal("postval", ctx.ResponseTrailers().GetString("postkey"));
+            }
+        }
+
+        [DebugTheory]
+        [InlineData(Scenario.RunToCompletion, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, CallContextFlags.CaptureMetadata)]
+
+        public async Task AsyncUnaryWithLengthSuccess(Scenario scenario, CallContextFlags flags)
+        {
+            await using var svc = CreateClient(out var client);
+
+            var ctx = new CallContext(new CallOptions(headers: new Metadata { { nameof(Scenario), scenario.ToString() } }), flags);
+
+            var clientToServer = new FooWithLength { Bar = 42 };
+            Assert.Equal(0, clientToServer.CurrentLength);
+            Assert.Equal(0, clientToServer.PreviousLength);
+            var serverToClient = await client.UnaryWithLengthAsync(clientToServer, ctx);
+            Assert.Equal(2, clientToServer.CurrentLength);
+            Assert.Equal(0, clientToServer.PreviousLength);
+
+            Assert.Equal(42, serverToClient.Bar);
+            Assert.Equal(4, serverToClient.CurrentLength);
+            Assert.Equal(2, serverToClient.PreviousLength);
 
             if ((flags & CallContextFlags.CaptureMetadata) != 0)
             {

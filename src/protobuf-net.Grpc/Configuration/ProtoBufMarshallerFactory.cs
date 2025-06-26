@@ -165,37 +165,43 @@ namespace ProtoBuf.Grpc.Configuration
         private T ContextualDeserialize<T>(global::Grpc.Core.DeserializationContext context)
         {
             var ros = context.PayloadAsReadOnlySequence();
+            T result;
             if (_squenceReaderModel is object)
             {   // forget what we think we know about TypeModel; if we have protobuf-net 3.*, we can do this
                 RecordUplevelBufferRead();
-                return _squenceReaderModel.Deserialize<T>(ros, userState: _userState);
+                result = _squenceReaderModel.Deserialize<T>(ros, userState: _userState);
             }
-
-            // 2.4.2+ can use array-segments
-            IProtoInput<ArraySegment<byte>> segmentReader = _model;
-
-            // can we go direct to a single segment?
-            if (ros.IsSingleSegment && MemoryMarshal.TryGetArray(ros.First, out var segment))
+            else
             {
-                return segmentReader.Deserialize<T>(segment, userState: _userState);
-            }
 
-            // otherwise; linearize the data
-            var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
-            try
-            {
-                ros.CopyTo(oversized);
-                var obj = segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength), userState: _userState);
-                if (obj is IPayloadLength withLength)
+                // 2.4.2+ can use array-segments
+                IProtoInput<ArraySegment<byte>> segmentReader = _model;
+
+                // can we go direct to a single segment?
+                if (ros.IsSingleSegment && MemoryMarshal.TryGetArray(ros.First, out var segment))
                 {
-                    withLength.SetLength(context.PayloadLength);
+                    result = segmentReader.Deserialize<T>(segment, userState: _userState);
                 }
-                return obj;
+                else
+                {
+                    // otherwise; linearize the data
+                    var oversized = ArrayPool<byte>.Shared.Rent(context.PayloadLength);
+                    try
+                    {
+                        ros.CopyTo(oversized);
+                        result = segmentReader.Deserialize<T>(new ArraySegment<byte>(oversized, 0, context.PayloadLength), userState: _userState);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(oversized);
+                    }
+                }
             }
-            finally
+            if (result is IPayloadLength withLength)
             {
-                ArrayPool<byte>.Shared.Return(oversized);
+                withLength.SetLength(context.PayloadLength);
             }
+            return result;
         }
 
         /// <summary>
