@@ -10,16 +10,14 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+#if NET6_0_OR_GREATER
+using System.Runtime.Loader;
+#endif
 
 namespace ProtoBuf.Grpc.Internal
 {
     internal static class ProxyEmitter
     {
-        private static readonly string ProxyIdentity = typeof(ProxyEmitter).Namespace + ".Proxies";
-
-        private static readonly ModuleBuilder s_module = AssemblyBuilder.DefineDynamicAssembly(
-                new AssemblyName(ProxyIdentity), AssemblyBuilderAccess.RunAndCollect).DefineDynamicModule(ProxyIdentity);
-
         private static void Ldc_I4(ILGenerator il, int value)
         {
             switch (value)
@@ -142,14 +140,26 @@ namespace ProtoBuf.Grpc.Internal
         {
             Type baseType = GrpcClientFactory.ClientBaseType;
 
+#if NET6_0_OR_GREATER
+            var proxyLoadContext = AssemblyLoadContext.GetLoadContext(typeof(TService).Assembly) ??
+                AssemblyLoadContext.Default;
+            using var context = proxyLoadContext.EnterContextualReflection();
+            // Once we have the ALC for reflection, get or create the module for it.
+            // Any references will be resolved against the ALC that owns the service interface.
+            ModuleBuilder moduleBuilder = ProxyModuleHelper.GetOrCreateProxyModule(proxyLoadContext);
+#else
+            ModuleBuilder moduleBuilder = ProxyModuleHelper.MainProxyModule;
+#endif
+            var typeIdentity = ProxyModuleHelper.ProxyModuleIdentity + "." + baseType.Name + "." + typeof(TService).Name + "_Proxy_" + _typeIndex++;
+
             var callInvoker = baseType.GetProperty("CallInvoker", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetGetMethod(true);
             if (callInvoker == null || callInvoker.ReturnType != typeof(CallInvoker) || callInvoker.GetParameters().Length != 0)
                 throw new ArgumentException($"The base-type {baseType} for service-proxy {typeof(TService)} lacks a suitable CallInvoker API");
 
-            lock (s_module)
+            lock (moduleBuilder)
             {
                 // private sealed class IFooProxy...
-                var type = s_module.DefineType(ProxyIdentity + "." + baseType.Name + "." + typeof(TService).Name + "_Proxy_" + _typeIndex++,
+                var type = moduleBuilder.DefineType(typeIdentity,
                     TypeAttributes.Class | TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.BeforeFieldInit);
 
                 type.SetParent(baseType);
@@ -209,7 +219,7 @@ namespace ProtoBuf.Grpc.Internal
                         type.DefineMethodOverride(impl, iMethod);
 
                         var il = impl.GetILGenerator();
-                        
+
                         // check whether the method belongs to [ServiceInherited] interface
                         var isMethodInherited =
                             iMethod.DeclaringType?.IsDefined(typeof(SubServiceAttribute)) ?? false;
@@ -238,7 +248,7 @@ namespace ProtoBuf.Grpc.Internal
                             }
                             continue;
                         }
-                        
+
                         // in case method belongs to an sub-service interface, we have to find the service contract name inheriting it
                         if (isMethodInherited)
                         {
@@ -340,7 +350,7 @@ namespace ProtoBuf.Grpc.Internal
                 var finalType = type.CreateType()!;
 #endif
                 // assign the marshallers and invoke the init
-                foreach((var field, var name, var instance) in marshallers.Values)
+                foreach ((var field, var name, var instance) in marshallers.Values)
                 {
                     finalType.GetField(name, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public)!.SetValue(null, instance);
                 }
@@ -371,7 +381,7 @@ namespace ProtoBuf.Grpc.Internal
             s_CallContext_Default = typeof(CallContext).GetField(nameof(CallContext.Default))!,
 #pragma warning disable CS0618 // Empty
             s_Empty_Instance = typeof(Empty).GetField(nameof(Empty.Instance))!,
-            s_Empty_InstaneTask= typeof(Empty).GetField(nameof(Empty.InstanceTask))!;
+            s_Empty_InstaneTask = typeof(Empty).GetField(nameof(Empty.InstanceTask))!;
 #pragma warning restore CS0618
 
         internal static readonly MethodInfo s_CallContext_FromCancellationToken = typeof(CallContext).GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, null, [typeof(CancellationToken)], null)!;
