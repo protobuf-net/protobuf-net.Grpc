@@ -1,7 +1,6 @@
 ﻿using System.Reflection;
 using System.Reflection.Emit;
 #if NET6_0_OR_GREATER
-using System;
 using System.Collections.Concurrent;
 using System.Runtime.Loader;
 using System.Threading;
@@ -26,6 +25,7 @@ internal static class ProxyModuleHelper
     {
         return _proxyModules.GetOrAdd(assemblyLoadContext, key =>
         {
+            using var _ = key.EnterContextualReflection();
             var alc = CreateProxyModule(GetNextModuleIdentity());
             key.Unloading += _ => RemoveAssemblyLoadContext(key);
             return alc;

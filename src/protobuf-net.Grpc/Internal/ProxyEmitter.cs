@@ -143,7 +143,6 @@ namespace ProtoBuf.Grpc.Internal
 #if NET6_0_OR_GREATER
             var proxyLoadContext = AssemblyLoadContext.GetLoadContext(typeof(TService).Assembly) ??
                 AssemblyLoadContext.Default;
-            using var context = proxyLoadContext.EnterContextualReflection();
             // Once we have the ALC for reflection, get or create the module for it.
             // Any references will be resolved against the ALC that owns the service interface.
             ModuleBuilder moduleBuilder = ProxyModuleHelper.GetOrCreateProxyModule(proxyLoadContext);
