@@ -9,21 +9,42 @@ using Xunit;
 namespace protobuf_net.Grpc.Test;
 public class AssemblyLoadContextsClientFactoryTests
 {
+    private const string TestProxyAssemblyFileName = "protobuf-net.Grpc.Tests.TestProxy.dll";
+    private static readonly string CurrentAssemblyFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+    private static readonly string ProxyPath = Path.Combine(CurrentAssemblyFolder, TestProxyAssemblyFileName);
+
     [Fact]
-    public void CanCreateProxiesInAssemblyLoadContexts()
+    public void CanCreateProxiesWithPureIsolation()
     {
-        const string TestProxyAssemblyFileName = "protobuf-net.Grpc.Tests.TestProxy.dll";
+        AssemblyLoadContext plugin1 = CreatePluginAssemblyLoadContext("alc1", CurrentAssemblyFolder);
+        AssemblyLoadContext plugin2 = CreatePluginAssemblyLoadContext("alc2", CurrentAssemblyFolder);
 
-        string folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        AssertPlugins(plugin1, plugin2);
+    }
 
-        AssemblyLoadContext shared = CreatePluginAssemblyLoadContext("Shared", folder);
-        AssemblyLoadContext plugin1 = CreatePluginAssemblyLoadContext("alc1", folder, shared);
-        AssemblyLoadContext plugin2 = CreatePluginAssemblyLoadContext("alc2", folder, shared);
+    [Fact]
+    public void CanCreateProxiesWithSharedALC()
+    {
+        AssemblyLoadContext shared = CreatePluginAssemblyLoadContext("Shared", CurrentAssemblyFolder);
+        AssemblyLoadContext plugin1 = CreatePluginAssemblyLoadContext("alc1", CurrentAssemblyFolder, shared);
+        AssemblyLoadContext plugin2 = CreatePluginAssemblyLoadContext("alc2", CurrentAssemblyFolder, shared);
 
-        string proxyPath = Path.Combine(folder, TestProxyAssemblyFileName);
+        AssertPlugins(plugin1, plugin2);
+    }
 
-        var proxyAssembly1 = plugin1.LoadFromAssemblyPath(proxyPath);
-        var proxyAssembly2 = plugin2.LoadFromAssemblyPath(proxyPath);
+    [Fact]
+    public void CanCreateProxiesWithSharedPlugin()
+    {
+        AssemblyLoadContext plugin1 = CreatePluginAssemblyLoadContext("alc1", CurrentAssemblyFolder);
+        AssemblyLoadContext plugin2 = CreatePluginAssemblyLoadContext("alc2", CurrentAssemblyFolder, plugin1);
+
+        AssertPlugins(plugin1, plugin2);
+    }
+
+    private static void AssertPlugins(AssemblyLoadContext plugin1, AssemblyLoadContext plugin2)
+    {
+        var proxyAssembly1 = plugin1.LoadFromAssemblyPath(ProxyPath);
+        var proxyAssembly2 = plugin2.LoadFromAssemblyPath(ProxyPath);
 
         object? proxy1 = CreateAndAssertProxy(proxyAssembly1, plugin1);
         object? proxy2 = CreateAndAssertProxy(proxyAssembly2, plugin2);
