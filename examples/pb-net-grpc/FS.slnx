@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Client_FS/Client_FS.fsproj" />
+  <Project Path="Server_FS/Server_FS.fsproj" />
+  <Project Path="Shared_FS/Shared_FS.fsproj" />
+</Solution>

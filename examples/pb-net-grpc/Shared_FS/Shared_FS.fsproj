@@ -4,7 +4,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>$(DefaultTFM)</TargetFramework>
     <SignAssembly>false</SignAssembly>
-    <LangVersion>4.7</LangVersion>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,5 +14,7 @@
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="System.ServiceModel.Primitives" />
+    <!-- for security advisory (build warning -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
   </ItemGroup>
 </Project>

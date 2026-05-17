@@ -11,6 +11,8 @@
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="protobuf-net" />
     <PackageReference Include="protobuf-net.Grpc" />
+    <!-- for security advisory (build warning -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
   </ItemGroup>
 
 </Project>

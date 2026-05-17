@@ -1,4 +1,4 @@
-#if !(NET462 || NET472)
+#if !NETFRAMEWORK
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
@@ -10,7 +10,6 @@ using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using Xunit;
 using Grpc.Core.Interceptors;
-using Xunit.Abstractions;
 using System.Runtime.CompilerServices;
 using ProtoBuf.Meta;
 
@@ -92,9 +91,11 @@ namespace protobuf_net.Grpc.Test.Integration
                     // then try BinaryFormatter for anything that protobuf-net can't handle
 
                     ProtoBufMarshallerFactory.Default,
+#if !NET9_0_OR_GREATER // hard-gone
 #pragma warning disable CS0618 // Type or member is obsolete
                     BinaryFormatterMarshallerFactory.Default, // READ THE NOTES ON NOT DOING THIS
 #pragma warning restore CS0618 // Type or member is obsolete
+#endif
                     }));
     }
 
@@ -290,6 +291,7 @@ namespace protobuf_net.Grpc.Test.Integration
             static MethodInfo GetMethod(string name) => typeof(ApplyServices).GetMethod(name)!;
         }
 
+#if !NET9_0_OR_GREATER // BinaryFormatter hard gone
         [Fact]
         public void CanCallAdhocService()
         {
@@ -301,6 +303,7 @@ namespace protobuf_net.Grpc.Test.Integration
             var response = client.AdhocMethod(request);
             Assert.Equal(19, response.Z);
         }
+#endif
 
         [Fact]
         public async Task CanCallInterceptedService()

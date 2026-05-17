@@ -26,7 +26,7 @@ namespace protobuf_net.Grpc.Test.Issues
             // client 
             var channel = new TestChannel("abc");
             IMyService service = channel.CreateGrpcService<IMyService>(binder.ClientFactory);
-            await service.SomeMethodAsync();
+            await service.SomeMethodAsync(TestContext.Current.CancellationToken);
             Assert.Equal("abc:/Foo/Bar", Assert.Single(channel.Calls));
         }
         public interface IMyService

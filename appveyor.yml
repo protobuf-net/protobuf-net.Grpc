@@ -2,9 +2,9 @@ image: Visual Studio 2019
 
 install:
 - cmd: >-
-    choco install dotnet-6.0-sdk
-
     choco install dotnet-8.0-sdk
+    
+    choco install dotnet-10.0-sdk
 
 skip_branch_with_pr: true
 skip_tags: true

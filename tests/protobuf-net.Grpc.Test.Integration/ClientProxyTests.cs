@@ -13,7 +13,6 @@ using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using ProtoBuf.Grpc;
 using Xunit;
-using Xunit.Abstractions;
 
 #nullable disable
 
@@ -114,7 +113,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
 
 
-#if !(NET462 || NET472)
+#if !NETFRAMEWORK
         [Fact]
         public async Task ClientProxyTests_WhenCalledToDerivedInterfaceMethod_NoException()
         {

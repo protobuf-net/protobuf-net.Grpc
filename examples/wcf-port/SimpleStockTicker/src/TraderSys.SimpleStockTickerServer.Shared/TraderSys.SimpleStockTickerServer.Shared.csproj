@@ -11,6 +11,8 @@
     <PackageReference Include="System.ServiceModel.Primitives" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="protobuf-net" />
+    <!-- for security advisory (build warning -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
   </ItemGroup>
 
   <ItemGroup>

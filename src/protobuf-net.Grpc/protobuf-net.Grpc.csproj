@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFrameworks>net462;netstandard2.1;netstandard2.0;net6.0;net8.0</TargetFrameworks>
+        <TargetFrameworks>net472;netstandard2.1;netstandard2.0;net8.0;net10.0</TargetFrameworks>
         <RootNamespace>ProtoBuf.Grpc</RootNamespace>
         <DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
     </PropertyGroup>
@@ -9,11 +9,11 @@
         <PackageReference Include="protobuf-net" VersionOverride="$(ProtoBufNet2Version)" />
         <PackageReference Include="System.IO.Pipelines" />
     </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'netstandard2.0'">
+    <ItemGroup Condition="'$(TargetFramework)' == 'net472' or '$(TargetFramework)' == 'netstandard2.0'">
         <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
         <PackageReference Include="System.Threading.Channels" />
     </ItemGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
+    <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
         <!-- need to be explicit to avoid fight with System.IO.Pipelines -->
         <PackageReference Include="System.ValueTuple" />
     </ItemGroup>

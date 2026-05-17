@@ -4,7 +4,9 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>$(DefaultTFM)</TargetFramework>
     <SignAssembly>false</SignAssembly>
-    <LangVersion>4.7</LangVersion>
+    <LangVersion>latest</LangVersion>
+    <!-- migrations of the webhost code gratefully accepted -->
+    <NoWarn>$(NoWarn);FS0044</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
