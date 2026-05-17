@@ -18,7 +18,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test.Integration
 {
@@ -31,7 +30,7 @@ namespace protobuf_net.Grpc.Test.Integration
         public void Log(string message)
         {
             var tmp = Output;
-            if (tmp is object)
+            if (tmp is not null)
             {
                 lock (tmp)
                 {
@@ -39,8 +38,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 }
             }
         }
-        public StreamTestsFixture() { }
-
+        
         public int Port { get; } = PortManager.GetNextPort();
         public void Init()
         {
@@ -59,7 +57,7 @@ namespace protobuf_net.Grpc.Test.Integration
     }
 
     [Service]
-    public interface IStreamAPI
+    public interface IStreamApi
     {
         IAsyncEnumerable<Foo> DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx = default);
         IObservable<Foo> DuplexEchoObservable(IObservable<Foo> values, CallContext ctx = default);
@@ -99,7 +97,7 @@ namespace protobuf_net.Grpc.Test.Integration
         FaultSuccessGoodProducer, // observes cancellation
     }
 
-    class StreamServer : IStreamAPI, IStreamRewrite
+    class StreamServer : IStreamApi, IStreamRewrite
     {
         readonly StreamTestsFixture _fixture;
         internal StreamServer(StreamTestsFixture fixture)
@@ -116,7 +114,7 @@ namespace protobuf_net.Grpc.Test.Integration
             return !string.IsNullOrWhiteSpace(header) && Enum.TryParse<Scenario>(header, out var tmp) ? tmp : Scenario.RunToCompletion;
         }
 
-        async ValueTask IStreamAPI.TakeFive(CancellationToken cancellationToken)
+        async ValueTask IStreamApi.TakeFive(CancellationToken cancellationToken)
         {
             var start = DateTime.UtcNow;
             try
@@ -131,7 +129,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        async IAsyncEnumerable<Foo> IStreamAPI.DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx)
+        async IAsyncEnumerable<Foo> IStreamApi.DuplexEcho(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
             Log("server checking scenario");
             var scenario = GetScenario(ctx);
@@ -179,7 +177,7 @@ namespace protobuf_net.Grpc.Test.Integration
             Log("server is complete");
         }
 
-        IObservable<Foo> IStreamAPI.DuplexEchoObservable(IObservable<Foo> values, CallContext ctx)
+        IObservable<Foo> IStreamApi.DuplexEchoObservable(IObservable<Foo> values, CallContext ctx)
         {
             Log("server checking scenario");
             var scenario = GetScenario(ctx);
@@ -258,7 +256,7 @@ namespace protobuf_net.Grpc.Test.Integration
             => throw new RpcException(new Status(StatusCode.Internal, state + " detail"),
             new Metadata { { "faultkey", state + " faultval" } }, state + " message");
 
-        async ValueTask<Foo> IStreamAPI.UnaryAsync(Foo value, CallContext ctx)
+        async ValueTask<Foo> IStreamApi.UnaryAsync(Foo value, CallContext ctx)
         {
             var scenario = GetScenario(ctx);
             var sCtx = ctx.ServerCallContext!;
@@ -278,7 +276,7 @@ namespace protobuf_net.Grpc.Test.Integration
             return value;
         }
 
-        async ValueTask<FooWithLength> IStreamAPI.UnaryWithLengthAsync(FooWithLength value, CallContext ctx)
+        async ValueTask<FooWithLength> IStreamApi.UnaryWithLengthAsync(FooWithLength value, CallContext ctx)
         {
             var scenario = GetScenario(ctx);
             var sCtx = ctx.ServerCallContext!;
@@ -301,14 +299,15 @@ namespace protobuf_net.Grpc.Test.Integration
 
 
 
-        Foo IStreamAPI.UnaryBlocking(Foo value, CallContext ctx)
+        Foo IStreamApi.UnaryBlocking(Foo value, CallContext ctx)
         {
             try
             {
-                return ((IStreamAPI)this).UnaryAsync(value, ctx).AsTask().Result; // sync-over-async for this test only
+                return ((IStreamApi)this).UnaryAsync(value, ctx).AsTask().Result; // sync-over-async for this test only
             }
             catch (AggregateException aex)  when (aex.InnerException is RpcException ex)
             {
+                // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
                 Log($"RpcException: {ex.StatusCode}, '{ex.Message}', {ex.Trailers?.Count ?? 0} trailers");
                 throw ex;
             }
@@ -319,7 +318,7 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
-        async ValueTask<Foo> IStreamAPI.ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx)
+        async ValueTask<Foo> IStreamApi.ClientStreaming(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
             int sum = 0;
             await foreach (var item in values.WithCancellation(ctx.CancellationToken))
@@ -329,7 +328,7 @@ namespace protobuf_net.Grpc.Test.Integration
             return new Foo { Bar = sum };
         }
 
-        async IAsyncEnumerable<Foo> IStreamAPI.ServerStreaming(Foo value, CallContext ctx)
+        async IAsyncEnumerable<Foo> IStreamApi.ServerStreaming(Foo value, CallContext ctx)
         {
             await ctx.ServerCallContext!.WriteResponseHeadersAsync(new Metadata { { "req", value.Bar } });
             var fault = ctx.RequestHeaders.GetInt32("fault");
@@ -353,7 +352,7 @@ namespace protobuf_net.Grpc.Test.Integration
             AddSum(ctx.ServerCallContext!.ResponseTrailers);
         }
 
-        IAsyncEnumerable<Foo> IStreamAPI.FullDuplex(IAsyncEnumerable<Foo> values, CallContext ctx)
+        IAsyncEnumerable<Foo> IStreamApi.FullDuplex(IAsyncEnumerable<Foo> values, CallContext ctx)
         {
             if (ctx.RequestHeaders.GetString("mode") == "byitem")
                 return WrapByItem(values, ctx);
@@ -364,7 +363,7 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             // this is a different "item by item callback" API
             int count = 0, sum = 0;
-            await foreach (var item in ctx.FullDuplexAsync(Producer, values, (val, ctx) =>
+            await foreach (var item in ctx.FullDuplexAsync(Producer, values, (val, _) =>
              {
                  count++;
                  sum += val.Bar;
@@ -515,7 +514,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
     }
 
-#if !(NET462 || NET472)
+#if !NETFRAMEWORK
     public class ManagedStreamTests : StreamTests
     {
         public override bool IsManagedClient => true;
@@ -556,7 +555,7 @@ namespace protobuf_net.Grpc.Test.Integration
     {
         public class DebugTheoryAttribute : TheoryAttribute
         {
-            public DebugTheoryAttribute()
+            public DebugTheoryAttribute([CallerFilePath] string sourceFilePath = "", [CallerLineNumber] int sourceLineNumber = -1) : base(sourceFilePath, sourceLineNumber)
             {
 #if !DEBUG
                 Skip = "Streaming tests are timing sensitive and brittle; useful for debug, but skipping here";
@@ -565,7 +564,7 @@ namespace protobuf_net.Grpc.Test.Integration
         }
         public class DebugFactAttribute : FactAttribute
         {
-            public DebugFactAttribute()
+            public DebugFactAttribute([CallerFilePath] string sourceFilePath = "", [CallerLineNumber] int sourceLineNumber = -1) : base(sourceFilePath, sourceLineNumber)
             {
 #if !DEBUG
                 Skip = "Streaming tests are timing sensitive and brittle; useful for debug, but skipping here";
@@ -579,7 +578,7 @@ namespace protobuf_net.Grpc.Test.Integration
         {
             _fixture = fixture;
             fixture.Init();
-            fixture?.SetOutput(log);
+            fixture.SetOutput(log);
             GrpcClientFactory.AllowUnencryptedHttp2 = true;
         }
 
@@ -587,19 +586,20 @@ namespace protobuf_net.Grpc.Test.Integration
 
         public void Dispose()
         {
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             _fixture?.SetOutput(null);
             GC.SuppressFinalize(this);
         }
 
-        protected IAsyncDisposable CreateClient(out IStreamAPI client) => CreateClient<IStreamAPI>(out client);
+        protected IAsyncDisposable CreateClient(out IStreamApi client) => CreateClient<IStreamApi>(out client);
 
         protected abstract IAsyncDisposable CreateClient<TService>(out TService client) where TService : class;
 
-        const int DEFAULT_SIZE = 20;
+        const int DefaultSize = 20;
 
         [DebugTheory]
-        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.None)]
-        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.RunToCompletion, DefaultSize, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, DefaultSize, CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination)]
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.None)]
@@ -631,7 +631,7 @@ namespace protobuf_net.Grpc.Test.Integration
             var values = new List<int>(expectedCount);
             try
             {
-                await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
+                await foreach (var item in client.DuplexEcho(For(scenario, DefaultSize), ctx))
                 {
                     await CheckHeaderStateAsync();
                     values.Add(item.Bar);
@@ -639,9 +639,11 @@ namespace protobuf_net.Grpc.Test.Integration
             }
             catch (Exception ex) when (expectBrittle && ex.GetType().FullName == "ProtoBuf.Grpc.Internal.IncompleteSendRpcException")
             {
+                // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
                 _fixture?.Log($"faulted as incomplete; user advised: '{ex.Message}'");
                 return; // best we can do
             }
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             _fixture?.Log("after await foreach");
             await CheckHeaderStateAsync();
             Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
@@ -677,8 +679,8 @@ namespace protobuf_net.Grpc.Test.Integration
 
 
         [DebugTheory]
-        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.None)]
-        [InlineData(Scenario.RunToCompletion, DEFAULT_SIZE, CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.RunToCompletion, DefaultSize, CallContextFlags.None)]
+        [InlineData(Scenario.RunToCompletion, DefaultSize, CallContextFlags.CaptureMetadata)]
 
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination)]
         [InlineData(Scenario.YieldNothing, 0, CallContextFlags.IgnoreStreamTermination | CallContextFlags.CaptureMetadata)]
@@ -711,7 +713,8 @@ namespace protobuf_net.Grpc.Test.Integration
             var values = new List<int>(expectedCount);
             try
             {
-                await client.DuplexEchoObservable(ForObservable(DEFAULT_SIZE), ctx).ForEachAsync(async item =>
+                // ReSharper disable once AsyncVoidLambda - I'm not here to judge RX
+                await client.DuplexEchoObservable(ForObservable(DefaultSize), ctx).ForEachAsync(async item =>
                 {
                     _fixture.Log($"client received {item.Bar}");
                     await CheckHeaderStateAsync();
@@ -720,9 +723,11 @@ namespace protobuf_net.Grpc.Test.Integration
             }
             catch (Exception ex) when (expectBrittle && ex.GetType().FullName == "ProtoBuf.Grpc.Internal.IncompleteSendRpcException")
             {
+                // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
                 _fixture?.Log($"faulted as incomplete; user advised: '{ex.Message}'");
                 return; // best we can do
             }
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             _fixture?.Log("after await foreach");
             await CheckHeaderStateAsync();
             Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
@@ -759,8 +764,8 @@ namespace protobuf_net.Grpc.Test.Integration
         }
 
         [DebugTheory]
-        [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.None)]
-        [InlineData(Scenario.FaultAfterYield, DEFAULT_SIZE, "after yield", CallContextFlags.CaptureMetadata)]
+        [InlineData(Scenario.FaultAfterYield, DefaultSize, "after yield", CallContextFlags.None)]
+        [InlineData(Scenario.FaultAfterYield, DefaultSize, "after yield", CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultBeforeYield, 0, "before yield", CallContextFlags.None)]
         [InlineData(Scenario.FaultBeforeYield, 0, "before yield", CallContextFlags.CaptureMetadata)]
         [InlineData(Scenario.FaultBeforeHeaders, 0, "before headers", CallContextFlags.None)]
@@ -776,7 +781,7 @@ namespace protobuf_net.Grpc.Test.Integration
 
             var rpc = await Assert.ThrowsAsync<RpcException>(async () =>
             {
-                await foreach (var item in client.DuplexEcho(For(scenario, DEFAULT_SIZE), ctx))
+                await foreach (var item in client.DuplexEcho(For(scenario, DefaultSize), ctx))
                 {
                     await CheckHeaderStateAsync();
                     values.Add(item.Bar);
@@ -786,6 +791,7 @@ namespace protobuf_net.Grpc.Test.Integration
             Assert.Equal(marker + " detail", rpc.Status.Detail);
             Assert.Equal(marker + " faultval", rpc.Trailers.GetString("faultkey"));
 
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             _fixture?.Log("after await foreach");
             await CheckHeaderStateAsync();
             Assert.Equal(string.Join(",", Enumerable.Range(0, expectedCount)), string.Join(",", values));
@@ -842,6 +848,7 @@ namespace protobuf_net.Grpc.Test.Integration
                 }
             }
 
+            // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
             void Log(string message) => fixture?.Log(message);
 
             Log("starting producer");
@@ -901,11 +908,14 @@ namespace protobuf_net.Grpc.Test.Integration
                 switch (scenario)
                 {
                     case Scenario.RunToCompletion:
+#pragma warning disable xUnit1051 // async / test CT
                         string s = await sr.ReadToEndAsync();
+
                         Assert.Equal("hello, world", s);
                         break;
                     case Scenario.YieldNothing:
                         s = await sr.ReadToEndAsync();
+#pragma warning restore xUnit1051
                         Assert.Equal("", s);
                         break;
                     default:
@@ -957,6 +967,7 @@ namespace protobuf_net.Grpc.Test.Integration
             void Log(string message)
             {
                 Debug.WriteLine(message);
+                // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
                 fixture?.Log(message);
             }
 
@@ -1225,6 +1236,7 @@ namespace protobuf_net.Grpc.Test.Integration
             await foreach (var reply in client.FullDuplex(For(Scenario.RunToCompletion, send), ctx))
             {
                 got++;
+                _ = reply; // make compiler happy
             }
             Assert.Equal(produce, got);
             var trailers = ctx.ResponseTrailers();
@@ -1261,7 +1273,10 @@ namespace protobuf_net.Grpc.Test.Integration
             {
                 var ex = await Assert.ThrowsAsync<RpcException>(async () =>
                 {
-                    await foreach (var item in seq) { }
+                    await foreach (var item in seq)
+                    {
+                        _ = item; // make compiler happy
+                    }
                 });
                 Assert.Equal("oops", ex.Status.Detail);
                 Assert.Equal(StatusCode.Internal, ex.Status.StatusCode);

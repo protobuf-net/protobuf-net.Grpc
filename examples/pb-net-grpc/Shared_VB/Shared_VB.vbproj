@@ -8,5 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.ServiceModel.Primitives" />
+    <!-- for security advisory (build warning -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
   </ItemGroup>
 </Project>

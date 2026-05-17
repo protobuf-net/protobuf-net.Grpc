@@ -1,6 +1,6 @@
 <Project>
     <PropertyGroup>
-        <DefaultTFM>net8.0</DefaultTFM>
+        <DefaultTFM>net10.0</DefaultTFM>
         <RootNamespace>ProtoBuf.Grpc</RootNamespace>
         <Authors>Marc Gravell</Authors>
         <OutputType>Library</OutputType>

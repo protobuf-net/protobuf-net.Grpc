@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Client_VB/Client_VB.vbproj" />
+  <Project Path="Server_VB/Server_VB.vbproj" />
+  <Project Path="Shared_VB/Shared_VB.vbproj" />
+</Solution>

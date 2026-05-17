@@ -12,7 +12,6 @@ using protobuf_net.Grpc.Reflection.Test;
 using Google.Protobuf.Reflection;
 using Grpc.Core;
 using Xunit;
-using Xunit.Abstractions;
 
 [module: CompatibilityLevel(CompatibilityLevel.Level300)] // configures how DateTime etc are handled
 

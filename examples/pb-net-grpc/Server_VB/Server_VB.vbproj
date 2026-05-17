@@ -6,6 +6,8 @@
     <RootNamespace>Server_VB</RootNamespace>
     <TargetFramework>$(DefaultTFM)</TargetFramework>
     <LangVersion>latest</LangVersion>
+    <!-- migrations of the webhost code gratefully accepted -->
+    <NoWarn>$(NoWarn);ASPDEPR008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

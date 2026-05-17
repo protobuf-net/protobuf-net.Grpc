@@ -10,7 +10,7 @@ using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.Threading.Tasks;
 using Xunit;
-using Xunit.Abstractions;
+
 #nullable disable
 namespace protobuf_net.Grpc.Test.Integration.Issues
 {

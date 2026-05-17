@@ -1,0 +1,181 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
+    <BuildType Name="VS" />
+  </Configurations>
+  <Folder Name="/config/">
+    <File Path="appveyor.yml" />
+    <File Path="Build.csproj" />
+    <File Path="Directory.build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="nuget.config" />
+    <File Path="readme.md" />
+    <File Path="version.json" />
+    <Project Path="docs/docs.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/" />
+  <Folder Name="/examples/dotnet-grpc/">
+    <Project Path="examples/dotnet-grpc/DN_Client/DN_Client.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/dotnet-grpc/DN_Server/DN_Server.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/grpc/">
+    <Project Path="examples/grpc/Client/Client.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/grpc/Server/Server.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/grpc/Shared/Shared.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/pb-net-grpc/" />
+  <Folder Name="/examples/pb-net-grpc/csharp/">
+    <Project Path="examples/pb-net-grpc/Client_CS/Client_CS.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/pb-net-grpc/Server_CS/Server_CS.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/pb-net-grpc/Shared_CS/Shared_CS.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/pb-net-grpc/fsharp/">
+    <Project Path="examples/pb-net-grpc/Client_FS/Client_FS.fsproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/pb-net-grpc/Server_FS/Server_FS.fsproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/pb-net-grpc/Shared_FS/Shared_FS.fsproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/pb-net-grpc/visualbasic/">
+    <Project Path="examples/pb-net-grpc/Client_VB/Client_VB.vbproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/pb-net-grpc/Server_VB/Server_VB.vbproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/pb-net-grpc/Shared_VB/Shared_VB.vbproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/pb-net/">
+    <Project Path="examples/pb-net/JustProtos/JustProtos.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/perf/">
+    <Project Path="examples/perf/PerfClient/PerfClient.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/perf/PerfServer/PerfServer.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/wcf-port/">
+    <File Path="examples/wcf-port/README.md" />
+  </Folder>
+  <Folder Name="/examples/wcf-port/FullStockTicker/">
+    <Project Path="examples/wcf-port/FullStockTicker/src/TraderSys.FullStockTicker.Shared/TraderSys.FullStockTicker.Shared.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/FullStockTicker/src/TraderSys.FullStockTickerClientApp/TraderSys.FullStockTickerClientApp.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/FullStockTicker/src/TraderSys.FullStockTickerServer/TraderSys.FullStockTickerServer.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/FullStockTicker/src/TraderSys.StockMarket/TraderSys.StockMarket.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/wcf-port/SimpleStockTicker/">
+    <Project Path="examples/wcf-port/SimpleStockTicker/src/TraderSys.SimpleStockTickerServer.ClientConsole/TraderSys.SimpleStockTickerServer.ClientConsole.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/SimpleStockTicker/src/TraderSys.SimpleStockTickerServer.Shared/TraderSys.SimpleStockTickerServer.Shared.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/SimpleStockTicker/src/TraderSys.SimpleStockTickerServer/TraderSys.SimpleStockTickerServer.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/SimpleStockTicker/src/TraderSys.StockMarket/TraderSys.StockMarket.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/examples/wcf-port/TraderSys/">
+    <Project Path="examples/wcf-port/TraderSys/src/TraderSys.PortfolioData/TraderSys.PortfolioData.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/TraderSys/src/TraderSys.Portfolios.ClientConsole/TraderSys.Portfolios.ClientConsole.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/TraderSys/src/TraderSys.Portfolios.Shared/TraderSys.Portfolios.Shared.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="examples/wcf-port/TraderSys/src/TraderSys.Portfolios/TraderSys.Portfolios.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/">
+    <File Path="src/Directory.Build.props" />
+    <File Path="src/protobuf-net.png" />
+    <Project Path="src/protobuf-net.Grpc.Reflection/protobuf-net.Grpc.Reflection.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="src/protobuf-net.Grpc/protobuf-net.Grpc.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/managed/">
+    <Project Path="src/protobuf-net.Grpc.AspNetCore.Reflection/protobuf-net.Grpc.AspNetCore.Reflection.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="src/protobuf-net.Grpc.AspNetCore/protobuf-net.Grpc.AspNetCore.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="src/protobuf-net.Grpc.ClientFactory/protobuf-net.Grpc.ClientFactory.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/native/">
+    <Project Path="src/protobuf-net.Grpc.Native/protobuf-net.Grpc.Native.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/protobuf-net.Grpc.Reflection.Test/protobuf-net.Grpc.Reflection.Test.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="tests/protobuf-net.Grpc.Test.Integration/protobuf-net.Grpc.Test.Integration.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="tests/protobuf-net.Grpc.Test.IntegrationUpLevel/protobuf-net.Grpc.Test.IntegrationUpLevel.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="tests/protobuf-net.Grpc.Test/protobuf-net.Grpc.Test.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+  <Folder Name="/toys/">
+    <Project Path="toys/PlayClient/PlayClient.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+    <Project Path="toys/PlayServer/PlayServer.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
+  </Folder>
+</Solution>

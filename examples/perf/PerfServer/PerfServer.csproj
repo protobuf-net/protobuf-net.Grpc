@@ -3,6 +3,8 @@
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TargetFramework>$(DefaultTFM)</TargetFramework>
+    <!-- migrations accepted! -->
+    <NoWarn>$(NoWarn);ASPDEPR008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

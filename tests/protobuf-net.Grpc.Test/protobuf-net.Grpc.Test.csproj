@@ -2,19 +2,20 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <TargetFrameworks>net462;net472;net6.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
     <RootNamespace>protobuf_net.Grpc.Test</RootNamespace>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CA1822;CS8981</NoWarn>
+    <OutputType>exe</OutputType>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' != 'net462' and '$(TargetFramework)' != 'net472'">
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net472'">
     <DefineConstants>$(DefineConstants);CLIENT_FACTORY</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -23,7 +24,7 @@
     <PackageReference Include="Grpc.Core.Api" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' != 'net462' and '$(TargetFramework)' != 'net472'">
+  <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-#if !(NET462 || NET472)
+#if !NETFRAMEWORK
 using Grpc.Core;
 using ProtoBuf.Grpc.Server;
 using System;
@@ -10,7 +10,6 @@ using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using Xunit;
 using Grpc.Core.Interceptors;
-using Xunit.Abstractions;
 using System.Runtime.CompilerServices;
 using ProtoBuf.Meta;
 

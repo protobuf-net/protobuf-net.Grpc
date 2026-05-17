@@ -5,6 +5,8 @@
     <TargetFramework>$(DefaultTFM)</TargetFramework>
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
     <RootNamespace>Server_CS</RootNamespace>
+    <!-- migrations accepted! -->
+    <NoWarn>$(NoWarn);ASPDEPR008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

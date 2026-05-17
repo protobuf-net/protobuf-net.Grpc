@@ -10,7 +10,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Xunit;
-using Xunit.Abstractions;
 
 #nullable disable
 
@@ -130,7 +129,7 @@ As sub-object :
             }
         }
 
-#if !(NET462 || NET472)
+#if !NETFRAMEWORK
         [Fact]
         public async Task Issue100_ManagedClient()
         {

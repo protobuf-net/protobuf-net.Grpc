@@ -1,7 +1,6 @@
 ﻿using ProtoBuf.Grpc.Configuration;
 using System;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace protobuf_net.Grpc.Test.Issues
 {
