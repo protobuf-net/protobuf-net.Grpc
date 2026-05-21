@@ -19,7 +19,7 @@ namespace ProtoBuf.Grpc.Internal
         private static readonly string ProxyIdentity = typeof(ProxyEmitter).Namespace + ".Proxies";
 
         // lazy: DefineDynamicAssembly is RequiresDynamicCode; keeping it out of the cctor lets the trimmer
-        // shake this whole codepath when only [GenerateProxy]/[Proxy]-decorated services are used.
+        // shake this whole codepath when generated proxies (via the BuildTools generator or a manual [Proxy]) cover every service.
         private static ModuleBuilder? s_module;
 #if NET8_0_OR_GREATER
         [RequiresDynamicCode("Reflection.Emit is used to build a dynamic proxy assembly.")]
@@ -119,9 +119,9 @@ namespace ProtoBuf.Grpc.Internal
             = typeof(MarshallerCache).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
 #if NET8_0_OR_GREATER
         [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
-            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the [GenerateProxy] / [Proxy] static path is used instead.")]
+            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the generated-registry / [Proxy] static path is used instead.")]
         [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
-            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the [GenerateProxy] / [Proxy] static path is used instead.")]
+            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the generated-registry / [Proxy] static path is used instead.")]
 #endif
         internal static Func<CallInvoker, TService> CreateFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
            where TService : class
@@ -199,8 +199,8 @@ namespace ProtoBuf.Grpc.Internal
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
 #if NET8_0_OR_GREATER
-        [RequiresDynamicCode("Generates a proxy type at runtime using Reflection.Emit; use [GenerateProxy] on the service contract for AOT support.")]
-        [RequiresUnreferencedCode("Reflects over all members of TService to emit method overrides; use [GenerateProxy] on the service contract for trim support.")]
+        [RequiresDynamicCode("Generates a proxy type at runtime using Reflection.Emit; reference the protobuf-net.Grpc.BuildTools generator to get an AOT-friendly build-time proxy instead.")]
+        [RequiresUnreferencedCode("Reflects over all members of TService to emit method overrides; reference the protobuf-net.Grpc.BuildTools generator to get a trim-friendly build-time proxy instead.")]
         [UnconditionalSuppressMessage("Trimming", "IL2087", Justification = "Whole method is RequiresUnreferencedCode; callers are gated on RuntimeFeature.IsDynamicCodeSupported.")]
         [UnconditionalSuppressMessage("Trimming", "IL2090", Justification = "Whole method is RequiresUnreferencedCode; callers are gated on RuntimeFeature.IsDynamicCodeSupported.")]
 #endif

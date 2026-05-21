@@ -11,7 +11,7 @@
     <DevelopmentDependency>true</DevelopmentDependency>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <Description>Source generator for protobuf-net.Grpc; emits AOT/trim-friendly client proxies for service contracts marked with [GenerateProxy].</Description>
+    <Description>Source generator for protobuf-net.Grpc; emits AOT/trim-friendly client proxies and server bindings for any interface tagged with [Service] or [ServiceContract], registered via a module initializer.</Description>
   </PropertyGroup>
 
   <ItemGroup>

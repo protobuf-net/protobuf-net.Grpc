@@ -181,8 +181,8 @@ namespace ProtoBuf.Grpc.Configuration
             /// Create a delegate that will invoke this method against a constant instance of the service
             /// </summary>
 #if NET8_0_OR_GREATER
-            [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Builds the delegate via Expression.Compile; use [GenerateProxy] (which also emits server bindings) for AOT support.")]
-            [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Reflects over service methods; use [GenerateProxy] (which also emits server bindings) for trim support.")]
+            [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Builds the delegate via Expression.Compile; reference the protobuf-net.Grpc.BuildTools generator to get AOT-friendly server bindings instead.")]
+            [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Reflects over service methods; reference the protobuf-net.Grpc.BuildTools generator to get trim-friendly server bindings instead.")]
 #endif
             public TDelegate CreateDelegate<TDelegate>()
                 where TDelegate : Delegate

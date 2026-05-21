@@ -46,12 +46,9 @@ namespace protobuf_net.Grpc.Test
         public void NoProxyAttributeStampedOnInterface()
         {
             // The generator no longer stamps anything on the user's interface — registration happens
-            // via the registry at module-init time, so neither attribute should appear here.
-#pragma warning disable CS0618 // GenerateProxyAttribute / GeneratedServerAttribute are obsolete
+            // via the GeneratedProxyRegistry at module-init time. The interface stays untouched, so
+            // [Proxy] (the manual-override path) should not be present here either.
             Assert.Null(typeof(IGenProxyService).GetCustomAttribute<ProxyAttribute>());
-            Assert.Null(typeof(IGenProxyService).GetCustomAttribute<GenerateProxyAttribute>());
-            Assert.Null(typeof(IGenProxyService).GetCustomAttribute<GeneratedServerAttribute>());
-#pragma warning restore CS0618
         }
 
         [Fact]
