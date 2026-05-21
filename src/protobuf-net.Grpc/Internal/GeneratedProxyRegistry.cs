@@ -1,4 +1,5 @@
 using Grpc.Core;
+using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
@@ -25,11 +26,13 @@ namespace ProtoBuf.Grpc.Internal
         private static readonly ConcurrentDictionary<Type, Type> s_serverBindings = new();
 
         /// <summary>
-        /// Register a generated client proxy factory for <typeparamref name="TService"/>. Called from
-        /// the generated <c>[ModuleInitializer]</c>; do not call directly.
+        /// Register a generated client proxy factory for <typeparamref name="TService"/>. The factory
+        /// receives the <see cref="BinderConfiguration"/> the caller asked for, so custom marshaller
+        /// factories work the same as with the runtime IL-emit path. Called from the generated
+        /// <c>[ModuleInitializer]</c>; do not call directly.
         /// </summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public static void RegisterClient<TService>(Func<CallInvoker, TService> factory)
+        public static void RegisterClient<TService>(Func<CallInvoker, BinderConfiguration, TService> factory)
             where TService : class
         {
             if (factory is null) throw new ArgumentNullException(nameof(factory));
@@ -57,10 +60,10 @@ namespace ProtoBuf.Grpc.Internal
         /// <summary>
         /// Try to resolve a generated client factory for <typeparamref name="TService"/>.
         /// </summary>
-        internal static Func<CallInvoker, TService>? TryGetClientFactory<TService>()
+        internal static Func<CallInvoker, BinderConfiguration, TService>? TryGetClientFactory<TService>()
             where TService : class
             => s_clientFactories.TryGetValue(typeof(TService), out var d)
-                ? (Func<CallInvoker, TService>)d
+                ? (Func<CallInvoker, BinderConfiguration, TService>)d
                 : null;
 
         /// <summary>

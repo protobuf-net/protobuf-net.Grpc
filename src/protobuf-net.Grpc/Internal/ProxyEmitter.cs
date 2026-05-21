@@ -131,9 +131,10 @@ namespace ProtoBuf.Grpc.Internal
                 throw new InvalidOperationException("Type is not an interface: " + typeof(TService).FullName);
 
             // 1. registry populated by [ModuleInitializer] from build-time generated code — fully static,
-            // no reflection on TService.
+            // no reflection on TService. The factory receives the configured BinderConfiguration so
+            // custom marshaller factories work the same as with the IL-emit path.
             var generated = GeneratedProxyRegistry.TryGetClientFactory<TService>();
-            if (generated is not null) return generated;
+            if (generated is not null) return invoker => generated(invoker, binderConfig);
 
             if (binderConfig == BinderConfiguration.Default) // only use ProxyAttribute for default binder
             {

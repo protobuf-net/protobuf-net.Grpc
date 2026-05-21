@@ -52,20 +52,12 @@ internal static class ProxyEmitter
         sb.Append("    internal sealed class ").Append(iface.ProxyTypeName).Append(" : global::Grpc.Core.ClientBase, ").Append(iface.InterfaceFullName).AppendLine();
         sb.AppendLine("    {");
 
-        // ctor
-        sb.Append("        public ").Append(iface.ProxyTypeName).AppendLine("(global::Grpc.Core.CallInvoker callInvoker) : base(callInvoker) { }");
-        sb.AppendLine();
+        // marshallers + Method<,> are instance readonly fields so they can be built from the caller-
+        // supplied BinderConfiguration (which may register custom marshaller factories — the static
+        // BinderConfiguration.Default doesn't see those, so a static-field cache would crash any service
+        // whose payload type isn't marshallable under the defaults).
 
-        // static factory (this is what ProxyEmitter.CreateViaActivator will pick up)
-        sb.Append("        public static ").Append(iface.InterfaceFullName).Append(" Create(global::Grpc.Core.CallInvoker callInvoker)").AppendLine();
-        sb.Append("            => new ").Append(iface.ProxyTypeName).Append("(callInvoker);").AppendLine();
-        sb.AppendLine();
-
-        // ToString override
-        sb.Append("        public override string ToString() => \"").Append(iface.ServiceName.Replace("\"", "\\\"")).Append(" / CallInvoker\";").AppendLine();
-        sb.AppendLine();
-
-        // marshallers - dedupe by full type name
+        // dedupe marshallers by full type name
         var marshallerTypes = new SortedSet<string>(System.StringComparer.Ordinal);
         foreach (var op in iface.Operations)
         {
@@ -79,26 +71,56 @@ internal static class ProxyEmitter
         {
             var fieldName = "__m" + marshallerIndex++;
             marshallerNames[t] = fieldName;
-            sb.Append("        private static readonly global::Grpc.Core.Marshaller<").Append(t).Append("> ").Append(fieldName).AppendLine();
-            sb.Append("            = global::ProtoBuf.Grpc.Configuration.BinderConfiguration.Default.GetMarshaller<").Append(t).Append(">();").AppendLine();
+            sb.Append("        private readonly global::Grpc.Core.Marshaller<").Append(t).Append("> ").Append(fieldName).AppendLine(";");
+        }
+
+        var opFieldNames = new List<string>(iface.Operations.Length);
+        for (int i = 0; i < iface.Operations.Length; i++)
+        {
+            var op = iface.Operations[i];
+            var fieldName = "__op" + i;
+            opFieldNames.Add(fieldName);
+            sb.Append("        private readonly global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append("> ").Append(fieldName).AppendLine(";");
         }
         sb.AppendLine();
 
-        // Method<,> fields
-        int opIndex = 0;
-        var opFieldNames = new List<string>(iface.Operations.Length);
-        foreach (var op in iface.Operations)
+        // ctor(CallInvoker, BinderConfiguration) — the registry calls this
+        sb.Append("        public ").Append(iface.ProxyTypeName).Append("(global::Grpc.Core.CallInvoker callInvoker, global::ProtoBuf.Grpc.Configuration.BinderConfiguration config) : base(callInvoker)").AppendLine();
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (config is null) config = global::ProtoBuf.Grpc.Configuration.BinderConfiguration.Default;");
+        foreach (var t in marshallerTypes)
         {
-            var fieldName = "__op" + opIndex++;
-            opFieldNames.Add(fieldName);
-            sb.Append("        private static readonly global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append("> ").Append(fieldName).AppendLine();
-            sb.Append("            = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
+            sb.Append("            ").Append(marshallerNames[t]).Append(" = config.GetMarshaller<").Append(t).AppendLine(">();");
+        }
+        for (int i = 0; i < iface.Operations.Length; i++)
+        {
+            var op = iface.Operations[i];
+            sb.Append("            ").Append(opFieldNames[i]).Append(" = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
             sb.Append(MapMethodType(op.Kind)).Append(", ");
             sb.Append("\"").Append(EscapeString(iface.ServiceName)).Append("\", ");
             sb.Append("\"").Append(EscapeString(op.OperationName)).Append("\", ");
             sb.Append(marshallerNames[op.RequestTypeFullName]).Append(", ");
             sb.Append(marshallerNames[op.ResponseTypeFullName]).AppendLine(");");
         }
+        sb.AppendLine("        }");
+        sb.AppendLine();
+
+        // back-compat ctor(CallInvoker) — used by manual [Proxy(typeof(X))] consumers
+        sb.Append("        public ").Append(iface.ProxyTypeName).Append("(global::Grpc.Core.CallInvoker callInvoker)").AppendLine();
+        sb.Append("            : this(callInvoker, global::ProtoBuf.Grpc.Configuration.BinderConfiguration.Default) { }").AppendLine();
+        sb.AppendLine();
+
+        // static factories: Create(CallInvoker, BinderConfiguration) for the registry path,
+        // Create(CallInvoker) for the [Proxy(typeof(X))] path.
+        sb.Append("        public static ").Append(iface.InterfaceFullName).Append(" Create(global::Grpc.Core.CallInvoker callInvoker, global::ProtoBuf.Grpc.Configuration.BinderConfiguration config)").AppendLine();
+        sb.Append("            => new ").Append(iface.ProxyTypeName).Append("(callInvoker, config);").AppendLine();
+        sb.AppendLine();
+        sb.Append("        public static ").Append(iface.InterfaceFullName).Append(" Create(global::Grpc.Core.CallInvoker callInvoker)").AppendLine();
+        sb.Append("            => new ").Append(iface.ProxyTypeName).Append("(callInvoker);").AppendLine();
+        sb.AppendLine();
+
+        // ToString override
+        sb.Append("        public override string ToString() => \"").Append(iface.ServiceName.Replace("\"", "\\\"")).Append(" / CallInvoker\";").AppendLine();
         sb.AppendLine();
 
         // operation implementations
@@ -180,44 +202,45 @@ internal static class ProxyEmitter
             marshallerTypes.Add(op.ResponseTypeFullName);
         }
 
-        var marshallerNames = new Dictionary<string, string>(System.StringComparer.Ordinal);
-        int marshallerIndex = 0;
-        foreach (var t in marshallerTypes)
-        {
-            var fieldName = "__m" + marshallerIndex++;
-            marshallerNames[t] = fieldName;
-            sb.Append("        private static readonly global::Grpc.Core.Marshaller<").Append(t).Append("> ").Append(fieldName).AppendLine();
-            sb.Append("            = global::ProtoBuf.Grpc.Configuration.BinderConfiguration.Default.GetMarshaller<").Append(t).Append(">();").AppendLine();
-        }
-        sb.AppendLine();
+        // No static marshaller / Method<,> fields. Marshallers come from the caller-supplied
+        // BinderConfiguration (custom marshaller factories live there); resolving them eagerly in the
+        // cctor would crash the whole class for services whose payloads aren't marshallable under the
+        // defaults. Build everything as locals inside Bind<TService> using binder.Configuration.
 
-        // Method<,> fields - same as client side
-        int opIndex = 0;
-        var opFieldNames = new List<string>(iface.Operations.Length);
-        foreach (var op in iface.Operations)
-        {
-            var fieldName = "__op" + opIndex++;
-            opFieldNames.Add(fieldName);
-            sb.Append("        private static readonly global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append("> ").Append(fieldName).AppendLine();
-            sb.Append("            = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
-            sb.Append(MapMethodType(op.Kind)).Append(", ");
-            sb.Append("\"").Append(EscapeString(iface.ServiceName)).Append("\", ");
-            sb.Append("\"").Append(EscapeString(op.OperationName)).Append("\", ");
-            sb.Append(marshallerNames[op.RequestTypeFullName]).Append(", ");
-            sb.Append(marshallerNames[op.ResponseTypeFullName]).AppendLine(");");
-        }
-        sb.AppendLine();
-
-        // public static int Bind<TService>(TService service, IServerMethodBinder<TService> binder)
+        // public static int Bind<TService>(IServerMethodBinder<TService> binder)
         sb.Append("        public static int Bind<TService>(global::ProtoBuf.Grpc.Configuration.IServerMethodBinder<TService> binder)").AppendLine();
         sb.Append("            where TService : class, ").Append(iface.InterfaceFullName).AppendLine();
         sb.AppendLine("        {");
+        sb.AppendLine("            var __cfg = binder.Configuration;");
+
+        var marshallerLocalNames = new Dictionary<string, string>(System.StringComparer.Ordinal);
+        int marshallerIndex = 0;
+        foreach (var t in marshallerTypes)
+        {
+            var localName = "__m" + marshallerIndex++;
+            marshallerLocalNames[t] = localName;
+            sb.Append("            var ").Append(localName).Append(" = __cfg.GetMarshaller<").Append(t).AppendLine(">();");
+        }
+
+        var opLocalNames = new List<string>(iface.Operations.Length);
+        for (int i = 0; i < iface.Operations.Length; i++)
+        {
+            var op = iface.Operations[i];
+            var localName = "__op" + i;
+            opLocalNames.Add(localName);
+            sb.Append("            var ").Append(localName).Append(" = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
+            sb.Append(MapMethodType(op.Kind)).Append(", ");
+            sb.Append("\"").Append(EscapeString(iface.ServiceName)).Append("\", ");
+            sb.Append("\"").Append(EscapeString(op.OperationName)).Append("\", ");
+            sb.Append(marshallerLocalNames[op.RequestTypeFullName]).Append(", ");
+            sb.Append(marshallerLocalNames[op.ResponseTypeFullName]).AppendLine(");");
+        }
         sb.AppendLine("            int count = 0;");
 
         for (int i = 0; i < iface.Operations.Length; i++)
         {
             var op = iface.Operations[i];
-            var opField = opFieldNames[i];
+            var opLocal = opLocalNames[i];
 
             var ifaceFq = iface.InterfaceFullName;
             var opNameLiteral = "\"" + EscapeString(op.MethodName) + "\"";
@@ -225,22 +248,22 @@ internal static class ProxyEmitter
             {
                 case MethodKind.Unary:
                     sb.Append("            binder.AddUnaryMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
                 case MethodKind.ServerStreaming:
                     sb.Append("            binder.AddServerStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
                 case MethodKind.ClientStreaming:
                     sb.Append("            binder.AddClientStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
                 case MethodKind.DuplexStreaming:
                     sb.Append("            binder.AddDuplexStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
             }
