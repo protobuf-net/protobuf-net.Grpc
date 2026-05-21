@@ -133,6 +133,9 @@
   <Folder Name="/src/">
     <File Path="src/Directory.Build.props" />
     <File Path="src/protobuf-net.png" />
+    <Project Path="src/protobuf-net.Grpc.BuildTools/protobuf-net.Grpc.BuildTools.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
     <Project Path="src/protobuf-net.Grpc.Reflection/protobuf-net.Grpc.Reflection.csproj">
       <BuildType Solution="VS|*" Project="Debug" />
     </Project>

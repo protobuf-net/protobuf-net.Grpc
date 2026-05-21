@@ -1,8 +1,7 @@
-﻿using Grpc.Core;
+using Grpc.Core;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Linq.Expressions;
 using System.Reflection;
 
 namespace ProtoBuf.Grpc.Configuration
@@ -52,58 +51,51 @@ namespace ProtoBuf.Grpc.Configuration
                     Func<DeserializationContext, T> deserializer;
                     Action<T, global::Grpc.Core.SerializationContext> serializer;
 
+                    var parserInstance = parser.GetValue(null);
+                    if (parserInstance is null) return null;
+
                     if (iBufferMessage is not null)
                     {
-                        /* we want to generate:
-// write
-context.SetPayloadLength(message.CalculateSize());
-global::Google.Protobuf.MessageExtensions.WriteTo(message, context.GetBufferWriter());
-context.Complete();
-
-// read
-parser.ParseFrom(context.PayloadAsReadOnlySequence()
-*/
-                        var context = Expression.Parameter(typeof(global::Grpc.Core.DeserializationContext), "context");
+                        // deserializer: parser.ParseFrom(context.PayloadAsReadOnlySequence())
                         var parseFrom = parser.PropertyType.GetMethod("ParseFrom", [typeof(ReadOnlySequence<byte>)])!;
-                        Expression body = Expression.Call(Expression.Constant(parser.GetValue(null), parser.PropertyType),
-                            parseFrom, Expression.Call(context, nameof(DeserializationContext.PayloadAsReadOnlySequence), Type.EmptyTypes));
-                        deserializer = Expression.Lambda<Func<DeserializationContext, T>>(body, context).Compile();
+                        var parseFromDel = (Func<ReadOnlySequence<byte>, T>)Delegate.CreateDelegate(
+                            typeof(Func<ReadOnlySequence<byte>, T>), parserInstance, parseFrom);
+                        deserializer = ctx => parseFromDel(ctx.PayloadAsReadOnlySequence());
 
-                        var message = Expression.Parameter(typeof(T), "message");
-                        context = Expression.Parameter(typeof(global::Grpc.Core.SerializationContext), "context");
-                        var setPayloadLength = typeof(global::Grpc.Core.SerializationContext).GetMethod(nameof(global::Grpc.Core.SerializationContext.SetPayloadLength), [typeof(int)])!;
+                        // serializer composes three calls:
+                        //   context.SetPayloadLength(message.CalculateSize());
+                        //   MessageExtensions.WriteTo(message, context.GetBufferWriter());
+                        //   context.Complete();
                         var calculateSize = iMessage.GetMethod("CalculateSize", Type.EmptyTypes)!;
                         var writeTo = me.GetMethod("WriteTo", [iMessage, typeof(IBufferWriter<byte>)])!;
-                        body = Expression.Block(
-                            Expression.Call(context, setPayloadLength, Expression.Call(message, calculateSize)),
-                            Expression.Call(writeTo, message, Expression.Call(context, "GetBufferWriter", Type.EmptyTypes)),
-                            Expression.Call(context, "Complete", Type.EmptyTypes)
-                        );
-                        serializer = Expression.Lambda<Action<T, global::Grpc.Core.SerializationContext>>(body, message, context).Compile();
+                        // open instance delegate over IMessage.CalculateSize() — first param is the receiver;
+                        // T : IMessage so Func<T, int> is delegate-compatible (contravariant in arg type)
+                        var calculateSizeDel = (Func<T, int>)Delegate.CreateDelegate(typeof(Func<T, int>), calculateSize);
+                        // static MessageExtensions.WriteTo(IMessage, IBufferWriter<byte>) — Action<T, IBufferWriter<byte>> is contravariant
+                        var writeToDel = (Action<T, IBufferWriter<byte>>)Delegate.CreateDelegate(
+                            typeof(Action<T, IBufferWriter<byte>>), writeTo);
+
+                        serializer = (message, ctx) =>
+                        {
+                            ctx.SetPayloadLength(calculateSizeDel(message));
+                            writeToDel(message, ctx.GetBufferWriter());
+                            ctx.Complete();
+                        };
                     }
                     else
                     {
-                        /* we want to generate:
-// write
-context.Complete(global::Google.Protobuf.MessageExtensions.ToByteArray(message));
-
-// read
-parser.ParseFrom(context.PayloadAsNewBuffer());
-*/
-
-                        var context = Expression.Parameter(typeof(global::Grpc.Core.DeserializationContext), "context");
+                        // deserializer: parser.ParseFrom(context.PayloadAsNewBuffer())
                         var parseFrom = parser.PropertyType.GetMethod("ParseFrom", [typeof(byte[])])!;
-                        Expression body = Expression.Call(Expression.Constant(parser.GetValue(null), parser.PropertyType),
-                            parseFrom, Expression.Call(context, nameof(DeserializationContext.PayloadAsNewBuffer), Type.EmptyTypes));
-                        deserializer = Expression.Lambda<Func<DeserializationContext, T>>(body, context).Compile();
+                        var parseFromDel = (Func<byte[], T>)Delegate.CreateDelegate(
+                            typeof(Func<byte[], T>), parserInstance, parseFrom);
+                        deserializer = ctx => parseFromDel(ctx.PayloadAsNewBuffer());
 
-                        var message = Expression.Parameter(typeof(T), "message");
-                        context = Expression.Parameter(typeof(global::Grpc.Core.SerializationContext), "context");
+                        // serializer: context.Complete(MessageExtensions.ToByteArray(message))
                         var toByteArray = me.GetMethod("ToByteArray", [iMessage])!;
-                        var complete = typeof(global::Grpc.Core.SerializationContext).GetMethod(
-                            nameof(global::Grpc.Core.SerializationContext.Complete), [typeof(byte[])])!;
-                        body = Expression.Call(context, complete, Expression.Call(toByteArray, message));
-                        serializer = Expression.Lambda<Action<T, global::Grpc.Core.SerializationContext>>(body, message, context).Compile();
+                        var toByteArrayDel = (Func<T, byte[]>)Delegate.CreateDelegate(
+                            typeof(Func<T, byte[]>), toByteArray);
+
+                        serializer = (message, ctx) => ctx.Complete(toByteArrayDel(message));
                     }
                     return new Marshaller<T>(serializer, deserializer);
                 }

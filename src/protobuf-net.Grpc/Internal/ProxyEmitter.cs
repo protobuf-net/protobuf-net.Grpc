@@ -3,6 +3,7 @@ using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -109,6 +110,12 @@ namespace ProtoBuf.Grpc.Internal
         static int _typeIndex;
         private static readonly MethodInfo s_marshallerCacheGenericMethodDef
             = typeof(MarshallerCache).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+#if NET8_0_OR_GREATER
+        [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
+            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the [GenerateProxy] / [Proxy] static path is used instead.")]
+        [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
+            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the [GenerateProxy] / [Proxy] static path is used instead.")]
+#endif
         internal static Func<CallInvoker, TService> CreateFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
            where TService : class
         {
@@ -125,11 +132,43 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
 
+#if NET8_0_OR_GREATER
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+            {
+                ThrowAotRequiresGenerateProxy(typeof(TService));
+            }
+#endif
             return EmitFactory<TService>(binderConfig, log);
         }
+
+#if NET8_0_OR_GREATER
+        [DoesNotReturn]
+        private static void ThrowAotRequiresGenerateProxy(Type contractType)
+            => throw new NotSupportedException(
+                "Service contract '" + contractType.FullName +
+                "' requires a build-time proxy when dynamic code is not supported (e.g. NativeAOT). " +
+                "Add [ProtoBuf.Grpc.Configuration.GenerateProxy] to the interface (and mark it 'partial') " +
+                "so the protobuf-net.Grpc source generator can emit a static proxy.");
+#endif
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Func<CallInvoker, TService> CreateViaActivator<TService>(Type type)
         {
+            // prefer a "public static TService Create(CallInvoker)" factory if the proxy exposes one;
+            // source-generated proxies emit this so the trimmer/AOT can see a static call-chain and avoid
+            // Activator.CreateInstance reflection
+            var staticCreate = type.GetMethod(
+                FactoryName,
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                types: [typeof(CallInvoker)],
+                modifiers: null);
+            if (staticCreate is not null
+                && typeof(TService).IsAssignableFrom(staticCreate.ReturnType))
+            {
+                return (Func<CallInvoker, TService>)Delegate.CreateDelegate(
+                    typeof(Func<CallInvoker, TService>), staticCreate);
+            }
+
             return channel => (TService)Activator.CreateInstance(
                         type,
                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
@@ -138,6 +177,10 @@ namespace ProtoBuf.Grpc.Internal
                         null)!;
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
+#if NET8_0_OR_GREATER
+        [RequiresDynamicCode("Generates a proxy type at runtime using Reflection.Emit; use [GenerateProxy] on the service contract for AOT support.")]
+        [RequiresUnreferencedCode("Reflects over all members of TService to emit method overrides; use [GenerateProxy] on the service contract for trim support.")]
+#endif
         internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
         {
             Type baseType = GrpcClientFactory.ClientBaseType;

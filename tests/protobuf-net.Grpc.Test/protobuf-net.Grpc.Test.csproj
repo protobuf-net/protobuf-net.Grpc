@@ -21,6 +21,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="..\..\src\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
+    <ProjectReference Include="..\..\src\protobuf-net.Grpc.BuildTools\protobuf-net.Grpc.BuildTools.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="Grpc.Core.Api" />
   </ItemGroup>
 
