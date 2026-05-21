@@ -119,8 +119,11 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
 
         var serviceName = GetServiceName(iface);
         var nsName = iface.ContainingNamespace.IsGlobalNamespace ? "" : iface.ContainingNamespace.ToDisplayString();
-        var proxyTypeName = MakeProxyTypeName(iface);
+        var sanitizedBase = MakeSanitizedBase(iface);
+        var proxyTypeName = sanitizedBase + "_ClientProxy";
         var proxyFullTypeName = "ProtoBuf.Grpc.Generated." + proxyTypeName;
+        var serverBindingsTypeName = sanitizedBase + "_ServerBindings";
+        var serverBindingsFullTypeName = "ProtoBuf.Grpc.Generated." + serverBindingsTypeName;
         var accessibility = iface.DeclaredAccessibility switch
         {
             Accessibility.Public => "public",
@@ -137,6 +140,8 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
             ServiceName: serviceName,
             ProxyTypeName: proxyTypeName,
             ProxyFullTypeName: proxyFullTypeName,
+            ServerBindingsTypeName: serverBindingsTypeName,
+            ServerBindingsFullTypeName: serverBindingsFullTypeName,
             Operations: ops.ToImmutable());
 
         return new Candidate(model, diagnostics.ToImmutable());
@@ -167,7 +172,7 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
         return string.IsNullOrEmpty(ns) ? trimmed : ns + "." + trimmed;
     }
 
-    private static string MakeProxyTypeName(INamedTypeSymbol iface)
+    private static string MakeSanitizedBase(INamedTypeSymbol iface)
     {
         var ns = iface.ContainingNamespace.IsGlobalNamespace ? "" : iface.ContainingNamespace.ToDisplayString();
         var raw = (string.IsNullOrEmpty(ns) ? "" : ns + ".") + iface.Name;
@@ -176,7 +181,7 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
         {
             sb.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
         }
-        return sb.ToString() + "_ClientProxy";
+        return sb.ToString();
     }
 
     private static string SanitizeHintName(string fullName)

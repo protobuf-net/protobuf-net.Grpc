@@ -22,8 +22,9 @@ internal static class ProxyEmitter
             sb.AppendLine("{");
         }
 
-        // 1. partial interface declaration with [Proxy(typeof(...))]
+        // 1. partial interface declaration with [Proxy(typeof(...))] AND [GeneratedServer(typeof(...))]
         sb.Append("    [global::ProtoBuf.Grpc.Configuration.Proxy(typeof(global::").Append(iface.ProxyFullTypeName).AppendLine("))]");
+        sb.Append("    [global::ProtoBuf.Grpc.Configuration.GeneratedServer(typeof(global::").Append(iface.ServerBindingsFullTypeName).AppendLine("))]");
         sb.Append("    ").Append(iface.InterfaceAccessibility).Append(" partial interface ").Append(iface.InterfaceName).AppendLine();
         sb.AppendLine("    {");
         sb.AppendLine("    }");
@@ -35,6 +36,17 @@ internal static class ProxyEmitter
         sb.AppendLine("namespace ProtoBuf.Grpc.Generated");
         sb.AppendLine("{");
 
+        EmitClientProxy(sb, iface);
+        sb.AppendLine();
+        EmitServerBindings(sb, iface);
+
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    private static void EmitClientProxy(StringBuilder sb, InterfaceModel iface)
+    {
         sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc.BuildTools\", \"1.0\")]").AppendLine();
         sb.Append("    [global::System.Diagnostics.DebuggerNonUserCode]").AppendLine();
         sb.Append("    internal sealed class ").Append(iface.ProxyTypeName).Append(" : global::Grpc.Core.ClientBase, ").Append(iface.InterfaceFullName).AppendLine();
@@ -92,16 +104,13 @@ internal static class ProxyEmitter
         // operation implementations
         for (int i = 0; i < iface.Operations.Length; i++)
         {
-            EmitOperation(sb, iface, iface.Operations[i], opFieldNames[i]);
+            EmitClientOperation(sb, iface, iface.Operations[i], opFieldNames[i]);
         }
 
         sb.AppendLine("    }");
-        sb.AppendLine("}");
-
-        return sb.ToString();
     }
 
-    private static void EmitOperation(StringBuilder sb, InterfaceModel iface, OperationModel op, string opFieldName)
+    private static void EmitClientOperation(StringBuilder sb, InterfaceModel iface, OperationModel op, string opFieldName)
     {
         // explicit interface implementation
         sb.Append("        ").Append(op.ReturnTypeDisplay).Append(" ").Append(iface.InterfaceFullName).Append(".").Append(op.MethodName).Append("(");
@@ -117,10 +126,7 @@ internal static class ProxyEmitter
         switch (op.Context)
         {
             case ContextKind.None:
-                // no local, pass `in CallContext.Default`
-                break;
             case ContextKind.CallContext:
-                // pass the user's `context` param directly (we'll use `in`)
                 break;
             case ContextKind.CancellationToken:
                 sb.Append("            global::ProtoBuf.Grpc.CallContext __ctx = ");
@@ -128,26 +134,15 @@ internal static class ProxyEmitter
                 break;
         }
 
-        // figure out reshape method name
-        var reshapeMethod = GetReshapeMethodName(op);
+        var reshapeMethod = GetClientReshapeMethodName(op);
 
-        // request argument
-        string requestExpr;
-        switch (op.RequestShape)
+        string requestExpr = op.RequestShape switch
         {
-            case ArgShape.Data:
-                requestExpr = op.Parameters[0].Name;
-                break;
-            case ArgShape.AsyncEnumerable:
-                requestExpr = op.Parameters[0].Name;
-                break;
-            case ArgShape.Void:
-            default:
-                requestExpr = "global::ProtoBuf.Grpc.Internal.Empty.Instance";
-                break;
-        }
+            ArgShape.Data => op.Parameters[0].Name,
+            ArgShape.AsyncEnumerable => op.Parameters[0].Name,
+            _ => "global::ProtoBuf.Grpc.Internal.Empty.Instance",
+        };
 
-        // context expression
         string contextExpr = op.Context switch
         {
             ContextKind.CallContext => "in " + GetContextParameterName(op),
@@ -156,7 +151,7 @@ internal static class ProxyEmitter
         };
 
         sb.Append("            ");
-        if (!IsVoidLike(op)) sb.Append("return ");
+        if (!IsVoidLikeClientReturn(op)) sb.Append("return ");
         sb.Append("global::ProtoBuf.Grpc.Internal.Reshape.").Append(reshapeMethod).Append("(");
         sb.Append(contextExpr).Append(", ");
         sb.Append("this.CallInvoker, ").Append(opFieldName).Append(", ");
@@ -167,9 +162,304 @@ internal static class ProxyEmitter
         sb.AppendLine();
     }
 
+    // -------- server bindings --------
+
+    private static void EmitServerBindings(StringBuilder sb, InterfaceModel iface)
+    {
+        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc.BuildTools\", \"1.0\")]").AppendLine();
+        sb.Append("    [global::System.Diagnostics.DebuggerNonUserCode]").AppendLine();
+        sb.Append("    public static class ").Append(iface.ServerBindingsTypeName).AppendLine();
+        sb.AppendLine("    {");
+
+        // marshallers + Method<,> fields shared with the client proxy live there too, but since the
+        // client proxy lives in the same compilation we *could* reuse them. simpler: declare our own.
+        var marshallerTypes = new SortedSet<string>(System.StringComparer.Ordinal);
+        foreach (var op in iface.Operations)
+        {
+            marshallerTypes.Add(op.RequestTypeFullName);
+            marshallerTypes.Add(op.ResponseTypeFullName);
+        }
+
+        var marshallerNames = new Dictionary<string, string>(System.StringComparer.Ordinal);
+        int marshallerIndex = 0;
+        foreach (var t in marshallerTypes)
+        {
+            var fieldName = "__m" + marshallerIndex++;
+            marshallerNames[t] = fieldName;
+            sb.Append("        private static readonly global::Grpc.Core.Marshaller<").Append(t).Append("> ").Append(fieldName).AppendLine();
+            sb.Append("            = global::ProtoBuf.Grpc.Configuration.BinderConfiguration.Default.GetMarshaller<").Append(t).Append(">();").AppendLine();
+        }
+        sb.AppendLine();
+
+        // Method<,> fields - same as client side
+        int opIndex = 0;
+        var opFieldNames = new List<string>(iface.Operations.Length);
+        foreach (var op in iface.Operations)
+        {
+            var fieldName = "__op" + opIndex++;
+            opFieldNames.Add(fieldName);
+            sb.Append("        private static readonly global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append("> ").Append(fieldName).AppendLine();
+            sb.Append("            = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
+            sb.Append(MapMethodType(op.Kind)).Append(", ");
+            sb.Append("\"").Append(EscapeString(iface.ServiceName)).Append("\", ");
+            sb.Append("\"").Append(EscapeString(op.OperationName)).Append("\", ");
+            sb.Append(marshallerNames[op.RequestTypeFullName]).Append(", ");
+            sb.Append(marshallerNames[op.ResponseTypeFullName]).AppendLine(");");
+        }
+        sb.AppendLine();
+
+        // public static int Bind<TService>(TService service, IServerMethodBinder<TService> binder)
+        sb.Append("        public static int Bind<TService>(global::ProtoBuf.Grpc.Configuration.IServerMethodBinder<TService> binder)").AppendLine();
+        sb.Append("            where TService : class, ").Append(iface.InterfaceFullName).AppendLine();
+        sb.AppendLine("        {");
+        sb.AppendLine("            int count = 0;");
+
+        for (int i = 0; i < iface.Operations.Length; i++)
+        {
+            var op = iface.Operations[i];
+            var opField = opFieldNames[i];
+
+            var ifaceFq = iface.InterfaceFullName;
+            var opNameLiteral = "\"" + EscapeString(op.MethodName) + "\"";
+            switch (op.Kind)
+            {
+                case MethodKind.Unary:
+                    sb.Append("            binder.AddUnaryMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
+                    break;
+                case MethodKind.ServerStreaming:
+                    sb.Append("            binder.AddServerStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
+                    break;
+                case MethodKind.ClientStreaming:
+                    sb.Append("            binder.AddClientStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
+                    break;
+                case MethodKind.DuplexStreaming:
+                    sb.Append("            binder.AddDuplexStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append(opField).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                      .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
+                    break;
+            }
+            sb.AppendLine("            count++;");
+        }
+
+        sb.AppendLine("            return count;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+
+        // per-op generic static handler methods
+        foreach (var op in iface.Operations)
+        {
+            EmitServerOperationHandler(sb, iface, op);
+        }
+
+        sb.AppendLine("    }");
+    }
+
+    private static string GetServerHandlerName(OperationModel op) => op.MethodName + "_Server_" + op.Kind;
+
+    private static void EmitServerOperationHandler(StringBuilder sb, InterfaceModel iface, OperationModel op)
+    {
+        var ifaceFq = iface.InterfaceFullName;
+        var serverContext = "global::Grpc.Core.ServerCallContext";
+        var name = GetServerHandlerName(op);
+
+        switch (op.Kind)
+        {
+            case MethodKind.Unary:
+                // signature: Task<TResponse>(TService, TRequest, ServerCallContext)
+                sb.Append("        private static global::System.Threading.Tasks.Task<").Append(op.ResponseTypeFullName)
+                  .Append("> ").Append(name).Append("<TService>(TService service, ").Append(op.RequestTypeFullName)
+                  .Append(" request, ").Append(serverContext).Append(" ctx)").AppendLine();
+                sb.Append("            where TService : class, ").Append(ifaceFq).AppendLine();
+                sb.AppendLine("        {");
+                EmitUnaryBody(sb, op);
+                sb.AppendLine("        }");
+                break;
+
+            case MethodKind.ServerStreaming:
+                // signature: Task(TService, TRequest, IServerStreamWriter<TResponse>, ServerCallContext)
+                sb.Append("        private static global::System.Threading.Tasks.Task ").Append(name)
+                  .Append("<TService>(TService service, ").Append(op.RequestTypeFullName)
+                  .Append(" request, global::Grpc.Core.IServerStreamWriter<").Append(op.ResponseTypeFullName)
+                  .Append("> writer, ").Append(serverContext).Append(" ctx)").AppendLine();
+                sb.Append("            where TService : class, ").Append(ifaceFq).AppendLine();
+                sb.AppendLine("        {");
+                EmitServerStreamingBody(sb, op);
+                sb.AppendLine("        }");
+                break;
+
+            case MethodKind.ClientStreaming:
+                // signature: Task<TResponse>(TService, IAsyncStreamReader<TRequest>, ServerCallContext)
+                sb.Append("        private static global::System.Threading.Tasks.Task<").Append(op.ResponseTypeFullName)
+                  .Append("> ").Append(name).Append("<TService>(TService service, global::Grpc.Core.IAsyncStreamReader<")
+                  .Append(op.RequestTypeFullName).Append("> reader, ").Append(serverContext).Append(" ctx)").AppendLine();
+                sb.Append("            where TService : class, ").Append(ifaceFq).AppendLine();
+                sb.AppendLine("        {");
+                EmitClientStreamingBody(sb, op);
+                sb.AppendLine("        }");
+                break;
+
+            case MethodKind.DuplexStreaming:
+                // signature: Task(TService, IAsyncStreamReader<TRequest>, IServerStreamWriter<TResponse>, ServerCallContext)
+                sb.Append("        private static global::System.Threading.Tasks.Task ").Append(name)
+                  .Append("<TService>(TService service, global::Grpc.Core.IAsyncStreamReader<").Append(op.RequestTypeFullName)
+                  .Append("> reader, global::Grpc.Core.IServerStreamWriter<").Append(op.ResponseTypeFullName)
+                  .Append("> writer, ").Append(serverContext).Append(" ctx)").AppendLine();
+                sb.Append("            where TService : class, ").Append(ifaceFq).AppendLine();
+                sb.AppendLine("        {");
+                EmitDuplexStreamingBody(sb, op);
+                sb.AppendLine("        }");
+                break;
+        }
+        sb.AppendLine();
+    }
+
+    private static void EmitContextLocalIfNeeded(StringBuilder sb, OperationModel op)
+    {
+        switch (op.Context)
+        {
+            case ContextKind.CallContext:
+                sb.AppendLine("            var __cc = new global::ProtoBuf.Grpc.CallContext(service, ctx);");
+                break;
+            case ContextKind.CancellationToken:
+                sb.AppendLine("            var __ct = ctx.CancellationToken;");
+                break;
+        }
+    }
+
+    private static string ServiceCallArgs(OperationModel op, string requestExpr)
+    {
+        // build the (args) string for service.Method(...)
+        var parts = new List<string>(2);
+        if (!op.VoidRequest) parts.Add(requestExpr);
+        switch (op.Context)
+        {
+            case ContextKind.CallContext: parts.Add("__cc"); break;
+            case ContextKind.CancellationToken: parts.Add("__ct"); break;
+        }
+        return string.Join(", ", parts);
+    }
+
+    private static void EmitUnaryBody(StringBuilder sb, OperationModel op)
+    {
+        EmitContextLocalIfNeeded(sb, op);
+        var callArgs = ServiceCallArgs(op, "request");
+        var call = "service." + op.MethodName + "(" + callArgs + ")";
+
+        switch (op.ResponseShape)
+        {
+            case ResultShape.Task:
+                if (op.VoidResponse)
+                {
+                    // service returns Task; convert to Task<Empty>
+                    sb.Append("            return global::ProtoBuf.Grpc.Internal.Reshape.EmptyTask(").Append(call).AppendLine(");");
+                }
+                else
+                {
+                    sb.Append("            return ").Append(call).AppendLine(";");
+                }
+                break;
+            case ResultShape.ValueTask:
+                if (op.VoidResponse)
+                {
+                    sb.Append("            return global::ProtoBuf.Grpc.Internal.Reshape.EmptyValueTask(").Append(call).AppendLine(");");
+                }
+                else
+                {
+                    sb.Append("            return ").Append(call).AppendLine(".AsTask();");
+                }
+                break;
+            case ResultShape.Sync:
+                if (op.VoidResponse)
+                {
+                    sb.Append("            ").Append(call).AppendLine(";");
+                    sb.AppendLine("            return global::ProtoBuf.Grpc.Internal.Empty.InstanceTask;");
+                }
+                else
+                {
+                    sb.Append("            return global::System.Threading.Tasks.Task.FromResult(").Append(call).AppendLine(");");
+                }
+                break;
+            default:
+                sb.AppendLine("            throw new global::System.NotSupportedException(\"Unsupported response shape\");");
+                break;
+        }
+    }
+
+    private static void EmitServerStreamingBody(StringBuilder sb, OperationModel op)
+    {
+        EmitContextLocalIfNeeded(sb, op);
+        var callArgs = ServiceCallArgs(op, "request");
+        var call = "service." + op.MethodName + "(" + callArgs + ")";
+        // service returns IAsyncEnumerable<TResponse>; reshape into the writer
+        sb.Append("            return global::ProtoBuf.Grpc.Internal.Reshape.WriteTo<").Append(op.ResponseTypeFullName).Append(">(").Append(call).AppendLine(", writer, ctx.CancellationToken);");
+    }
+
+    private static void EmitClientStreamingBody(StringBuilder sb, OperationModel op)
+    {
+        EmitContextLocalIfNeeded(sb, op);
+        // reader -> IAsyncEnumerable<TRequest>
+        sb.Append("            var seq = global::ProtoBuf.Grpc.Internal.Reshape.AsAsyncEnumerable<").Append(op.RequestTypeFullName).AppendLine(">(reader, ctx.CancellationToken);");
+        var callArgs = ServiceCallArgs(op, "seq");
+        var call = "service." + op.MethodName + "(" + callArgs + ")";
+
+        switch (op.ResponseShape)
+        {
+            case ResultShape.Task:
+                if (op.VoidResponse)
+                {
+                    sb.Append("            return global::ProtoBuf.Grpc.Internal.Reshape.EmptyTask(").Append(call).AppendLine(");");
+                }
+                else
+                {
+                    sb.Append("            return ").Append(call).AppendLine(";");
+                }
+                break;
+            case ResultShape.ValueTask:
+                if (op.VoidResponse)
+                {
+                    sb.Append("            return global::ProtoBuf.Grpc.Internal.Reshape.EmptyValueTask(").Append(call).AppendLine(");");
+                }
+                else
+                {
+                    sb.Append("            return ").Append(call).AppendLine(".AsTask();");
+                }
+                break;
+            case ResultShape.Sync:
+                if (op.VoidResponse)
+                {
+                    sb.Append("            ").Append(call).AppendLine(";");
+                    sb.AppendLine("            return global::ProtoBuf.Grpc.Internal.Empty.InstanceTask;");
+                }
+                else
+                {
+                    sb.Append("            return global::System.Threading.Tasks.Task.FromResult(").Append(call).AppendLine(");");
+                }
+                break;
+            default:
+                sb.AppendLine("            throw new global::System.NotSupportedException(\"Unsupported response shape\");");
+                break;
+        }
+    }
+
+    private static void EmitDuplexStreamingBody(StringBuilder sb, OperationModel op)
+    {
+        EmitContextLocalIfNeeded(sb, op);
+        sb.Append("            var seq = global::ProtoBuf.Grpc.Internal.Reshape.AsAsyncEnumerable<").Append(op.RequestTypeFullName).AppendLine(">(reader, ctx.CancellationToken);");
+        var callArgs = ServiceCallArgs(op, "seq");
+        var call = "service." + op.MethodName + "(" + callArgs + ")";
+        sb.Append("            return global::ProtoBuf.Grpc.Internal.Reshape.WriteTo<").Append(op.ResponseTypeFullName).Append(">(").Append(call).AppendLine(", writer, ctx.CancellationToken);");
+    }
+
+    // -------- shared helpers --------
+
     private static string GetContextParameterName(OperationModel op)
     {
-        // context is the second parameter when request is data/IAsyncEnumerable, else first
         if (op.RequestShape == ArgShape.Void)
         {
             return op.Parameters.Length > 0 ? op.Parameters[0].Name : "context";
@@ -177,12 +467,8 @@ internal static class ProxyEmitter
         return op.Parameters.Length > 1 ? op.Parameters[1].Name : "context";
     }
 
-    private static bool IsVoidLike(OperationModel op)
-    {
-        // sync void or untyped Task/ValueTask
-        if (op.ResponseShape == ResultShape.Sync && op.VoidResponse) return true;
-        return false;
-    }
+    private static bool IsVoidLikeClientReturn(OperationModel op)
+        => op.ResponseShape == ResultShape.Sync && op.VoidResponse;
 
     private static string MapMethodType(MethodKind kind) => kind switch
     {
@@ -193,29 +479,21 @@ internal static class ProxyEmitter
         _ => "global::Grpc.Core.MethodType.Unary",
     };
 
-    private static string GetReshapeMethodName(OperationModel op)
+    private static string GetClientReshapeMethodName(OperationModel op)
         => (op.Kind, op.ResponseShape, op.VoidResponse, op.RequestShape) switch
         {
-            // unary
             (MethodKind.Unary, ResultShape.Task, false, _) => "UnaryTaskAsync",
             (MethodKind.Unary, ResultShape.Task, true, _) => "UnaryTaskAsync",
             (MethodKind.Unary, ResultShape.ValueTask, false, _) => "UnaryValueTaskAsync",
             (MethodKind.Unary, ResultShape.ValueTask, true, _) => "UnaryValueTaskAsyncVoid",
             (MethodKind.Unary, ResultShape.Sync, false, _) => "UnarySync",
             (MethodKind.Unary, ResultShape.Sync, true, _) => "UnarySyncVoid",
-
-            // server-streaming
             (MethodKind.ServerStreaming, ResultShape.AsyncEnumerable, _, _) => "ServerStreamingAsync",
-
-            // client-streaming (IAsyncEnumerable in, single response out)
             (MethodKind.ClientStreaming, ResultShape.Task, false, _) => "ClientStreamingTaskAsync",
             (MethodKind.ClientStreaming, ResultShape.Task, true, _) => "ClientStreamingTaskAsync",
             (MethodKind.ClientStreaming, ResultShape.ValueTask, false, _) => "ClientStreamingValueTaskAsync",
             (MethodKind.ClientStreaming, ResultShape.ValueTask, true, _) => "ClientStreamingValueTaskAsyncVoid",
-
-            // duplex
             (MethodKind.DuplexStreaming, ResultShape.AsyncEnumerable, _, _) => "DuplexAsync",
-
             _ => "UnaryTaskAsync",
         };
 
@@ -239,9 +517,11 @@ internal static class ProxyEmitter
 internal sealed record InterfaceModel(
     string Namespace,
     string InterfaceName,
-    string InterfaceFullName,      // global::Ns.IFoo
-    string InterfaceAccessibility, // public/internal
-    string ServiceName,            // logical gRPC service name (Foo)
-    string ProxyTypeName,          // unique class name to put in ProtoBuf.Grpc.Generated namespace
-    string ProxyFullTypeName,      // ProtoBuf.Grpc.Generated.{ProxyTypeName}
+    string InterfaceFullName,          // global::Ns.IFoo
+    string InterfaceAccessibility,     // public/internal
+    string ServiceName,                // logical gRPC service name (Foo)
+    string ProxyTypeName,              // generated client class name in ProtoBuf.Grpc.Generated namespace
+    string ProxyFullTypeName,          // ProtoBuf.Grpc.Generated.{ProxyTypeName}
+    string ServerBindingsTypeName,     // generated server-bindings class name in ProtoBuf.Grpc.Generated namespace
+    string ServerBindingsFullTypeName, // ProtoBuf.Grpc.Generated.{ServerBindingsTypeName}
     ImmutableArray<OperationModel> Operations);
