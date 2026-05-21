@@ -15,34 +15,34 @@ internal static class ProxyEmitter
         sb.AppendLine("#pragma warning disable CS0618 // ProtoBuf.Grpc.Internal.Reshape is intentionally obsoleted for direct consumption");
         sb.AppendLine();
 
-        var hasNamespace = !string.IsNullOrEmpty(iface.Namespace);
-        if (hasNamespace)
-        {
-            sb.Append("namespace ").Append(iface.Namespace).AppendLine();
-            sb.AppendLine("{");
-        }
-
-        // 1. partial interface declaration with [Proxy(typeof(...))] AND [GeneratedServer(typeof(...))]
-        sb.Append("    [global::ProtoBuf.Grpc.Configuration.Proxy(typeof(global::").Append(iface.ProxyFullTypeName).AppendLine("))]");
-        sb.Append("    [global::ProtoBuf.Grpc.Configuration.GeneratedServer(typeof(global::").Append(iface.ServerBindingsFullTypeName).AppendLine("))]");
-        sb.Append("    ").Append(iface.InterfaceAccessibility).Append(" partial interface ").Append(iface.InterfaceName).AppendLine();
-        sb.AppendLine("    {");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-
-        if (hasNamespace) sb.AppendLine("}");
-
-        sb.AppendLine();
         sb.AppendLine("namespace ProtoBuf.Grpc.Generated");
         sb.AppendLine("{");
 
         EmitClientProxy(sb, iface);
         sb.AppendLine();
         EmitServerBindings(sb, iface);
+        sb.AppendLine();
+        EmitModuleInitializer(sb, iface);
 
         sb.AppendLine("}");
 
         return sb.ToString();
+    }
+
+    private static void EmitModuleInitializer(StringBuilder sb, InterfaceModel iface)
+    {
+        // A per-interface [ModuleInitializer] populates the GeneratedProxyRegistry. The trimmer/AOT
+        // compiler can see this as a static reference graph; no runtime attribute lookup needed.
+        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc.BuildTools\", \"1.0\")]").AppendLine();
+        sb.Append("    internal static class ").Append(iface.InitTypeName).AppendLine();
+        sb.AppendLine("    {");
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializer]");
+        sb.AppendLine("        internal static void Init()");
+        sb.AppendLine("        {");
+        sb.Append("            global::ProtoBuf.Grpc.Internal.GeneratedProxyRegistry.RegisterClient<").Append(iface.InterfaceFullName).Append(">(").Append(iface.ProxyTypeName).Append(".Create);").AppendLine();
+        sb.Append("            global::ProtoBuf.Grpc.Internal.GeneratedProxyRegistry.RegisterServer(typeof(").Append(iface.InterfaceFullName).Append("), typeof(").Append(iface.ServerBindingsTypeName).Append("));").AppendLine();
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
     }
 
     private static void EmitClientProxy(StringBuilder sb, InterfaceModel iface)
@@ -518,10 +518,10 @@ internal sealed record InterfaceModel(
     string Namespace,
     string InterfaceName,
     string InterfaceFullName,          // global::Ns.IFoo
-    string InterfaceAccessibility,     // public/internal
     string ServiceName,                // logical gRPC service name (Foo)
     string ProxyTypeName,              // generated client class name in ProtoBuf.Grpc.Generated namespace
     string ProxyFullTypeName,          // ProtoBuf.Grpc.Generated.{ProxyTypeName}
     string ServerBindingsTypeName,     // generated server-bindings class name in ProtoBuf.Grpc.Generated namespace
     string ServerBindingsFullTypeName, // ProtoBuf.Grpc.Generated.{ServerBindingsTypeName}
+    string InitTypeName,               // generated module-init class name in ProtoBuf.Grpc.Generated namespace
     ImmutableArray<OperationModel> Operations);

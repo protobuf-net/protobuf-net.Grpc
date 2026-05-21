@@ -7,6 +7,7 @@ using Grpc.Core;
 using ProtoBuf.Grpc;
 using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
+using ProtoBuf.Grpc.Internal;
 using Xunit;
 
 namespace protobuf_net.Grpc.Test
@@ -17,9 +18,10 @@ namespace protobuf_net.Grpc.Test
         [DataMember(Order = 1)] public string Value { get; set; } = "";
     }
 
+    // Note: no [GenerateProxy], no partial — the source generator auto-detects [Service] interfaces
+    // and registers the generated proxy + server bindings via [ModuleInitializer].
     [Service]
-    [GenerateProxy]
-    public partial interface IGenProxyService
+    public interface IGenProxyService
     {
         ValueTask<GenProxyEcho> EchoAsync(GenProxyEcho value, CallContext ctx = default);
     }
@@ -27,58 +29,29 @@ namespace protobuf_net.Grpc.Test
     public class GenerateProxyTests
     {
         [Fact]
-        public void GeneratedProxyIsRegisteredViaProxyAttribute()
+        public void GeneratedClientFactoryRegisteredInRegistry()
         {
-            // The source generator should stamp [Proxy(typeof(...))] onto a partial declaration of the interface
-            var proxyAttr = typeof(IGenProxyService).GetCustomAttribute<ProxyAttribute>();
-            Assert.NotNull(proxyAttr);
-            Assert.NotNull(proxyAttr!.Type);
-            Assert.True(typeof(IGenProxyService).IsAssignableFrom(proxyAttr.Type));
-        }
-
-        [Fact]
-        public void GeneratedProxyExposesStaticCreateFactory()
-        {
-            var proxyType = typeof(IGenProxyService).GetCustomAttribute<ProxyAttribute>()!.Type;
-            var create = proxyType.GetMethod(
-                "Create",
-                BindingFlags.Public | BindingFlags.Static,
-                binder: null,
-                types: [typeof(CallInvoker)],
-                modifiers: null);
-            Assert.NotNull(create);
-            Assert.True(typeof(IGenProxyService).IsAssignableFrom(create!.ReturnType));
-        }
-
-        [Fact]
-        public void CreateGrpcServiceReturnsGeneratedProxyInstance()
-        {
+            // The [ModuleInitializer] emitted by the generator populates GeneratedProxyRegistry.
+            // CreateGrpcService<T> consults it before any reflection / [Proxy] / IL emit path.
             var invoker = new NullCallInvoker();
             var client = invoker.CreateGrpcService<IGenProxyService>();
+            Assert.NotNull(client);
 
-            var proxyType = typeof(IGenProxyService).GetCustomAttribute<ProxyAttribute>()!.Type;
-            Assert.IsType(proxyType, client);
-
-            // it should NOT be an IL-emitted proxy (those live under ProtoBuf.Grpc.Internal.Proxies.*)
+            // proxy is the build-time generated one, NOT an IL-emitted runtime proxy.
             Assert.DoesNotContain("ProtoBuf.Grpc.Internal.Proxies", client.GetType().FullName ?? "");
+            Assert.Equal("ProtoBuf.Grpc.Generated", client.GetType().Namespace);
         }
 
         [Fact]
-        public void GeneratedServerBindingsAreRegisteredViaAttribute()
+        public void NoProxyAttributeStampedOnInterface()
         {
-            var attr = typeof(IGenProxyService).GetCustomAttribute<GeneratedServerAttribute>();
-            Assert.NotNull(attr);
-            Assert.NotNull(attr!.Type);
-
-            // generated bindings type should expose a public static Bind<TService>(IServerMethodBinder<TService>) method
-            var bind = attr.Type.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .SingleOrDefault(m => m.Name == "Bind" && m.IsGenericMethodDefinition);
-            Assert.NotNull(bind);
-            var parameters = bind!.GetParameters();
-            Assert.Single(parameters);
-            // parameter type is IServerMethodBinder<TService>
-            Assert.True(parameters[0].ParameterType.IsGenericType);
-            Assert.Equal(typeof(IServerMethodBinder<>), parameters[0].ParameterType.GetGenericTypeDefinition());
+            // The generator no longer stamps anything on the user's interface — registration happens
+            // via the registry at module-init time, so neither attribute should appear here.
+#pragma warning disable CS0618 // GenerateProxyAttribute / GeneratedServerAttribute are obsolete
+            Assert.Null(typeof(IGenProxyService).GetCustomAttribute<ProxyAttribute>());
+            Assert.Null(typeof(IGenProxyService).GetCustomAttribute<GenerateProxyAttribute>());
+            Assert.Null(typeof(IGenProxyService).GetCustomAttribute<GeneratedServerAttribute>());
+#pragma warning restore CS0618
         }
 
         [Fact]
@@ -87,9 +60,9 @@ namespace protobuf_net.Grpc.Test
             // a fake binder records what the generated code asks to register
             var binder = new RecordingBinder<MyEchoService>();
 
-            // close Bind<MyEchoService> against our concrete impl and invoke
-            var attr = typeof(IGenProxyService).GetCustomAttribute<GeneratedServerAttribute>();
-            var bindMethod = attr!.Type.GetMethod("Bind", BindingFlags.Public | BindingFlags.Static)!
+            // resolve the generated bindings type via the registry, then close Bind<MyEchoService>
+            Assert.True(GeneratedProxyRegistry.TryGetServerBindings(typeof(IGenProxyService), out var bindingsType));
+            var bindMethod = bindingsType!.GetMethod("Bind", BindingFlags.Public | BindingFlags.Static)!
                 .MakeGenericMethod(typeof(MyEchoService));
             var count = (int)bindMethod.Invoke(null, [binder])!;
 

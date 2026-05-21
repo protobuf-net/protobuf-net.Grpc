@@ -130,8 +130,14 @@ namespace ProtoBuf.Grpc.Internal
             if (!typeof(TService).IsInterface)
                 throw new InvalidOperationException("Type is not an interface: " + typeof(TService).FullName);
 
+            // 1. registry populated by [ModuleInitializer] from build-time generated code — fully static,
+            // no reflection on TService.
+            var generated = GeneratedProxyRegistry.TryGetClientFactory<TService>();
+            if (generated is not null) return generated;
+
             if (binderConfig == BinderConfiguration.Default) // only use ProxyAttribute for default binder
             {
+                // 2. manual override: user wrote a [Proxy(typeof(X))] of their own
                 var proxy = (typeof(TService).GetCustomAttribute(typeof(ProxyAttribute)) as ProxyAttribute)?.Type;
                 if (proxy is not null)
                 {
@@ -140,9 +146,10 @@ namespace ProtoBuf.Grpc.Internal
             }
 
 #if NET8_0_OR_GREATER
+            // 3. IL emit fallback — gate so the trimmer can drop it under PublishAot=true
             if (!RuntimeFeature.IsDynamicCodeSupported)
             {
-                ThrowAotRequiresGenerateProxy(typeof(TService));
+                ThrowAotRequiresGeneratedProxy(typeof(TService));
             }
 #endif
             return EmitFactory<TService>(binderConfig, log);
@@ -150,12 +157,12 @@ namespace ProtoBuf.Grpc.Internal
 
 #if NET8_0_OR_GREATER
         [DoesNotReturn]
-        private static void ThrowAotRequiresGenerateProxy(Type contractType)
+        private static void ThrowAotRequiresGeneratedProxy(Type contractType)
             => throw new NotSupportedException(
                 "Service contract '" + contractType.FullName +
-                "' requires a build-time proxy when dynamic code is not supported (e.g. NativeAOT). " +
-                "Add [ProtoBuf.Grpc.Configuration.GenerateProxy] to the interface (and mark it 'partial') " +
-                "so the protobuf-net.Grpc source generator can emit a static proxy.");
+                "' has no generated proxy and dynamic code is not supported (e.g. NativeAOT). " +
+                "Add a reference to the 'protobuf-net.Grpc.BuildTools' analyzer package in the project " +
+                "that declares this interface — the source generator will pick it up automatically.");
 #endif
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static Func<CallInvoker, TService> CreateViaActivator<TService>(

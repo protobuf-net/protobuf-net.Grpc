@@ -55,20 +55,18 @@ namespace ProtoBuf.Grpc.Configuration
                 // now that we know it is a service contract type for sure
                 var serviceContract = potentialServiceContract;
 
-                // AOT-friendly path: if the contract has [GeneratedServer], dispatch through the build-time
-                // generated bindings instead of walking methods via reflection + Expression.Compile.
-                if (state is IGeneratedServerBindContext genCtx)
+                // AOT-friendly path: if the source generator has registered server bindings for this
+                // contract, dispatch through them instead of walking methods via reflection +
+                // Expression.Compile.
+                if (state is IGeneratedServerBindContext genCtx
+                    && Internal.GeneratedProxyRegistry.TryGetServerBindings(serviceContract, out var generatedBindingsType))
                 {
-                    var generatedAttr = serviceContract.GetCustomAttribute<GeneratedServerAttribute>();
-                    if (generatedAttr is not null)
+                    var bound = genCtx.InvokeGeneratedBind(generatedBindingsType!, serviceContract, serviceType, binderConfiguration);
+                    if (bound > 0)
                     {
-                        var bound = genCtx.InvokeGeneratedBind(generatedAttr.Type, serviceContract, serviceType, binderConfiguration);
-                        if (bound > 0)
-                        {
-                            totalCount += bound;
-                            OnServiceBound(state, serviceName!, serviceType, serviceContract, bound);
-                            continue;
-                        }
+                        totalCount += bound;
+                        OnServiceBound(state, serviceName!, serviceType, serviceContract, bound);
+                        continue;
                     }
                 }
 

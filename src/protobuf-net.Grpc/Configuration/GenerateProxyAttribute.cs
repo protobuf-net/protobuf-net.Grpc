@@ -3,13 +3,13 @@ using System;
 namespace ProtoBuf.Grpc.Configuration
 {
     /// <summary>
-    /// Opts an interface in to having a client proxy generated at build time by the
-    /// protobuf-net.Grpc source generator. The interface must be declared <c>partial</c>;
-    /// the generator emits a companion partial declaration that carries <see cref="ProxyAttribute"/>
-    /// pointing at the generated proxy type. This lets the proxy live in static code so the
-    /// trimmer and AOT compiler can see (and shake) it.
+    /// Previously an opt-in marker for the protobuf-net.Grpc source generator. The generator now
+    /// auto-detects any interface tagged <c>[Service]</c> / <c>[ServiceContract]</c>, so this
+    /// attribute is no longer required; left in place for source compatibility with the
+    /// <c>1.2.10</c> pre-release that required it.
     /// </summary>
     [AttributeUsage(AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
+    [Obsolete("No longer required: the source generator now auto-detects [Service]/[ServiceContract] interfaces. This attribute is a no-op and will be removed in a future major version.")]
     public sealed class GenerateProxyAttribute : Attribute
     {
     }

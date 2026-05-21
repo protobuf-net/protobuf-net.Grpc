@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace ProtoBuf.Grpc.BuildTools;
@@ -9,31 +8,52 @@ namespace ProtoBuf.Grpc.BuildTools;
 [Generator(LanguageNames.CSharp)]
 public sealed class ProxySourceGenerator : IIncrementalGenerator
 {
-    private const string GenerateProxyAttributeFullName = "ProtoBuf.Grpc.Configuration.GenerateProxyAttribute";
+    // The two attributes the generator scans for. Either qualifies the interface as a service contract;
+    // mirrors the runtime ServiceBinder.IsServiceContract logic.
+    private const string ServiceAttributeName = "ProtoBuf.Grpc.Configuration.ServiceAttribute";
+    private const string ServiceContractAttributeName = "System.ServiceModel.ServiceContractAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var candidates = context.SyntaxProvider
+        var serviceCandidates = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                GenerateProxyAttributeFullName,
+                ServiceAttributeName,
                 predicate: static (node, _) => node is InterfaceDeclarationSyntax,
-                transform: static (ctx, ct) => BuildCandidate(ctx, ct))
-            .Where(static x => x is not null)!;
+                transform: static (ctx, ct) => BuildCandidate(ctx, ct));
 
-        context.RegisterSourceOutput(candidates, static (ctx, candidate) =>
+        var serviceContractCandidates = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                ServiceContractAttributeName,
+                predicate: static (node, _) => node is InterfaceDeclarationSyntax,
+                transform: static (ctx, ct) => BuildCandidate(ctx, ct));
+
+        var combined = serviceCandidates.Collect()
+            .Combine(serviceContractCandidates.Collect());
+
+        context.RegisterSourceOutput(combined, static (ctx, pair) =>
         {
-            if (candidate is null) return;
-
-            foreach (var diag in candidate.Diagnostics)
+            var (a, b) = pair;
+            // dedupe by interface full name in case both attributes are present (rare but possible)
+            var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var candidate in a.Concat(b))
             {
-                ctx.ReportDiagnostic(diag);
-            }
+                if (candidate is null) continue;
+                if (candidate.Model is not null && !seen.Add(candidate.Model.InterfaceFullName))
+                {
+                    continue;
+                }
 
-            if (candidate.Model is { } model)
-            {
-                var source = ProxyEmitter.Emit(model);
-                var hintName = SanitizeHintName(model.InterfaceFullName) + ".g.cs";
-                ctx.AddSource(hintName, source);
+                foreach (var diag in candidate.Diagnostics)
+                {
+                    ctx.ReportDiagnostic(diag);
+                }
+
+                if (candidate.Model is { } model)
+                {
+                    var source = ProxyEmitter.Emit(model);
+                    var hintName = SanitizeHintName(model.InterfaceFullName) + ".g.cs";
+                    ctx.AddSource(hintName, source);
+                }
             }
         });
     }
@@ -45,9 +65,16 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
         if (ctx.TargetSymbol is not INamedTypeSymbol iface || iface.TypeKind != TypeKind.Interface)
             return null;
 
+        // Skip interfaces that already have an explicit [Proxy(typeof(...))] attribute — the user
+        // has their own proxy and we shouldn't second-guess that.
+        foreach (var attr in iface.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() == "ProtoBuf.Grpc.Configuration.ProxyAttribute")
+                return null;
+        }
+
         var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
-        // diagnostic: must be top-level
         if (iface.ContainingType is not null)
         {
             diagnostics.Add(Diagnostic.Create(
@@ -58,7 +85,6 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
             return new Candidate(null, diagnostics.ToImmutable());
         }
 
-        // diagnostic: generic interfaces not supported
         if (iface.IsGenericType)
         {
             diagnostics.Add(Diagnostic.Create(
@@ -68,32 +94,16 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
             return new Candidate(null, diagnostics.ToImmutable());
         }
 
-        // diagnostic: must be partial
-        bool isPartial = false;
-        foreach (var decl in iface.DeclaringSyntaxReferences)
-        {
-            if (decl.GetSyntax(ct) is InterfaceDeclarationSyntax syn
-                && syn.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))
-            {
-                isPartial = true;
-                break;
-            }
-        }
-        if (!isPartial)
-        {
-            diagnostics.Add(Diagnostic.Create(
-                Diagnostics.InterfaceMustBePartial,
-                iface.Locations.FirstOrDefault(),
-                iface.Name));
-            return new Candidate(null, diagnostics.ToImmutable());
-        }
-
-        // walk all methods on this interface and its base interfaces (mirrors ContractOperation.ExpandInterfaces)
         var allInterfaces = ImmutableArray.CreateBuilder<INamedTypeSymbol>();
         allInterfaces.Add(iface);
         foreach (var i in iface.AllInterfaces) allInterfaces.Add(i);
 
+        // Strategy: emit only when EVERY method on the interface (and bases) is in a shape we can
+        // handle. If any method is unsupported, skip — the runtime IL emitter handles a wider set of
+        // shapes (IObservable, Stream, etc.) than we currently generate, so we'd regress behavior if
+        // we emitted a partial proxy with throwing stubs.
         var ops = ImmutableArray.CreateBuilder<OperationModel>();
+        bool hasUnsupportedMethod = false;
         foreach (var i in allInterfaces)
         {
             foreach (var member in i.GetMembers())
@@ -108,6 +118,7 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
                 }
                 else
                 {
+                    hasUnsupportedMethod = true;
                     diagnostics.Add(Diagnostic.Create(
                         Diagnostics.UnsupportedMethodShape,
                         method.Locations.FirstOrDefault(),
@@ -117,6 +128,13 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
             }
         }
 
+        // Don't emit if any method is unsupported (would leave the proxy with missing interface
+        // implementations) or if no methods are recognised at all (probably a marker interface).
+        if (hasUnsupportedMethod || ops.Count == 0)
+        {
+            return new Candidate(null, diagnostics.ToImmutable());
+        }
+
         var serviceName = GetServiceName(iface);
         var nsName = iface.ContainingNamespace.IsGlobalNamespace ? "" : iface.ContainingNamespace.ToDisplayString();
         var sanitizedBase = MakeSanitizedBase(iface);
@@ -124,24 +142,18 @@ public sealed class ProxySourceGenerator : IIncrementalGenerator
         var proxyFullTypeName = "ProtoBuf.Grpc.Generated." + proxyTypeName;
         var serverBindingsTypeName = sanitizedBase + "_ServerBindings";
         var serverBindingsFullTypeName = "ProtoBuf.Grpc.Generated." + serverBindingsTypeName;
-        var accessibility = iface.DeclaredAccessibility switch
-        {
-            Accessibility.Public => "public",
-            Accessibility.Internal => "internal",
-            Accessibility.NotApplicable => "internal",
-            _ => "internal",
-        };
+        var initTypeName = sanitizedBase + "_Init";
 
         var model = new InterfaceModel(
             Namespace: nsName,
             InterfaceName: iface.Name,
             InterfaceFullName: iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            InterfaceAccessibility: accessibility,
             ServiceName: serviceName,
             ProxyTypeName: proxyTypeName,
             ProxyFullTypeName: proxyFullTypeName,
             ServerBindingsTypeName: serverBindingsTypeName,
             ServerBindingsFullTypeName: serverBindingsFullTypeName,
+            InitTypeName: initTypeName,
             Operations: ops.ToImmutable());
 
         return new Candidate(model, diagnostics.ToImmutable());
