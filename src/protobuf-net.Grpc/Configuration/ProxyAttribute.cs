@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ProtoBuf.Grpc.Configuration
 {
@@ -11,11 +12,24 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Indicates the proxy type
         /// </summary>
+#if NET8_0_OR_GREATER
+        [DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicMethods
+            | DynamicallyAccessedMemberTypes.PublicConstructors
+            | DynamicallyAccessedMemberTypes.NonPublicConstructors)]
+#endif
         public Type Type { get; }
         /// <summary>
         /// Create a new ProxyAttribute instance
         /// </summary>
         /// <param name="type">Indicates the proxy type</param>
-        public ProxyAttribute(Type type) => Type = type;
+        public ProxyAttribute(
+#if NET8_0_OR_GREATER
+            [DynamicallyAccessedMembers(
+                DynamicallyAccessedMemberTypes.PublicMethods
+                | DynamicallyAccessedMemberTypes.PublicConstructors
+                | DynamicallyAccessedMemberTypes.NonPublicConstructors)]
+#endif
+            Type type) => Type = type;
     }
 }

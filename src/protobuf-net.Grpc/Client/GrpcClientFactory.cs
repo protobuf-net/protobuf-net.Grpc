@@ -11,9 +11,11 @@ namespace ProtoBuf.Grpc.Client
     /// </summary>
     public static class GrpcClientFactory
     {
-#if NET5_0_OR_GREATER
-        // it is *intended* that this attribute usage will help the linker not remove things that we need
-        // see: https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming#dynamicallyaccessedmembers
+#if NET5_0_OR_GREATER && !NET8_0_OR_GREATER
+        // For older trimmer scenarios, hint the linker to keep ClientBase members so the IL-emit fallback
+        // can derive from it. From .NET 8+ this annotation cascades trim warnings (because some kept
+        // members are themselves [RequiresUnreferencedCode]), and the IL-emit path is now gated on
+        // RuntimeFeature.IsDynamicCodeSupported anyway — so drop the annotation for net8+ AOT.
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
 #endif
         internal static readonly Type ClientBaseType = typeof(ClientBase);

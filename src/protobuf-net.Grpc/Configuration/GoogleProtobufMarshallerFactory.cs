@@ -2,6 +2,7 @@ using Grpc.Core;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace ProtoBuf.Grpc.Configuration
@@ -12,19 +13,43 @@ namespace ProtoBuf.Grpc.Configuration
 
         private GoogleProtobufMarshallerFactory() { }
 
+#if NET8_0_OR_GREATER
+        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Best-effort Google.Protobuf detection; returns null when reflection inputs aren't preserved.")]
+        [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "Best-effort Google.Protobuf detection; returns null when reflection inputs aren't preserved.")]
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Best-effort Google.Protobuf detection; returns null when MakeGenericMethod isn't available.")]
+#endif
         protected internal override bool CanSerialize(Type type)
         {
             if (_knownTypes.TryGetValue(type, out var existing))
             {
                 return existing is not null;
             }
-            var created = s_Create.MakeGenericMethod(type).Invoke(null, null);
+            object? created = null;
+            try
+            {
+                created = GetCreateMethod().MakeGenericMethod(type).Invoke(null, null);
+            }
+            catch { /* best-effort; AOT may not have native code for this instantiation */ }
             _knownTypes[type] = created;
             return created is not null;
         }
-        static readonly MethodInfo s_Create = typeof(GoogleProtobufMarshallerFactory).GetMethod(nameof(AutoDetectProtobufMarshaller), BindingFlags.Static | BindingFlags.NonPublic)!;
+        // lazy: holding a MethodInfo for AutoDetectProtobufMarshaller in a static field would surface
+        // the [RequiresUnreferencedCode]/[RequiresDynamicCode] cascade onto the static cctor (which can't be
+        // suppressed). lazy lookup keeps the warning on this single suppressed method.
+        private static MethodInfo? s_createMethod;
+#if NET8_0_OR_GREATER
+        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only through the already-suppressed CanSerialize path.")]
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Reachable only through the already-suppressed CanSerialize path.")]
+#endif
+        private static MethodInfo GetCreateMethod()
+            => s_createMethod ??= typeof(GoogleProtobufMarshallerFactory).GetMethod(
+                nameof(AutoDetectProtobufMarshaller), BindingFlags.Static | BindingFlags.NonPublic)!;
 
         static readonly ConcurrentDictionary<Type, object?> s_KnownTypes = new();
+#if NET8_0_OR_GREATER
+        [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Best-effort Google.Protobuf detection; returns null when reflection inputs aren't preserved.")]
+        [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Best-effort Google.Protobuf detection; returns null when reflection inputs aren't preserved.")]
+#endif
         protected internal override Marshaller<T> CreateMarshaller<T>()
         {
             if (_knownTypes.TryGetValue(typeof(T), out var existing))
@@ -40,6 +65,10 @@ namespace ProtoBuf.Grpc.Configuration
 
         // attempt to auto-detect the patterns exposed by Google.Protobuf types;
         // this is (by necessity) reflection-based and imperfect
+#if NET8_0_OR_GREATER
+        [RequiresUnreferencedCode("Reflects over T to detect a Google.Protobuf parser / IMessage; the source generator does not currently handle Google.Protobuf message types.")]
+        [RequiresDynamicCode("Builds delegates against reflected methods.")]
+#endif
         static Marshaller<T>? AutoDetectProtobufMarshaller<T>()
         {
             try

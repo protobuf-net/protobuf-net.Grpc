@@ -59,6 +59,10 @@ namespace ProtoBuf.Grpc.Internal
             return new AttributeHelper(attribs);
         }
 
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",
+            Justification = "Walks the inheritance chain to gather custom attribute data; this is metadata-only and tolerates missing methods.")]
+#endif
         static MethodInfo? GetAncestor(MethodInfo method)
         {
             if (method is null || method.IsStatic) return null;
