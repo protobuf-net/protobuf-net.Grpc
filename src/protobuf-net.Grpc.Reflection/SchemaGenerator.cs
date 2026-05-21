@@ -17,7 +17,15 @@ namespace ProtoBuf.Grpc.Reflection
         /// <summary>
         /// Gets or sets the syntax version
         /// </summary>
-        public ProtoSyntax ProtoSyntax { get; set; } = ProtoSyntax.Proto3;
+        public ProtoSyntax ProtoSyntax { get => Options.Syntax; set => Options.Syntax = value; }
+
+        /// <summary>
+        /// Gets or sets the options for the generation of the schema.
+        /// </summary>
+        public SchemaGenerationOptions Options { get; set; } = new SchemaGenerationOptions
+        {
+            Syntax = ProtoSyntax.Proto3
+        };
 
         /// <summary>
         /// Gets or sets the binder configuration (the default configuration is used if omitted)
@@ -118,8 +126,10 @@ namespace ProtoBuf.Grpc.Reflection
 
             var options = new SchemaGenerationOptions
             {
-                Syntax = ProtoSyntax,
+                Syntax = Options.Syntax,
                 Package = globalPackage,
+                Flags = Options.Flags,
+                Origin = Options.Origin,
             };
             options.Services.AddRange(services);
 
