@@ -7,11 +7,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsRoslynComponent>true</IsRoslynComponent>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <DevelopmentDependency>true</DevelopmentDependency>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <Description>Source generator for protobuf-net.Grpc; emits AOT/trim-friendly client proxies and server bindings for any interface tagged with [Service] or [ServiceContract], registered via a module initializer.</Description>
+    <!-- Not packaged on its own; protobuf-net.Grpc.csproj packs the generator DLL into its own
+         nupkg at analyzers/dotnet/cs/, the same pattern used by System.Text.Json / Microsoft.Extensions.Logging. -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,13 +18,6 @@
     <PackageReference Include="PolySharp" PrivateAssets="all">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="$(OutputPath)\$(AssemblyName).dll"
-          Pack="true"
-          PackagePath="analyzers/dotnet/cs"
-          Visible="false" />
   </ItemGroup>
 
 </Project>
