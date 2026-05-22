@@ -54,8 +54,37 @@ Everything is available as pre-built packages on nuget; in particular, you proba
 - [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore) for servers using ASP.NET Core 3.1
 - [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native) for clients or servers using the native/unmanaged API
 - [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc) and [`Grpc.Net.Client`](https://www.nuget.org/packages/Grpc.Net.Client/) for clients using `HttpClient` on .NET Core 3.1
+- [`protobuf-net.Grpc.BuildTools`](https://www.nuget.org/packages/protobuf-net.Grpc.BuildTools) — source generator that emits build-time client proxies and server bindings; reference it from the project that declares your `[Service]` / `[ServiceContract]` interfaces and the runtime IL-emit / `Expression.Compile` paths get bypassed (see [Trimming and AOT](#trimming-and-aot) below).
 
 [Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/main/examples/pb-net-grpc).
+
+## Trimming and AOT
+
+Reference `protobuf-net.Grpc.BuildTools` from the project that declares your contract interfaces:
+
+```xml
+<PackageReference Include="protobuf-net.Grpc.BuildTools"
+                  PrivateAssets="all"
+                  IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
+```
+
+The generator automatically picks up every `[Service]` / `[ServiceContract]` interface in the project and emits both a client proxy and server bindings in the `ProtoBuf.Grpc.Generated.*` namespace, registered via a `[ModuleInitializer]`. No source changes to your interfaces; no opt-in attribute; the interfaces don't need to be `partial`.
+
+`protobuf-net.Grpc.dll` itself is fully trim-clean — the runtime `Reflection.Emit` and `Expression.Compile` paths are gated behind `RuntimeFeature.IsDynamicCodeSupported` and annotated `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]`, so the trimmer can shake them away.
+
+**However**, the default serializer (`protobuf-net`) is still reflection-based — `RuntimeTypeModel.Default.CanSerialize(typeof(T))` walks `T`'s members at runtime to discover `[ProtoContract]` / `[ProtoMember]`. Under `PublishTrimmed=true`, you currently need to root the assemblies whose contract types you want to serialize:
+
+```xml
+<ItemGroup>
+  <TrimmerRootAssembly Include="MyApp.Contracts" />
+  <TrimmerRootAssembly Include="protobuf-net" />
+  <TrimmerRootAssembly Include="protobuf-net.Core" />
+</ItemGroup>
+```
+
+Without those, the trimmer strips members and attributes that `RuntimeTypeModel` needs at discovery time, marshaller resolution returns null, and your service either fails to bind methods (by default a fail-fast at startup) or — if you set `services.Configure<CodeFirstGrpcOptions>(o => o.ContinueOnBindFailure = true)` — comes up with a partial service surface and a warning per missing method.
+
+Under `PublishAot=true` the serializer's reflection breaks more fundamentally — the only path for full AOT today is to switch the marshaller layer to a generator-based serializer (Google.Protobuf, MemoryPack, MessagePack-CSharp via a custom `MarshallerFactory`).
 
 ## Anything else?
 
