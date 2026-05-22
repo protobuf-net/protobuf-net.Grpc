@@ -262,7 +262,14 @@ internal static class ProxyEmitter
             }
             sb.AppendLine("                count++;");
             sb.AppendLine("            }");
-            sb.Append("            catch (global::System.Exception __ex) { if (!binder.OnBindFailed(").Append(opNameLiteral).AppendLine(", __ex)) throw; }");
+            // Wrap-and-rethrow with the operation name + contract type baked in as string literals,
+            // so the host startup stack trace points right at the broken op without needing the
+            // caller to wire any logging hook.
+            sb.Append("            catch (global::System.Exception __ex)").AppendLine();
+            sb.AppendLine("            {");
+            sb.Append("                throw new global::System.InvalidOperationException(\"Failed to bind '\" + ")
+              .Append(opNameLiteral).Append(" + \"' on \" + typeof(").Append(ifaceFq).Append(").FullName + \": \" + __ex.Message, __ex);").AppendLine();
+            sb.AppendLine("            }");
         }
 
         sb.AppendLine("            return count;");

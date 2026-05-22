@@ -31,7 +31,6 @@ namespace ProtoBuf.Grpc.Server
             var builder = configureOptions == null ? services.AddGrpc() : services.AddGrpc(configureOptions);
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IServiceMethodProvider<>), typeof(CodeFirstServiceMethodProvider<>)));
             services.TryAddSingleton(SimpleRpcExceptionsInterceptor.Instance);
-            services.AddOptions<CodeFirstGrpcOptions>();
             return builder;
         }
 
@@ -39,11 +38,9 @@ namespace ProtoBuf.Grpc.Server
         {
             private readonly ILogger<CodeFirstServiceMethodProvider<TService>> _logger;
             private readonly BinderConfiguration? _binderConfiguration;
-            private readonly CodeFirstGrpcOptions _options;
-            public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory, Microsoft.Extensions.Options.IOptions<CodeFirstGrpcOptions> options, BinderConfiguration? binderConfiguration = null)
+            public CodeFirstServiceMethodProvider(ILoggerFactory loggerFactory, BinderConfiguration? binderConfiguration = null)
             {
                 _binderConfiguration = binderConfiguration;
-                _options = options.Value;
                 _logger = loggerFactory.CreateLogger<CodeFirstServiceMethodProvider<TService>>();
             }
 
@@ -51,7 +48,7 @@ namespace ProtoBuf.Grpc.Server
             {
                 // Wrap context in a typed adapter so ServerBinder can dispatch through the generated path
                 // when generated server bindings are present in the registry.
-                var adapter = new GeneratedBindAdapter<TService>(context, _binderConfiguration, _logger, _options.ContinueOnBindFailure);
+                var adapter = new GeneratedBindAdapter<TService>(context, _binderConfiguration, _logger);
                 int count = new Binder(_logger).Bind<TService>(adapter, _binderConfiguration);
                 if (count != 0) _logger.Log(LogLevel.Information, "RPC services being provided by {Service}: {Count}", typeof(TService), count);
             }
@@ -69,15 +66,13 @@ namespace ProtoBuf.Grpc.Server
             private readonly ServiceMethodProviderContext<TService> _context;
             private readonly BinderConfiguration _config;
             private readonly ILogger _logger;
-            private readonly bool _continueOnBindFailure;
             private Type? _currentContract; // populated during a Bind<TService> call so GetMetadata can resolve
 
-            internal GeneratedBindAdapter(ServiceMethodProviderContext<TService> context, BinderConfiguration? config, ILogger logger, bool continueOnBindFailure)
+            internal GeneratedBindAdapter(ServiceMethodProviderContext<TService> context, BinderConfiguration? config, ILogger logger)
             {
                 _context = context;
                 _config = config ?? BinderConfiguration.Default;
                 _logger = logger;
-                _continueOnBindFailure = continueOnBindFailure;
             }
 
             internal ServiceMethodProviderContext<TService> Context => _context;
@@ -122,19 +117,6 @@ namespace ProtoBuf.Grpc.Server
             {
                 _context.AddDuplexStreamingMethod(method, metadata, new DuplexStreamingServerMethod<TService, TRequest, TResponse>(handler.Invoke));
                 _logger.Log(LogLevel.Debug, "{Service} / {Method} bound from generated server bindings", method.ServiceName, method.Name);
-            }
-
-            bool IServerMethodBinder<TService>.OnBindFailed(string operationName, Exception exception)
-            {
-                // Always record the failure so it's visible in logs regardless of whether we
-                // swallow or rethrow.
-                _logger.Log(_continueOnBindFailure ? LogLevel.Warning : LogLevel.Error, exception,
-                    "Failed to bind {Contract}.{Method} from generated server bindings: {Message}",
-                    typeof(TService), operationName, exception.Message);
-                // Default (false) is fail-fast: the original exception propagates and host startup fails
-                // with a stack trace that points right at the broken operation. Consumers who genuinely
-                // need partial-bind tolerance opt in via CodeFirstGrpcOptions.ContinueOnBindFailure.
-                return _continueOnBindFailure;
             }
 
 #if NET8_0_OR_GREATER
