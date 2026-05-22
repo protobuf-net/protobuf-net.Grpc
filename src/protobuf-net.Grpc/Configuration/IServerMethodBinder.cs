@@ -125,5 +125,13 @@ namespace ProtoBuf.Grpc.Configuration
         /// applies here too.
         /// </summary>
         IList<object> GetMetadata(Type contractType, string methodName);
+
+        /// <summary>
+        /// Reported by generated code when binding a single operation fails (e.g. its request /
+        /// response type has no marshaller in the configured factories). The intent mirrors the
+        /// reflection-based <c>ServerBinder.OnError</c> path: log and continue so a single bad
+        /// method does not take down the entire interface bind.
+        /// </summary>
+        void OnBindFailed(string operationName, Exception exception);
     }
 }

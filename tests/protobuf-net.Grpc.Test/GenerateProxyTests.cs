@@ -110,6 +110,9 @@ namespace protobuf_net.Grpc.Test
                 where TRequest : class where TResponse : class { }
             public void AddDuplexStreamingMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, System.Collections.Generic.IList<object> metadata, DuplexStreamingServerHandler<TService, TRequest, TResponse> handler)
                 where TRequest : class where TResponse : class { }
+
+            public System.Collections.Generic.List<(string OperationName, Exception Exception)> BindFailures { get; } = new();
+            public void OnBindFailed(string operationName, Exception exception) => BindFailures.Add((operationName, exception));
         }
 
         private sealed class FakeServerCallContext : ServerCallContext

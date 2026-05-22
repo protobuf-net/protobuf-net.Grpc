@@ -212,62 +212,57 @@ internal static class ProxyEmitter
         sb.Append("            where TService : class, ").Append(iface.InterfaceFullName).AppendLine();
         sb.AppendLine("        {");
         sb.AppendLine("            var __cfg = binder.Configuration;");
-
-        var marshallerLocalNames = new Dictionary<string, string>(System.StringComparer.Ordinal);
-        int marshallerIndex = 0;
-        foreach (var t in marshallerTypes)
-        {
-            var localName = "__m" + marshallerIndex++;
-            marshallerLocalNames[t] = localName;
-            sb.Append("            var ").Append(localName).Append(" = __cfg.GetMarshaller<").Append(t).AppendLine(">();");
-        }
-
-        var opLocalNames = new List<string>(iface.Operations.Length);
-        for (int i = 0; i < iface.Operations.Length; i++)
-        {
-            var op = iface.Operations[i];
-            var localName = "__op" + i;
-            opLocalNames.Add(localName);
-            sb.Append("            var ").Append(localName).Append(" = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
-            sb.Append(MapMethodType(op.Kind)).Append(", ");
-            sb.Append("\"").Append(EscapeString(iface.ServiceName)).Append("\", ");
-            sb.Append("\"").Append(EscapeString(op.OperationName)).Append("\", ");
-            sb.Append(marshallerLocalNames[op.RequestTypeFullName]).Append(", ");
-            sb.Append(marshallerLocalNames[op.ResponseTypeFullName]).AppendLine(");");
-        }
         sb.AppendLine("            int count = 0;");
 
         for (int i = 0; i < iface.Operations.Length; i++)
         {
             var op = iface.Operations[i];
-            var opLocal = opLocalNames[i];
-
             var ifaceFq = iface.InterfaceFullName;
             var opNameLiteral = "\"" + EscapeString(op.MethodName) + "\"";
+
+            // Each operation is bound inside its own try/catch — mirrors the IL emitter's
+            // per-method tolerance so one bad type (no marshaller, etc.) doesn't take down the
+            // whole interface bind.
+            sb.AppendLine("            try");
+            sb.AppendLine("            {");
+            sb.Append("                var __m_req = __cfg.GetMarshaller<").Append(op.RequestTypeFullName).AppendLine(">();");
+            if (!string.Equals(op.RequestTypeFullName, op.ResponseTypeFullName, System.StringComparison.Ordinal))
+            {
+                sb.Append("                var __m_resp = __cfg.GetMarshaller<").Append(op.ResponseTypeFullName).AppendLine(">();");
+            }
+            var respMarshaller = string.Equals(op.RequestTypeFullName, op.ResponseTypeFullName, System.StringComparison.Ordinal) ? "__m_req" : "__m_resp";
+            sb.Append("                var __op = new global::Grpc.Core.Method<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(");
+            sb.Append(MapMethodType(op.Kind)).Append(", ");
+            sb.Append("\"").Append(EscapeString(iface.ServiceName)).Append("\", ");
+            sb.Append("\"").Append(EscapeString(op.OperationName)).Append("\", ");
+            sb.Append("__m_req, ").Append(respMarshaller).AppendLine(");");
+
             switch (op.Kind)
             {
                 case MethodKind.Unary:
-                    sb.Append("            binder.AddUnaryMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                    sb.Append("                binder.AddUnaryMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append("__op, binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
                 case MethodKind.ServerStreaming:
-                    sb.Append("            binder.AddServerStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                    sb.Append("                binder.AddServerStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append("__op, binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
                 case MethodKind.ClientStreaming:
-                    sb.Append("            binder.AddClientStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                    sb.Append("                binder.AddClientStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append("__op, binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
                 case MethodKind.DuplexStreaming:
-                    sb.Append("            binder.AddDuplexStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
-                      .Append(opLocal).Append(", binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
+                    sb.Append("                binder.AddDuplexStreamingMethod<").Append(op.RequestTypeFullName).Append(", ").Append(op.ResponseTypeFullName).Append(">(")
+                      .Append("__op, binder.GetMetadata(typeof(").Append(ifaceFq).Append("), ").Append(opNameLiteral).Append("), ")
                       .Append(GetServerHandlerName(op)).Append("<TService>);").AppendLine();
                     break;
             }
-            sb.AppendLine("            count++;");
+            sb.AppendLine("                count++;");
+            sb.AppendLine("            }");
+            sb.Append("            catch (global::System.Exception __ex) { binder.OnBindFailed(").Append(opNameLiteral).AppendLine(", __ex); }");
         }
 
         sb.AppendLine("            return count;");

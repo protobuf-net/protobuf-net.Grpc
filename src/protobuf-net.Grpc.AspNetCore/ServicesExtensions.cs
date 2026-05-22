@@ -119,6 +119,14 @@ namespace ProtoBuf.Grpc.Server
                 _logger.Log(LogLevel.Debug, "{Service} / {Method} bound from generated server bindings", method.ServiceName, method.Name);
             }
 
+            void IServerMethodBinder<TService>.OnBindFailed(string operationName, Exception exception)
+            {
+                // Mirrors the reflection-binder's per-method tolerance: log and skip the method
+                // rather than letting one bad operation take down the whole interface.
+                _logger.LogWarning(exception, "Failed to bind {Contract}.{Method} from generated server bindings: {Message}",
+                    typeof(TService), operationName, exception.Message);
+            }
+
 #if NET8_0_OR_GREATER
             [UnconditionalSuppressMessage("AOT", "IL3050",
                 Justification = "MakeGenericMethod over typeof(TService); under AOT the closed instantiation Bind<TService> must be statically reachable (typically via the user's service registration).")]
