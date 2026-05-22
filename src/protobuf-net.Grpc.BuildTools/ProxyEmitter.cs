@@ -33,7 +33,7 @@ internal static class ProxyEmitter
     {
         // A per-interface [ModuleInitializer] populates the GeneratedProxyRegistry. The trimmer/AOT
         // compiler can see this as a static reference graph; no runtime attribute lookup needed.
-        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc.BuildTools\", \"1.0\")]").AppendLine();
+        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc\", \"1.0\")]").AppendLine();
         sb.Append("    internal static class ").Append(iface.InitTypeName).AppendLine();
         sb.AppendLine("    {");
         sb.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializer]");
@@ -47,7 +47,7 @@ internal static class ProxyEmitter
 
     private static void EmitClientProxy(StringBuilder sb, InterfaceModel iface)
     {
-        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc.BuildTools\", \"1.0\")]").AppendLine();
+        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc\", \"1.0\")]").AppendLine();
         sb.Append("    [global::System.Diagnostics.DebuggerNonUserCode]").AppendLine();
         sb.Append("    internal sealed class ").Append(iface.ProxyTypeName).Append(" : global::Grpc.Core.ClientBase, ").Append(iface.InterfaceFullName).AppendLine();
         sb.AppendLine("    {");
@@ -188,7 +188,7 @@ internal static class ProxyEmitter
 
     private static void EmitServerBindings(StringBuilder sb, InterfaceModel iface)
     {
-        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc.BuildTools\", \"1.0\")]").AppendLine();
+        sb.Append("    [global::System.CodeDom.Compiler.GeneratedCode(\"protobuf-net.Grpc\", \"1.0\")]").AppendLine();
         sb.Append("    [global::System.Diagnostics.DebuggerNonUserCode]").AppendLine();
         sb.Append("    public static class ").Append(iface.ServerBindingsTypeName).AppendLine();
         sb.AppendLine("    {");
