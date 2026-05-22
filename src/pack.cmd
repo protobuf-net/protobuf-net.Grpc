@@ -1,3 +1,4 @@
 dotnet pack protobuf-net.Grpc -c Release
 dotnet pack protobuf-net.Grpc.AspNetCore -c Release
+dotnet pack protobuf-net.Grpc.ClientFactory -c Release
 dotnet pack protobuf-net.Grpc.Native -c Release

@@ -11,6 +11,10 @@ namespace ProtoBuf.Grpc.Internal
     {
         private readonly MarshallerFactory[] _factories = factories ?? throw new ArgumentNullException(nameof(factories));
 
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Discovers a marshaller for an arbitrary Type via MakeGenericMethod; only used by the IL-emit discovery path.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Discovers a marshaller for an arbitrary Type via reflection; only used by the IL-emit discovery path.")]
+#endif
         internal bool CanSerializeType(Type type)
         {
             if (_marshallers.TryGetValue(type, out var obj)) return obj != null;

@@ -27,7 +27,10 @@ namespace protobuf_net.Grpc.Test
 
             Assert.NotNull(client);
             var name = client.GetType().FullName;
-            Assert.StartsWith("ProtoBuf.Grpc.Internal.Proxies.ClientBase.", name);
+            // The source generator emits proxies in ProtoBuf.Grpc.Generated.* now that
+            // [ServiceContract]/[Service] interfaces are auto-detected. The IL-emit fallback
+            // (ProtoBuf.Grpc.Internal.Proxies.*) is only reached if no generated proxy exists.
+            Assert.StartsWith("ProtoBuf.Grpc.Generated.", name);
         }
 
         [Fact]
@@ -45,7 +48,10 @@ namespace protobuf_net.Grpc.Test
 
             Assert.NotNull(client);
             var name = client.GetType().FullName;
-            Assert.StartsWith("ProtoBuf.Grpc.Internal.Proxies.ClientBase.", name);
+            // The source generator emits proxies in ProtoBuf.Grpc.Generated.* now that
+            // [ServiceContract]/[Service] interfaces are auto-detected. The IL-emit fallback
+            // (ProtoBuf.Grpc.Internal.Proxies.*) is only reached if no generated proxy exists.
+            Assert.StartsWith("ProtoBuf.Grpc.Generated.", name);
         }
     }
 

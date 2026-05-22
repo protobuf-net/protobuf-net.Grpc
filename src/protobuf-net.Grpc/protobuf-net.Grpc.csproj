@@ -21,4 +21,26 @@
         <PackageReference Include="System.Threading.Channels" />
         <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
     </ItemGroup>
+
+    <!--
+        Bundle the source generator (protobuf-net.Grpc.BuildTools) into this package at
+        analyzers/dotnet/cs/. Same pattern as System.Text.Json / Microsoft.Extensions.Logging:
+        one nupkg, runtime DLL under lib/ + generator DLL under analyzers/. Consumers reference
+        protobuf-net.Grpc and get the build-time proxy / server-bindings generator for free.
+
+        The ProjectReference (without OutputItemType="Analyzer") gives us the build dependency
+        ordering — BuildTools is built before we pack — without loading the generator into our
+        own compilation (the runtime project has no [Service] interfaces to generate for anyway).
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\protobuf-net.Grpc.BuildTools\protobuf-net.Grpc.BuildTools.csproj"
+                          ReferenceOutputAssembly="false"
+                          PrivateAssets="all" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\protobuf-net.Grpc.BuildTools\bin\$(Configuration)\netstandard2.0\protobuf-net.Grpc.BuildTools.dll"
+              Pack="true"
+              PackagePath="analyzers/dotnet/cs/"
+              Visible="false" />
+    </ItemGroup>
 </Project>

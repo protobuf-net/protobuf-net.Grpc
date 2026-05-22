@@ -194,6 +194,10 @@ namespace ProtoBuf.Grpc.Internal
 
         internal static int GeneralPurposeSignatureCount() => s_signaturePatterns.Values.Count(x => x.Context == ContextKind.CallContext || x.Context == ContextKind.NoContext || x.Context == ContextKind.CancellationToken);
 
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Discovery uses MarshallerCache.CanSerializeType, which calls MakeGenericMethod.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Discovery uses MarshallerCache.CanSerializeType, which reflects to find a factory.")]
+#endif
         static TypeCategory GetCategory(MarshallerCache marshallerCache, Type type, IBindContext? bindContext)
         {
             if (type == null) return TypeCategory.None;
@@ -231,6 +235,10 @@ namespace ProtoBuf.Grpc.Internal
         internal static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, MethodInfo method, IBindContext? bindContext)
             => GetSignature(marshallerCache, method.GetParameters(), method.ReturnType, bindContext);
 
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Discovery uses MarshallerCache.CanSerializeType.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Discovery uses MarshallerCache.CanSerializeType.")]
+#endif
         private static (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) GetSignature(MarshallerCache marshallerCache, ParameterInfo[] args, Type returnType, IBindContext? bindContext)
         {
             (TypeCategory Arg0, TypeCategory Arg1, TypeCategory Arg2, TypeCategory Ret) signature = default;
@@ -241,6 +249,10 @@ namespace ProtoBuf.Grpc.Internal
             return signature;
         }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0066:Convert switch statement to expression", Justification = "Clarity")]
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Discovery uses MarshallerCache.CanSerializeType.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Discovery uses MarshallerCache.CanSerializeType.")]
+#endif
         internal static bool TryIdentifySignature(MethodInfo method, BinderConfiguration binderConfig, out ContractOperation operation, IBindContext? bindContext)
         {
             operation = default;
@@ -316,7 +328,15 @@ namespace ProtoBuf.Grpc.Internal
             operation = new ContractOperation(opName!, from, to, method, config.Method, config.Context, config.Arg, config.Result, config.Void);
             return true;
         }
-        public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig, Type contractType, IBindContext? bindContext)
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Discovery uses MarshallerCache.CanSerializeType.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Reflects over all public instance methods of contractType to discover gRPC operations.")]
+#endif
+        public static List<ContractOperation> FindOperations(BinderConfiguration binderConfig,
+#if NET8_0_OR_GREATER
+            [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.Interfaces)]
+#endif
+            Type contractType, IBindContext? bindContext)
         {
             var all = contractType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
             var ops = new List<ContractOperation>(all.Length);
@@ -337,6 +357,10 @@ namespace ProtoBuf.Grpc.Internal
         }
 
 
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Uses MethodInfo.MakeGenericMethod over Reshape helpers.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Reflects over Reshape methods.")]
+#endif
         internal MethodInfo? TryGetClientHelper()
         {
 
@@ -419,7 +443,11 @@ namespace ProtoBuf.Grpc.Internal
                 && ret.GetGenericArguments()[0] == To;
         }
 
-        internal static ISet<Type> ExpandInterfaces(Type type)
+        internal static ISet<Type> ExpandInterfaces(
+#if NET8_0_OR_GREATER
+            [System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.Interfaces)]
+#endif
+            Type type)
         {
             var set = new HashSet<Type>(type.GetInterfaces());
             if (type.IsInterface) set.Add(type);

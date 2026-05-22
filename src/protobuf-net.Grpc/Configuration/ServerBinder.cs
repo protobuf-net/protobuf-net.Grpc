@@ -32,6 +32,10 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Initiate a bind operation, causing all service methods to be crawled for the provided type
         /// </summary>
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "When [GeneratedServer] is not present, the fallback is gated by RuntimeFeature.IsDynamicCodeSupported.")]
+        [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050", Justification = "When [GeneratedServer] is not present, the fallback is gated by RuntimeFeature.IsDynamicCodeSupported.")]
+#endif
         public int Bind(object state, Type serviceType, BinderConfiguration? binderConfiguration = null,
             object? service = null)
         {
@@ -50,7 +54,22 @@ namespace ProtoBuf.Grpc.Configuration
 
                 // now that we know it is a service contract type for sure
                 var serviceContract = potentialServiceContract;
-                
+
+                // AOT-friendly path: if the source generator has registered server bindings for this
+                // contract, dispatch through them instead of walking methods via reflection +
+                // Expression.Compile.
+                if (state is IGeneratedServerBindContext genCtx
+                    && Internal.GeneratedProxyRegistry.TryGetServerBindings(serviceContract, out var generatedBindingsType))
+                {
+                    var bound = genCtx.InvokeGeneratedBind(generatedBindingsType!, serviceContract, serviceType, binderConfiguration);
+                    if (bound > 0)
+                    {
+                        totalCount += bound;
+                        OnServiceBound(state, serviceName!, serviceType, serviceContract, bound);
+                        continue;
+                    }
+                }
+
                 var typesToBeIncludedInMethodsBinding =
                     ContractOperation.ExpandWithInterfacesMarkedAsSubService(binderConfiguration.Binder, serviceContract);
 
@@ -161,6 +180,10 @@ namespace ProtoBuf.Grpc.Configuration
             /// <summary>
             /// Create a delegate that will invoke this method against a constant instance of the service
             /// </summary>
+#if NET8_0_OR_GREATER
+            [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Builds the delegate via Expression.Compile; reference the protobuf-net.Grpc.BuildTools generator to get AOT-friendly server bindings instead.")]
+            [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Reflects over service methods; reference the protobuf-net.Grpc.BuildTools generator to get trim-friendly server bindings instead.")]
+#endif
             public TDelegate CreateDelegate<TDelegate>()
                 where TDelegate : Delegate
             {
@@ -239,6 +262,10 @@ namespace ProtoBuf.Grpc.Configuration
             .ToDictionary(method => method.IsGenericMethodDefinition ? method.GetGenericArguments().Length : 0);
 #pragma warning restore CS0618
 
+#if NET8_0_OR_GREATER
+        [System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Calls MethodStub<TService>.CreateDelegate<TDelegate>(), which uses Expression.Compile when arg-mapping is needed.")]
+        [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Calls MethodStub<TService>.CreateDelegate<TDelegate>(), which reflects over service methods.")]
+#endif
         private bool AddMethod<TService, TRequest, TResponse>(
             string serviceName, string operationName, MethodInfo method, MethodType methodType,
             ServiceBindContext bindContext,

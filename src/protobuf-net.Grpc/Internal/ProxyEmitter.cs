@@ -3,6 +3,7 @@ using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -17,7 +18,14 @@ namespace ProtoBuf.Grpc.Internal
     {
         private static readonly string ProxyIdentity = typeof(ProxyEmitter).Namespace + ".Proxies";
 
-        private static readonly ModuleBuilder s_module = AssemblyBuilder.DefineDynamicAssembly(
+        // lazy: DefineDynamicAssembly is RequiresDynamicCode; keeping it out of the cctor lets the trimmer
+        // shake this whole codepath when generated proxies (via the BuildTools generator or a manual [Proxy]) cover every service.
+        private static ModuleBuilder? s_module;
+#if NET8_0_OR_GREATER
+        [RequiresDynamicCode("Reflection.Emit is used to build a dynamic proxy assembly.")]
+#endif
+        private static ModuleBuilder GetModule()
+            => s_module ??= AssemblyBuilder.DefineDynamicAssembly(
                 new AssemblyName(ProxyIdentity), AssemblyBuilderAccess.RunAndCollect).DefineDynamicModule(ProxyIdentity);
 
         private static void Ldc_I4(ILGenerator il, int value)
@@ -109,6 +117,12 @@ namespace ProtoBuf.Grpc.Internal
         static int _typeIndex;
         private static readonly MethodInfo s_marshallerCacheGenericMethodDef
             = typeof(MarshallerCache).GetMethod(nameof(MarshallerCache.GetMarshaller), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+#if NET8_0_OR_GREATER
+        [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
+            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the generated-registry / [Proxy] static path is used instead.")]
+        [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
+            Justification = "EmitFactory call is guarded by RuntimeFeature.IsDynamicCodeSupported; under AOT the IL-emit branch is dead and the generated-registry / [Proxy] static path is used instead.")]
+#endif
         internal static Func<CallInvoker, TService> CreateFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
            where TService : class
         {
@@ -116,8 +130,15 @@ namespace ProtoBuf.Grpc.Internal
             if (!typeof(TService).IsInterface)
                 throw new InvalidOperationException("Type is not an interface: " + typeof(TService).FullName);
 
+            // 1. registry populated by [ModuleInitializer] from build-time generated code — fully static,
+            // no reflection on TService. The factory receives the configured BinderConfiguration so
+            // custom marshaller factories work the same as with the IL-emit path.
+            var generated = GeneratedProxyRegistry.TryGetClientFactory<TService>();
+            if (generated is not null) return invoker => generated(invoker, binderConfig);
+
             if (binderConfig == BinderConfiguration.Default) // only use ProxyAttribute for default binder
             {
+                // 2. manual override: user wrote a [Proxy(typeof(X))] of their own
                 var proxy = (typeof(TService).GetCustomAttribute(typeof(ProxyAttribute)) as ProxyAttribute)?.Type;
                 if (proxy is not null)
                 {
@@ -125,11 +146,51 @@ namespace ProtoBuf.Grpc.Internal
                 }
             }
 
+#if NET8_0_OR_GREATER
+            // 3. IL emit fallback — gate so the trimmer can drop it under PublishAot=true
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+            {
+                ThrowAotRequiresGeneratedProxy(typeof(TService));
+            }
+#endif
             return EmitFactory<TService>(binderConfig, log);
         }
+
+#if NET8_0_OR_GREATER
+        [DoesNotReturn]
+        private static void ThrowAotRequiresGeneratedProxy(Type contractType)
+            => throw new NotSupportedException(
+                "Service contract '" + contractType.FullName +
+                "' has no generated proxy and dynamic code is not supported (e.g. NativeAOT). " +
+                "Add a reference to the 'protobuf-net.Grpc.BuildTools' analyzer package in the project " +
+                "that declares this interface — the source generator will pick it up automatically.");
+#endif
         [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static Func<CallInvoker, TService> CreateViaActivator<TService>(Type type)
+        internal static Func<CallInvoker, TService> CreateViaActivator<TService>(
+#if NET8_0_OR_GREATER
+            [DynamicallyAccessedMembers(
+                DynamicallyAccessedMemberTypes.PublicMethods
+                | DynamicallyAccessedMemberTypes.PublicConstructors
+                | DynamicallyAccessedMemberTypes.NonPublicConstructors)]
+#endif
+            Type type)
         {
+            // prefer a "public static TService Create(CallInvoker)" factory if the proxy exposes one;
+            // source-generated proxies emit this so the trimmer/AOT can see a static call-chain and avoid
+            // Activator.CreateInstance reflection
+            var staticCreate = type.GetMethod(
+                FactoryName,
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                types: [typeof(CallInvoker)],
+                modifiers: null);
+            if (staticCreate is not null
+                && typeof(TService).IsAssignableFrom(staticCreate.ReturnType))
+            {
+                return (Func<CallInvoker, TService>)Delegate.CreateDelegate(
+                    typeof(Func<CallInvoker, TService>), staticCreate);
+            }
+
             return channel => (TService)Activator.CreateInstance(
                         type,
                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
@@ -138,6 +199,12 @@ namespace ProtoBuf.Grpc.Internal
                         null)!;
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
+#if NET8_0_OR_GREATER
+        [RequiresDynamicCode("Generates a proxy type at runtime using Reflection.Emit; reference the protobuf-net.Grpc.BuildTools generator to get an AOT-friendly build-time proxy instead.")]
+        [RequiresUnreferencedCode("Reflects over all members of TService to emit method overrides; reference the protobuf-net.Grpc.BuildTools generator to get a trim-friendly build-time proxy instead.")]
+        [UnconditionalSuppressMessage("Trimming", "IL2087", Justification = "Whole method is RequiresUnreferencedCode; callers are gated on RuntimeFeature.IsDynamicCodeSupported.")]
+        [UnconditionalSuppressMessage("Trimming", "IL2090", Justification = "Whole method is RequiresUnreferencedCode; callers are gated on RuntimeFeature.IsDynamicCodeSupported.")]
+#endif
         internal static Func<CallInvoker, TService> EmitFactory<TService>(BinderConfiguration binderConfig, Action<string>? log)
         {
             Type baseType = GrpcClientFactory.ClientBaseType;
@@ -146,10 +213,11 @@ namespace ProtoBuf.Grpc.Internal
             if (callInvoker == null || callInvoker.ReturnType != typeof(CallInvoker) || callInvoker.GetParameters().Length != 0)
                 throw new ArgumentException($"The base-type {baseType} for service-proxy {typeof(TService)} lacks a suitable CallInvoker API");
 
-            lock (s_module)
+            var module = GetModule();
+            lock (module)
             {
                 // private sealed class IFooProxy...
-                var type = s_module.DefineType(ProxyIdentity + "." + baseType.Name + "." + typeof(TService).Name + "_Proxy_" + _typeIndex++,
+                var type = module.DefineType(ProxyIdentity + "." + baseType.Name + "." + typeof(TService).Name + "_Proxy_" + _typeIndex++,
                     TypeAttributes.Class | TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.BeforeFieldInit);
 
                 type.SetParent(baseType);
