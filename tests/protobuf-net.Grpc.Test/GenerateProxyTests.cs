@@ -74,6 +74,62 @@ namespace protobuf_net.Grpc.Test
             Assert.True(svc.WasCalled);
         }
 
+        [Fact]
+        public void OnBindFailedReturningFalseRethrowsToCaller()
+        {
+            // A binder whose Configuration.GetMarshaller<T>() throws — simulates the "no marshaller"
+            // case (e.g. trim stripped the type's metadata, or a custom factory doesn't claim it).
+            var binder = new BlowUpBinder<MyEchoService> { ContinueOnBindFailure = false };
+
+            Assert.True(GeneratedProxyRegistry.TryGetServerBindings(typeof(IGenProxyService), out var bindingsType));
+            var bindMethod = bindingsType!.GetMethod("Bind", BindingFlags.Public | BindingFlags.Static)!
+                .MakeGenericMethod(typeof(MyEchoService));
+
+            var tie = Assert.Throws<TargetInvocationException>(() => bindMethod.Invoke(null, [binder]));
+            // Default contract: failure surfaces to the host so startup is loud, not silently skipped.
+            Assert.IsType<InvalidOperationException>(tie.InnerException);
+            Assert.Single(binder.BindFailures);
+        }
+
+        [Fact]
+        public void OnBindFailedReturningTrueSwallowsAndContinues()
+        {
+            var binder = new BlowUpBinder<MyEchoService> { ContinueOnBindFailure = true };
+
+            Assert.True(GeneratedProxyRegistry.TryGetServerBindings(typeof(IGenProxyService), out var bindingsType));
+            var bindMethod = bindingsType!.GetMethod("Bind", BindingFlags.Public | BindingFlags.Static)!
+                .MakeGenericMethod(typeof(MyEchoService));
+
+            var count = (int)bindMethod.Invoke(null, [binder])!;
+            Assert.Equal(0, count); // method was skipped because marshaller resolution failed
+            Assert.Single(binder.BindFailures);
+        }
+
+        private sealed class BlowUpBinder<TService> : IServerMethodBinder<TService> where TService : class
+        {
+            public BinderConfiguration Configuration { get; } = BinderConfiguration.Create(
+                marshallerFactories: [new ThrowingMarshallerFactory()]);
+            public System.Collections.Generic.IList<object> GetMetadata(Type contractType, string methodName) => Array.Empty<object>();
+            public System.Collections.Generic.List<(string, Exception)> BindFailures { get; } = new();
+            public bool ContinueOnBindFailure { get; set; }
+            public bool OnBindFailed(string operationName, Exception exception)
+            {
+                BindFailures.Add((operationName, exception));
+                return ContinueOnBindFailure;
+            }
+            public void AddUnaryMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, System.Collections.Generic.IList<object> metadata, UnaryServerHandler<TService, TRequest, TResponse> handler) where TRequest : class where TResponse : class { }
+            public void AddServerStreamingMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, System.Collections.Generic.IList<object> metadata, ServerStreamingServerHandler<TService, TRequest, TResponse> handler) where TRequest : class where TResponse : class { }
+            public void AddClientStreamingMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, System.Collections.Generic.IList<object> metadata, ClientStreamingServerHandler<TService, TRequest, TResponse> handler) where TRequest : class where TResponse : class { }
+            public void AddDuplexStreamingMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, System.Collections.Generic.IList<object> metadata, DuplexStreamingServerHandler<TService, TRequest, TResponse> handler) where TRequest : class where TResponse : class { }
+        }
+
+        // A factory that claims every type then throws when asked to actually marshal — gives us a deterministic
+        // "no marshaller available" failure at GetMarshaller<T>() time.
+        private sealed class ThrowingMarshallerFactory : MarshallerFactory
+        {
+            protected internal override bool CanSerialize(Type type) => false;
+        }
+
         private sealed class MyEchoService : IGenProxyService
         {
             public bool WasCalled { get; private set; }
@@ -112,7 +168,15 @@ namespace protobuf_net.Grpc.Test
                 where TRequest : class where TResponse : class { }
 
             public System.Collections.Generic.List<(string OperationName, Exception Exception)> BindFailures { get; } = new();
-            public void OnBindFailed(string operationName, Exception exception) => BindFailures.Add((operationName, exception));
+
+            /// <summary>Tests can flip this to opt into swallow-and-continue behaviour.</summary>
+            public bool ContinueOnBindFailure { get; set; }
+
+            public bool OnBindFailed(string operationName, Exception exception)
+            {
+                BindFailures.Add((operationName, exception));
+                return ContinueOnBindFailure;
+            }
         }
 
         private sealed class FakeServerCallContext : ServerCallContext

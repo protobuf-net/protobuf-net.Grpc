@@ -128,10 +128,13 @@ namespace ProtoBuf.Grpc.Configuration
 
         /// <summary>
         /// Reported by generated code when binding a single operation fails (e.g. its request /
-        /// response type has no marshaller in the configured factories). The intent mirrors the
-        /// reflection-based <c>ServerBinder.OnError</c> path: log and continue so a single bad
-        /// method does not take down the entire interface bind.
+        /// response type has no marshaller in the configured factories).
         /// </summary>
-        void OnBindFailed(string operationName, Exception exception);
+        /// <returns>
+        /// <see langword="true"/> to swallow the failure and continue binding the remaining
+        /// operations on the contract; <see langword="false"/> to rethrow the original exception
+        /// so the host fails fast at startup.
+        /// </returns>
+        bool OnBindFailed(string operationName, Exception exception);
     }
 }

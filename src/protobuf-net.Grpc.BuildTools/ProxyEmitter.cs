@@ -262,7 +262,7 @@ internal static class ProxyEmitter
             }
             sb.AppendLine("                count++;");
             sb.AppendLine("            }");
-            sb.Append("            catch (global::System.Exception __ex) { binder.OnBindFailed(").Append(opNameLiteral).AppendLine(", __ex); }");
+            sb.Append("            catch (global::System.Exception __ex) { if (!binder.OnBindFailed(").Append(opNameLiteral).AppendLine(", __ex)) throw; }");
         }
 
         sb.AppendLine("            return count;");
