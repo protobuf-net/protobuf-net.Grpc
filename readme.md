@@ -55,13 +55,19 @@ Everything is available as pre-built packages on nuget; in particular, you proba
 - [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native) for clients or servers using the native/unmanaged API
 - [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc) and [`Grpc.Net.Client`](https://www.nuget.org/packages/Grpc.Net.Client/) for clients using `HttpClient` on .NET Core 3.1
 
-`protobuf-net.Grpc` also ships a Roslyn source generator inside the same package (under `analyzers/dotnet/cs/`) that emits build-time client proxies and server bindings — see [Trimming and AOT](#trimming-and-aot) below.
-
 [Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/main/examples/pb-net-grpc).
 
 ## Trimming and AOT
 
-The source generator runs automatically wherever `protobuf-net.Grpc` is referenced — no extra package, no opt-in attribute, no `partial` keyword on your interfaces. For every `[Service]` / `[ServiceContract]` interface declared in your project, the generator emits both a client proxy and server bindings in the `ProtoBuf.Grpc.Generated.*` namespace, registered via a `[ModuleInitializer]`.
+Client proxies and server bindings are built at runtime by default, using `Reflection.Emit` — which neither trims nor AOT-compiles. Add [`protobuf-net.BuildTools`](https://www.nuget.org/packages/protobuf-net.BuildTools) to generate them at build time instead:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="protobuf-net.BuildTools" PrivateAssets="all" />
+</ItemGroup>
+```
+
+No opt-in attribute and no `partial` keyword on your interfaces: for every `[Service]` / `[ServiceContract]` interface declared in your project, the generator emits both a client proxy and server bindings in the `ProtoBuf.Grpc.Generated.*` namespace, registered via a `[ModuleInitializer]`. Anything it doesn't generate falls back to the runtime path, and it tells you why (`PBN30xx`).
 
 `protobuf-net.Grpc.dll` itself is fully trim-clean — the runtime `Reflection.Emit` and `Expression.Compile` paths are gated behind `RuntimeFeature.IsDynamicCodeSupported` and annotated `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]`, so the trimmer can shake them away.
 
@@ -75,7 +81,7 @@ The source generator runs automatically wherever `protobuf-net.Grpc` is referenc
 </ItemGroup>
 ```
 
-Without those, the trimmer strips members and attributes that `RuntimeTypeModel` needs at discovery time, marshaller resolution returns null, and your service either fails to bind methods (by default a fail-fast at startup) or — if you set `services.Configure<CodeFirstGrpcOptions>(o => o.ContinueOnBindFailure = true)` — comes up with a partial service surface and a warning per missing method.
+Without those, the trimmer strips members and attributes that `RuntimeTypeModel` needs at discovery time, marshaller resolution returns null, and your service fails to bind — a fail-fast at startup naming the operation, rather than a service that comes up with a silently incomplete surface.
 
 Under `PublishAot=true` the serializer's reflection breaks more fundamentally — the only path for full AOT today is to switch the marshaller layer to a generator-based serializer (Google.Protobuf, MemoryPack, MessagePack-CSharp via a custom `MarshallerFactory`).
 

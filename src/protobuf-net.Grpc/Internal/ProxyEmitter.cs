@@ -162,7 +162,7 @@ namespace ProtoBuf.Grpc.Internal
             => throw new NotSupportedException(
                 "Service contract '" + contractType.FullName +
                 "' has no generated proxy and dynamic code is not supported (e.g. NativeAOT). " +
-                "Add a reference to the 'protobuf-net.Grpc.BuildTools' analyzer package in the project " +
+                "Add a reference to the 'protobuf-net.BuildTools' analyzer package in the project " +
                 "that declares this interface — the source generator will pick it up automatically.");
 #endif
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -200,8 +200,8 @@ namespace ProtoBuf.Grpc.Internal
         }
         [MethodImpl(MethodImplOptions.NoInlining)]
 #if NET8_0_OR_GREATER
-        [RequiresDynamicCode("Generates a proxy type at runtime using Reflection.Emit; reference the protobuf-net.Grpc.BuildTools generator to get an AOT-friendly build-time proxy instead.")]
-        [RequiresUnreferencedCode("Reflects over all members of TService to emit method overrides; reference the protobuf-net.Grpc.BuildTools generator to get a trim-friendly build-time proxy instead.")]
+        [RequiresDynamicCode("Generates a proxy type at runtime using Reflection.Emit; reference the protobuf-net.BuildTools generator to get an AOT-friendly build-time proxy instead.")]
+        [RequiresUnreferencedCode("Reflects over all members of TService to emit method overrides; reference the protobuf-net.BuildTools generator to get a trim-friendly build-time proxy instead.")]
         [UnconditionalSuppressMessage("Trimming", "IL2087", Justification = "Whole method is RequiresUnreferencedCode; callers are gated on RuntimeFeature.IsDynamicCodeSupported.")]
         [UnconditionalSuppressMessage("Trimming", "IL2090", Justification = "Whole method is RequiresUnreferencedCode; callers are gated on RuntimeFeature.IsDynamicCodeSupported.")]
 #endif

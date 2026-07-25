@@ -10,7 +10,7 @@ namespace ProtoBuf.Grpc.Internal
     /// <summary>
     /// <para>
     /// Holds the build-time generated client factories and server bindings emitted by
-    /// <c>protobuf-net.Grpc.BuildTools</c>. The generator emits a <c>[ModuleInitializer]</c> per
+    /// <c>protobuf-net.BuildTools</c>. The generator emits a <c>[ModuleInitializer]</c> per
     /// service contract that populates this registry, so consumption is fully static — no
     /// reflection over the contract interface at runtime.
     /// </para>
