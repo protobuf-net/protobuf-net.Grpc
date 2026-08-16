@@ -8,6 +8,7 @@
 - [Create Proto File](createProtoFile)
 - [Register Client Service in Startup.cs](registerClientService)
 - [.NET Streams](streams)
+- [Native AOT and trimming](aot) (preview)
 
 Other Content
 

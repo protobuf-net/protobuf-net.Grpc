@@ -1,4 +1,5 @@
 using System;
+using ProtoBuf.Grpc.Internal;
 using System.Diagnostics.CodeAnalysis;
 
 namespace ProtoBuf.Grpc.Configuration
@@ -22,15 +23,9 @@ namespace ProtoBuf.Grpc.Configuration
     /// </para>
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-    [Experimental(DiagnosticId)]
+    [Experimental(Experiments.BuildTimeProxies, UrlFormat = Experiments.UrlFormat)]
     public sealed class ProtoGrpcAttribute : Attribute
     {
-        /// <summary>
-        /// The diagnostic id reported for use of this API while it is in preview; shared with
-        /// protobuf-net's own <c>[ProtoModel]</c>, so one <c>NoWarn</c> covers both halves.
-        /// </summary>
-        public const string DiagnosticId = "PBN9001";
-
         /// <summary>
         /// The <c>[ProtoModel]</c>-generated <see cref="ProtoBuf.Meta.TypeModel"/> to marshal
         /// payloads through.
@@ -53,7 +48,7 @@ namespace ProtoBuf.Grpc.Configuration
     /// the common shape, since service contracts usually ship in a shared package.
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    [Experimental(ProtoGrpcAttribute.DiagnosticId)]
+    [Experimental(Experiments.BuildTimeProxies, UrlFormat = Experiments.UrlFormat)]
     public sealed class ProtoServiceAttribute : Attribute
     {
         /// <summary>
