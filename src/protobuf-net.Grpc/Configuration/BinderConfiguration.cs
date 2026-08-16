@@ -24,7 +24,16 @@ namespace ProtoBuf.Grpc.Configuration
             MarshallerCache = new MarshallerCache(factories);
             Binder = binder;
         }
-        internal ServiceBinder Binder { get; private set; }
+        /// <summary>
+        /// The <see cref="ServiceBinder"/> associated with this configuration.
+        /// </summary>
+        /// <remarks>
+        /// Public so that build-time generated bindings can honour a custom binder. While this was
+        /// internal, generated code had no way to reach the configured binder and had to fall back to
+        /// <see cref="ServiceBinder.Default"/>, silently ignoring a consumer's override.
+        /// </remarks>
+        public ServiceBinder Binder { get; private set; }
+
         internal MarshallerCache MarshallerCache { get; }
 
         /// <summary>

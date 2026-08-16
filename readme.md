@@ -1,4 +1,4 @@
-# <img src="https://protogen.marcgravell.com/images/protobuf-net.svg" alt="protobuf-net logo" width="45" height="45"> protobuf-net.Grpc
+# <img src="https://raw.githubusercontent.com/protobuf-net/protobuf-net/main/protobuf-net-48.png" alt="protobuf-net logo" width="45" height="45"> protobuf-net.Grpc
 
 [![.NET](https://github.com/protobuf-net/protobuf-net.Grpc/actions/workflows/dotnet.yml/badge.svg)](https://github.com/protobuf-net/protobuf-net.Grpc/actions/workflows/dotnet.yml)
 
@@ -6,9 +6,9 @@
 
 It should work on all .NET languages that can generate something *even remotely like* a regular .NET type model.
 
-- [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted)
-- [All Documentation](https://protobuf-net.github.io/protobuf-net.Grpc/)
-- [Build/usage available via `protobuf-net.BuildTools`](https://protobuf-net.github.io/protobuf-net/build_tools)
+- [Getting Started](https://grpc.protobuf-net.dev/gettingstarted)
+- [All Documentation](https://grpc.protobuf-net.dev/)
+- [Build/usage available via `protobuf-net.BuildTools`](https://docs.protobuf-net.dev/build_tools)
 
 Usage is as simple as declaring an interface for your service-contract:
 
@@ -44,8 +44,8 @@ service MyAmazingService {
 }
 ```
 
-Obviously you need to tell it the uri etc - see [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted). Usually the configuration is convention-based, but
-if you prefer: there are [various configuration options](https://protobuf-net.github.io/protobuf-net.Grpc/configuration).
+Obviously you need to tell it the uri etc - see [Getting Started](https://grpc.protobuf-net.dev/gettingstarted). Usually the configuration is convention-based, but
+if you prefer: there are [various configuration options](https://grpc.protobuf-net.dev/configuration).
 
 ## Getting hold of it
 

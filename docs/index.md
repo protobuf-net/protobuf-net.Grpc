@@ -3,11 +3,12 @@
 - [Getting Started](gettingstarted)
 - [Configuration Options](configuration)
 - [Package Layout](projects)
-- [Build Tools ("code-first" focus)](https://protobuf-net.github.io/protobuf-net/build_tools)
-- [Build Tools ("contract-first" focus)](https://protobuf-net.github.io/protobuf-net/contract_first)
+- [Build Tools ("code-first" focus)](https://docs.protobuf-net.dev/build_tools)
+- [Build Tools ("contract-first" focus)](https://docs.protobuf-net.dev/contract_first)
 - [Create Proto File](createProtoFile)
 - [Register Client Service in Startup.cs](registerClientService)
 - [.NET Streams](streams)
+- [Native AOT and trimming](aot) (preview)
 
 Other Content
 
