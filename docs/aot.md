@@ -1,8 +1,9 @@
 # Native AOT and trimming
 
 > **Preview.** The attributes described here are marked `[Experimental]` with the id **`PBN9001`**,
-> which is a compile *error* until you suppress it — see [Opting in](#opting-in). The shape may
-> still change.
+> which is a compile *error* until you suppress it — see [Opting in](#opting-in), or
+> [the PBN9001 page](https://docs.protobuf-net.dev/exp/PBN9001), which covers both halves. The shape
+> may still change.
 
 Normally, protobuf-net.Grpc works out how to talk to a service at *runtime*: it reflects over your
 `[Service]` interface and emits IL for a client proxy, and builds server bindings with

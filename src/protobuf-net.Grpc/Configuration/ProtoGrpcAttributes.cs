@@ -23,7 +23,7 @@ namespace ProtoBuf.Grpc.Configuration
     /// </para>
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-    [Experimental(Experiments.BuildTimeProxies, UrlFormat = Experiments.UrlFormat)]
+    [Experimental(Experiments.BuildTimeProxies, UrlFormat = Experiments.BuildTimeProxiesUrlFormat)]
     public sealed class ProtoGrpcAttribute : Attribute
     {
         /// <summary>
@@ -48,7 +48,7 @@ namespace ProtoBuf.Grpc.Configuration
     /// the common shape, since service contracts usually ship in a shared package.
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    [Experimental(Experiments.BuildTimeProxies, UrlFormat = Experiments.UrlFormat)]
+    [Experimental(Experiments.BuildTimeProxies, UrlFormat = Experiments.BuildTimeProxiesUrlFormat)]
     public sealed class ProtoServiceAttribute : Attribute
     {
         /// <summary>
