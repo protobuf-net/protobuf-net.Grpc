@@ -37,7 +37,50 @@ namespace ProtoBuf.Grpc.Configuration
         /// <summary>
         /// Uses the default protobuf-net serializer.
         /// </summary>
-        public static MarshallerFactory Default { get; } = new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None, default);
+        /// <remarks>
+        /// <para>
+        /// <c>RuntimeTypeModel.Default</c> builds its serializers by reflection and ref-emit, so it
+        /// cannot work where dynamic code is unavailable. Naming it from a static initialiser also
+        /// makes the whole reflective serializer machinery <em>reachable</em>, which ILC must then
+        /// keep - and since <see cref="BinderConfiguration.Create"/> touches this to compare against
+        /// the default factory set, even a fully compile-time model dragged it all in.
+        /// </para>
+        /// <para>
+        /// The <c>RuntimeFeature.IsDynamicCodeSupported</c> test is the lever, rather than a
+        /// <c>Requires*</c> annotation: ILC substitutes it for a constant and eliminates the arm
+        /// <em>before</em> trim analysis, so the demand disappears instead of relocating to callers.
+        /// Same reasoning protobuf-net's own <c>TypeModel.ResolveSerializer&lt;T&gt;</c> uses.
+        /// </para>
+        /// <para>
+        /// The consequence is deliberate: under native AOT a consumer who has not supplied a
+        /// compile-time model gets "no marshaller available" immediately and by name, instead of the
+        /// same failure arriving via a swallowed <c>MakeGenericType</c> inside <c>DynamicStub</c>.
+        /// Neither can work; this one says so.
+        /// </para>
+        /// </remarks>
+        public static MarshallerFactory Default { get; } = CreateDefault();
+
+        private static MarshallerFactory CreateDefault()
+        {
+#if NET5_0_OR_GREATER
+            if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                return UnavailableMarshallerFactory.Instance;
+            }
+#endif
+            return new ProtoBufMarshallerFactory(RuntimeTypeModel.Default, Options.None, default);
+        }
+
+        /// <summary>
+        /// Stands in for the runtime-model factory where dynamic code is unavailable. It can never
+        /// serialize anything, so resolution falls through to whatever the caller supplied.
+        /// </summary>
+        private sealed class UnavailableMarshallerFactory : MarshallerFactory
+        {
+            public static readonly UnavailableMarshallerFactory Instance = new();
+            private UnavailableMarshallerFactory() { }
+            protected internal override bool CanSerialize(Type type) => false;
+        }
 
         /// <summary>
         /// Provides support for <a href="https://www.nuget.org/packages/Google.Protobuf/">Google.Protobuf</a> types.
@@ -64,6 +107,16 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public static MarshallerFactory Create(TypeModel? model = null, Options options = Options.None, object? userState = null)
         {
+            // the null/default-model path is the reflective one, so it is gated exactly as Default is;
+            // naming RuntimeTypeModel.Default unconditionally here would re-root everything that the
+            // gate on Default was there to remove
+#if NET5_0_OR_GREATER
+            if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                if (model is null) return Default; // i.e. UnavailableMarshallerFactory
+                return new ProtoBufMarshallerFactory(model, options, userState);
+            }
+#endif
             model ??= RuntimeTypeModel.Default;
             if (options == Options.None && model == RuntimeTypeModel.Default && userState is null) return Default;
             return new ProtoBufMarshallerFactory(model, options, userState);
