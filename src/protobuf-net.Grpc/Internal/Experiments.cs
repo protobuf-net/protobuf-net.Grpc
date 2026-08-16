@@ -7,12 +7,9 @@ namespace ProtoBuf.Grpc.Internal
     {
         // note: {0} is substituted with the DiagnosticId by the compiler, e.g. .../exp/PBNnnnn
         //
-        // github.io for now: protobuf-net's docs have moved to docs.protobuf-net.dev and this repo
-        // is expected to follow before release, at which point only this constant changes.
-        //
         // the page name must match the id's *case* - GitHub Pages paths are case-sensitive, so
         // docs/exp/PBNnnnn.md, not docs/exp/pbnnnnn.md
-        public const string UrlFormat = "https://protobuf-net.github.io/protobuf-net.Grpc/exp/{0}";
+        public const string UrlFormat = "https://grpc.protobuf-net.dev/exp/{0}";
 
         /// <summary>
         /// Compile-time gRPC proxies and server bindings, via <c>[ProtoGrpc]</c>.

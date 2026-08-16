@@ -37,7 +37,7 @@ by having an up-to-date IDE. Note that the tools work on more platforms than jus
 
 Also: make sure that you are *actually using* the correct .NET Core SDK (usually via "global.json").
 
-Note: to avoid common usage errors with protobuf-net and gRPC, consider using [`protobuf-net.BuildTools`](https://protobuf-net.github.io/protobuf-net/build_tools), which
+Note: to avoid common usage errors with protobuf-net and gRPC, consider using [`protobuf-net.BuildTools`](https://docs.protobuf-net.dev/build_tools), which
 reports problems at build-time.
 
 ### 1: define your data contracts and service contracts
