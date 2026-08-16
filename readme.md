@@ -1,6 +1,6 @@
 # <img src="https://protogen.marcgravell.com/images/protobuf-net.svg" alt="protobuf-net logo" width="45" height="45"> protobuf-net.Grpc
 
-[![Build status](https://ci.appveyor.com/api/projects/status/en9i5mp471ci6ip3/branch/main?svg=true)](https://ci.appveyor.com/project/StackExchange/protobuf-net-grpc/branch/main)
+[![.NET](https://github.com/protobuf-net/protobuf-net.Grpc/actions/workflows/dotnet.yml/badge.svg)](https://github.com/protobuf-net/protobuf-net.Grpc/actions/workflows/dotnet.yml)
 
 `protobuf-net.Grpc` adds code-first support for services over gRPC using either the native `Grpc.Core` API, or the fully-managed `Grpc.Net.Client` / `Grpc.AspNetCore.Server` API.
 
