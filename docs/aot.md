@@ -11,12 +11,15 @@ Normally, protobuf-net.Grpc works out how to talk to a service at *runtime*: it 
 where there is no IL emitter, and awkward under **trimming**, where the members it wants to reflect
 over may already have been removed.
 
-`protobuf-net.BuildTools` can build both at **compile time** instead, as ordinary C# in your own
-project — code you can read, step through, and that ILC can compile like anything else.
+Both can be built at **compile time** instead, as ordinary C# in your own project — code you can read,
+step through, and that ILC can compile like anything else.
 
-This needs **protobuf-net.Grpc 1.3.6 or later**. Earlier versions statically root
-`RuntimeTypeModel.Default`, which keeps the whole reflection path reachable however static your own
-code is — on our own smoke test that difference is 100 trim warnings versus 4.
+## What you need
+
+- **protobuf-net 3.4.0 or later.** The generators ship with it; there is nothing extra to reference.
+- **protobuf-net.Grpc 1.3.6 or later.** Earlier versions statically root `RuntimeTypeModel.Default`,
+  which keeps the whole reflection path reachable however static your own code is — on our own smoke
+  test that difference is 100 trim warnings versus 4.
 
 ## Two halves, and you need both
 
@@ -63,8 +66,8 @@ protobuf-net's `[ProtoModel]`, so one entry does both halves:
 </PropertyGroup>
 ```
 
-If you want none of this — no analyzers, no generators, from either half — one property turns off
-everything `protobuf-net.BuildTools` does, and is checked before any work happens:
+If you want none of this — no analyzers, no generators, from either half — one property turns all of
+protobuf-net's build-time tooling off, and is checked before any work happens:
 
 ``` xml
 <ProtoBufDisableBuildTools>true</ProtoBufDisableBuildTools>
@@ -93,7 +96,8 @@ change to your calling code at all.
 
 ### Recommended: let interceptors do it
 
-Name the namespace the generated interceptors live in, once, in your project file:
+Tell the compiler that protobuf-net's interceptors are enabled — once, in your project file. The
+namespace is fixed; this is consent, not configuration:
 
 ``` xml
 <PropertyGroup>
