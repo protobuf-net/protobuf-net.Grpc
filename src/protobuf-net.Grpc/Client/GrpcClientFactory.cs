@@ -11,7 +11,7 @@ namespace ProtoBuf.Grpc.Client
     /// </summary>
     public static class GrpcClientFactory
     {
-#if NET5_0_OR_GREATER
+#if NET
         // it is *intended* that this attribute usage will help the linker not remove things that we need
         // see: https://docs.microsoft.com/en-us/dotnet/core/deploying/trimming/prepare-libraries-for-trimming#dynamicallyaccessedmembers
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]

@@ -62,7 +62,7 @@ namespace ProtoBuf.Grpc.Configuration
 
         private static MarshallerFactory CreateDefault()
         {
-#if NET5_0_OR_GREATER
+#if NET
             if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
             {
                 return UnavailableMarshallerFactory.Instance;
@@ -110,7 +110,7 @@ namespace ProtoBuf.Grpc.Configuration
             // the null/default-model path is the reflective one, so it is gated exactly as Default is;
             // naming RuntimeTypeModel.Default unconditionally here would re-root everything that the
             // gate on Default was there to remove
-#if NET5_0_OR_GREATER
+#if NET
             if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
             {
                 if (model is null) return Default; // i.e. UnavailableMarshallerFactory

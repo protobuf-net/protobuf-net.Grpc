@@ -218,7 +218,7 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
     {
         if (payload.IsSingleSegment)
         {
-#if NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET
             return Parse(payload.FirstSpan);
 #else
             return Parse(payload.First.Span);
