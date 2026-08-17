@@ -8,6 +8,7 @@ using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.Threading.Tasks;
 using Xunit;
+
 namespace protobuf_net.Grpc.Test
 {
     public class ClientFactoryTests
@@ -21,7 +22,7 @@ namespace protobuf_net.Grpc.Test
                 o.Address = new Uri("http://localhost");
             });
             var serviceProvider = services.BuildServiceProvider();
-            
+
             var clientFactory = serviceProvider.GetRequiredService<GrpcClientFactory>();
             var client = clientFactory.CreateClient<IMyService>(nameof(IMyService));
 
@@ -47,16 +48,16 @@ namespace protobuf_net.Grpc.Test
             var name = client.GetType().FullName;
             Assert.StartsWith("ProtoBuf.Grpc.Internal.Proxies.ClientBase.", name);
         }
-    }
 
-    [ServiceContract]
-    public interface IMyService
-    {
-        [OperationContract]
-        public ValueTask<Dummy> UnaryCall(Dummy value);
-    }
+        [ServiceContract]
+        public interface IMyService
+        {
+            [OperationContract]
+            public ValueTask<Dummy> UnaryCall(Dummy value);
+        }
 
-    [DataContract]
-    public class Dummy { }
+        [DataContract]
+        public class Dummy { }
+    }
 }
 #endif
