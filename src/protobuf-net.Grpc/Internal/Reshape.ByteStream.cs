@@ -188,7 +188,7 @@ partial class Reshape
     {
         try
         {
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_0_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET
         await // IDisposable is up-level
 #endif
             using var stream = await source;

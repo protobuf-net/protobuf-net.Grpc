@@ -221,11 +221,11 @@ namespace ProtoBuf.Grpc.Internal
             => new WriterObserver<T>().Subscribe(reader, writer);
 
         private sealed class WriterObserver<T> : IObserver<T>, IValueTaskSource<bool>
-#if NETCOREAPP3_1_OR_GREATER
+#if NET
             , IThreadPoolWorkItem
 #endif
         {
-#if NETCOREAPP3_1_OR_GREATER
+#if NET
             void IThreadPoolWorkItem.Execute() => Activate();
 #else
             private static readonly WaitCallback s_Activate = static state => Unsafe.As<WriterObserver<T>>(state)!.Activate();
@@ -266,7 +266,7 @@ namespace ProtoBuf.Grpc.Internal
                             debugStep = nameof(_backlog.Dequeue);
                             lock (_backlog)
                             {
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET
                                 if (!_backlog.TryDequeue(out next!)) break;
 #else
                                 if (_backlog.Count == 0) break;
@@ -339,7 +339,7 @@ namespace ProtoBuf.Grpc.Internal
                 {
                     _flags &= ~StateFlags.NeedsActivation;
                     Debug.WriteLine("Activating", ToString());
-#if NETCOREAPP3_1_OR_GREATER
+#if NET
                     ThreadPool.UnsafeQueueUserWorkItem(this, false);
 #else
                     ThreadPool.UnsafeQueueUserWorkItem(s_Activate, this);
