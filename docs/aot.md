@@ -86,24 +86,50 @@ Add `[ProtoSerializable]` only for types you serialize directly yourself, outsid
 If the model lives in a **referenced assembly**, nothing can be added to it from here, so instead it is
 *checked*: any payload it has no serializer for is reported (`PBN4013`), naming the type and the model.
 
-## Using it
+## Using it: clients
 
-On the client, name the factory — that is what selects the generated proxy over the ref-emit one:
+There are two ways to point a client at the generated proxies, and the one to reach for first needs no
+change to your calling code at all.
+
+### Recommended: let interceptors do it
+
+Name the namespace the generated interceptors live in, once, in your project file:
+
+``` xml
+<PropertyGroup>
+  <InterceptorsNamespaces>$(InterceptorsNamespaces);ProtoBuf.AOT</InterceptorsNamespaces>
+</PropertyGroup>
+```
+
+Now ordinary code gets the generated proxy, and existing call sites need no edit:
+
+``` c#
+var greeter = channel.CreateGrpcService<IGreeter>();
+```
+
+Four things worth knowing, because "the compiler rewrote my call" deserves them:
+
+- **it only ever swaps the factory argument.** The rewritten call is exactly
+  `(clientFactory ?? MyServices.Instance).CreateClient<TService>(client)` — the same thing you would
+  have written by hand, so there is no behaviour hiding in it.
+- **a call that already passes a factory is left alone.** Yours wins.
+- **it is opt-in because it has to be.** An interceptor in a namespace you have not enabled is a
+  compile *error* (`CS9137`), so nothing is generated unless you ask for it.
+- **it needs the .NET 9 SDK or later.** That is where the compiler API this relies on arrived. Older
+  toolchains used `<InterceptorsPreviewNamespaces>` instead, and that spelling is honoured too.
+
+### Or name the factory yourself
+
+If you would rather not enable interceptors — or cannot — pass the factory explicitly. This is
+precisely what the interceptor does for you, so the two produce the same program:
 
 ``` c#
 var greeter = channel.CreateGrpcService<IGreeter>(MyServices.Instance);
 ```
 
-On the server, use the registration method generated into your own assembly, **instead of**
-`AddCodeFirstGrpc()`:
-
-``` c#
-builder.Services.AddMyServices();       // generated; named after your type
-app.MapGrpcService<GreeterService>();
-```
-
-`AddCodeFirstGrpc()` registers the reflection-based binder, so calling both would bind every
-operation twice. The generated method registers only what was generated.
+Naming the factory is what selects the generated proxy over the ref-emit one. If you have generated
+proxies for a contract and a call is not using them, `PBN4016` says so, and offers a code fix that
+inserts exactly the argument above.
 
 ### Clients registered through dependency injection
 
@@ -118,33 +144,17 @@ The generated `AddMyServices()` does that registration for you, so a project tha
 consumes them needs nothing extra. A client-only project has no `AddMyServices()` to call, and is
 reminded with `PBN4017`.
 
-## Letting existing call sites stay as they are
+## Using it: servers
 
-If you would rather not thread `MyServices.Instance` through every call, C# **interceptors** can do it
-for you. Opt in by naming the namespace the generated interceptors live in:
-
-``` xml
-<PropertyGroup>
-  <InterceptorsNamespaces>$(InterceptorsNamespaces);ProtoBuf.AOT</InterceptorsNamespaces>
-</PropertyGroup>
-```
-
-With that set, an ordinary call needs no change at all:
+Use the registration method generated into your own assembly, **instead of** `AddCodeFirstGrpc()`:
 
 ``` c#
-var greeter = channel.CreateGrpcService<IGreeter>();    // rewritten to use MyServices.Instance
+builder.Services.AddMyServices();       // generated; named after your type
+app.MapGrpcService<GreeterService>();
 ```
 
-Worth knowing:
-
-- **it is opt-in because it has to be.** An interceptor in a namespace you have not enabled is a
-  compile *error* (`CS9137`), so nothing is generated unless you ask.
-- **it only ever swaps the factory argument.** The rewritten call is exactly
-  `(clientFactory ?? MyServices.Instance).CreateClient<TService>(client)` — the same thing you would
-  have written by hand, so there is no behaviour hiding in it.
-- **a call that already passes a factory is left alone.** Yours wins.
-- **without interceptors you get `PBN4016` instead**, with a code fix that inserts the argument. The
-  two produce the same program; the interceptor just saves you the edit.
+`AddCodeFirstGrpc()` registers the reflection-based binder, so calling both would bind every
+operation twice. The generated method registers only what was generated.
 
 ## Diagnostics
 
