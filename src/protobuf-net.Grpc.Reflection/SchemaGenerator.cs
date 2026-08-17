@@ -20,9 +20,13 @@ namespace ProtoBuf.Grpc.Reflection
         public ProtoSyntax ProtoSyntax { get => Options.Syntax; set => Options.Syntax = value; }
 
         /// <summary>
-        /// Gets or sets the options for the generation of the schema.
+        /// Gets the options used as a template for schema generation; configure in-place.
         /// </summary>
-        public SchemaGenerationOptions Options { get; set; } = new SchemaGenerationOptions
+        /// <remarks>
+        /// These are copied onto a fresh instance per generation - including <c>Types</c>, but not
+        /// <c>Services</c> or <c>Package</c>, which come from the contract types being generated.
+        /// </remarks>
+        public SchemaGenerationOptions Options { get; } = new SchemaGenerationOptions
         {
             Syntax = ProtoSyntax.Proto3
         };
@@ -132,6 +136,7 @@ namespace ProtoBuf.Grpc.Reflection
                 Origin = Options.Origin,
             };
             options.Services.AddRange(services);
+            options.Types.AddRange(Options.Types);
 
             var model = binderConfiguration.MarshallerCache.TryGetFactory<ProtoBufMarshallerFactory>()?.Model ?? RuntimeTypeModel.Default;
             return model.GetSchema(options);
