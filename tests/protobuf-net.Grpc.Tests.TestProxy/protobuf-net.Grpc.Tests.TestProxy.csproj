@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- Directory.Build.props infers IsTestProject from the project *name* containing "Test";
+         this is a fixture library with no test adapter, so `dotnet test` on the traversal would
+         try to run it and abort -->
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
