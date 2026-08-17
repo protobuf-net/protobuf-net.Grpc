@@ -64,7 +64,7 @@ namespace ProtoBuf.Grpc.Configuration
                     var serviceContractSimplifiedExceptions = serviceImplSimplifiedExceptions ||
                                                               typeToBindItsMethods.IsDefined(
                                                                   typeof(SimpleRpcExceptionsAttribute));
-                    var bindCtx = new ServiceBindContext(typeToBindItsMethods, serviceType, state, binderConfiguration.Binder);
+                    var bindCtx = new ServiceBindContext(serviceContract, serviceType, state, binderConfiguration.Binder);
                     foreach (var op in ContractOperation.FindOperations(binderConfiguration, typeToBindItsMethods, this))
                     {
                         if (ServerInvokerLookup.TryGetValue(op.MethodType, op.Context, op.Arg, op.Result, op.Void, out var invoker)
