@@ -19,6 +19,9 @@ internal static class ProxyModuleHelper
         return ProxyModuleIdentity + "-" + Interlocked.Increment(ref s_moduleCounter);
     }
 
+    // strong keys, which is fine: a collectible ALC only unloads when Unload() is called, and the
+    // Unloading handler below removes it here before collection - so this never pins one that would
+    // otherwise have gone away
     private static readonly ConcurrentDictionary<AssemblyLoadContext, ModuleBuilder> _proxyModules = new();
 
     public static ModuleBuilder GetOrCreateProxyModule(AssemblyLoadContext assemblyLoadContext)

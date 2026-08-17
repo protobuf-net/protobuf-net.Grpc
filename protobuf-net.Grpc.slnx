@@ -169,6 +169,9 @@
     <Project Path="tests/protobuf-net.Grpc.Test/protobuf-net.Grpc.Test.csproj">
       <BuildType Solution="VS|*" Project="Debug" />
     </Project>
+    <Project Path="tests/protobuf-net.Grpc.Tests.TestProxy/protobuf-net.Grpc.Tests.TestProxy.csproj">
+      <BuildType Solution="VS|*" Project="Debug" />
+    </Project>
   </Folder>
   <Folder Name="/toys/">
     <Project Path="toys/PlayClient/PlayClient.csproj">
