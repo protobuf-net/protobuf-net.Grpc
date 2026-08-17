@@ -20,14 +20,20 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         protected ServiceBinder() { }
 
-        private static readonly ConcurrentDictionary<Type, InterfaceMapping> s_map = new ConcurrentDictionary<Type, InterfaceMapping>();
+        // the key is the *pair*, deliberately: an interface mapping is a property of the contract and
+        // of the type implementing it, so keying on the contract alone hands the second implementation
+        // of a shared contract the first one's TargetMethods - and callers then read attributes off
+        // the wrong class's methods
+        private static readonly ConcurrentDictionary<(Type ContractType, Type ServiceType), InterfaceMapping> s_map
+            = new ConcurrentDictionary<(Type ContractType, Type ServiceType), InterfaceMapping>();
         private static InterfaceMapping GetMap(Type contractType, Type serviceType)
         {
-            if (!s_map.TryGetValue(contractType, out var interfaceMapping))
+            var key = (contractType, serviceType);
+            if (!s_map.TryGetValue(key, out var interfaceMapping))
             {   // note: it doesn't matter if this ends up getting called more than once
                 // in a race condition - we don't need to block etc (the result will be compatible)
                 interfaceMapping = serviceType.GetInterfaceMap(contractType);
-                s_map[contractType] = interfaceMapping;
+                s_map[key] = interfaceMapping;
             }
             return interfaceMapping;
         }
