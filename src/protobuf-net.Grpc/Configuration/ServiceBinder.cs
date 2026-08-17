@@ -215,9 +215,9 @@ namespace ProtoBuf.Grpc.Configuration
         /// </summary>
         public MethodInfo? GetMethodImplementation(MethodInfo serviceMethod, Type contractType, Type serviceType)
         {
-            if (contractType != serviceType & serviceMethod is object)
+            if (contractType != serviceType && serviceMethod is object)
             {
-                var map = GetMap(contractType, serviceType);
+                var map = GetMap(serviceMethod.DeclaringType ?? contractType, serviceType);
                 var from = map.InterfaceMethods;
                 var to = map.TargetMethods;
                 int end = Math.Min(from.Length, to.Length);
