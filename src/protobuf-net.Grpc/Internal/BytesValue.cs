@@ -252,10 +252,7 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         while (index < payload.Length)
         {
             var tag = ReadVarint(payload, ref index);
-            var field = (int)(tag >> 3);
-            var wireType = (int)(tag & 7);
-
-            if (field == 1 && wireType == 2)
+            if (tag == PayloadTag)
             {
                 var len = checked((int)ReadVarint(payload, ref index));
                 if (len < 0 || index + len > payload.Length) ThrowMalformed();
@@ -277,11 +274,13 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
             }
             else
             {
-                Skip(payload, ref index, wireType);
+                Skip(payload, ref index, (int)(tag & 7));
             }
         }
         return new(oversized, length, pooled);
     }
+
+    private const ulong PayloadTag = (1 << 3) | 2; // field 1, string
 
     /// <summary>
     /// Skips one unknown field.
