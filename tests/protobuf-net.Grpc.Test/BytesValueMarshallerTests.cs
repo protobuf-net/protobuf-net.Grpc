@@ -9,6 +9,7 @@ namespace protobuf_net.Grpc.Test;
 
 #pragma warning disable CS0618 // all marked obsolete!
 
+[Collection(BytesValueCollection.Name)]
 public class BytesValueMarshallerTests
 {
     [Fact]

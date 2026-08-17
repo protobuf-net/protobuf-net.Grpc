@@ -181,69 +181,162 @@ public sealed class BytesValue(byte[] oversized, int length, bool pooled)
         }
     }
 
+    /// <summary>
+    /// Parses any payload <see cref="TryFastParse"/> declines, without going near the runtime model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to be <c>RuntimeTypeModel.Default.Deserialize&lt;BytesValue&gt;(...)</c>, and that
+    /// single line was expensive out of all proportion to how often it runs: <c>MarshallerCache</c>
+    /// pre-registers <see cref="Marshaller"/> in a field initialiser, so <em>every</em> consumer -
+    /// including one that never touches a <see cref="Stream"/>-shaped operation - made the whole
+    /// reflective serializer machinery statically reachable. Under native AOT that is metadata ILC
+    /// must keep and analyse; measured on a real publish, removing this root and the one in
+    /// <c>ProtoBufMarshallerFactory</c> took a sample app from 100 IL warnings to 5. Neither alone
+    /// moved it at all - each kept the other's graph alive.
+    /// </para>
+    /// <para>
+    /// The shape is trivial - one <c>bytes</c> field - so parsing it by hand removes the dependency
+    /// outright rather than gating it, and it is kept deliberately small: field 1, plus enough
+    /// unknown-field skipping not to regress a peer that sends something extra. See
+    /// <see cref="Skip"/> for the one capability knowingly dropped.
+    /// </para>
+    /// <para>
+    /// This does not use protobuf-net's own reader APIs either: the assembly compiles against
+    /// protobuf-net 2.x (<c>ProtoBufNet2Version</c>), where <c>ProtoReader.State</c> does not exist.
+    /// If that pin is ever raised to 3.x, most of this could go.
+    /// </para>
+    /// <para>
+    /// Field 1 uses <b>replace</b> semantics if it somehow appears twice, matching the protobuf rule
+    /// for a non-repeated field (last one wins). The runtime model would have <em>concatenated</em>,
+    /// via protobuf-net's append behaviour for <c>byte[]</c>; that difference is unreachable in
+    /// practice, since each chunk is its own gRPC message and <see cref="Serialize"/> writes field 1
+    /// exactly once, so no legacy opt-out is offered.
+    /// </para>
+    /// </remarks>
     private static BytesValue SlowParse(in ReadOnlySequence<byte> payload)
     {
-        IProtoInput<Stream> model = RuntimeTypeModel.Default;
-        var len = payload.Length;
-        // use protobuf-net v3 API if available
-        if (model is IProtoInput<ReadOnlySequence<byte>> v3)
+        if (payload.IsSingleSegment)
         {
-            return v3.Deserialize<BytesValue>(payload);
+#if NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
+            return Parse(payload.FirstSpan);
+#else
+            return Parse(payload.First.Span);
+#endif
         }
 
-        // use protobuf-net v2 API
-        MemoryStream ms;
-        if (payload.IsSingleSegment && MemoryMarshal.TryGetArray(payload.First, out var segment))
+        // multi-segment: linearize into a leased buffer, which is simpler (and cheaper) than
+        // threading a segment-crossing reader through what is a handful of bytes of framing
+        var length = checked((int)payload.Length);
+        var leased = ArrayPool<byte>.Shared.Rent(length);
+        try
         {
-            ms = new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false, publiclyVisible: true);
+            payload.CopyTo(leased);
+            return Parse(new ReadOnlySpan<byte>(leased, 0, length));
         }
-        else
+        finally
         {
-            ms = new MemoryStream();
-            ms.SetLength(len);
-            if (ms.TryGetBuffer(out var buffer) && buffer.Count >= len)
+            ArrayPool<byte>.Shared.Return(leased);
+        }
+    }
+
+    private static BytesValue Parse(ReadOnlySpan<byte> payload)
+    {
+        // an empty payload is a legal encoding of an empty BytesValue - every field defaulted - and
+        // is one of the ways TryFastParse declines, so it is a normal outcome rather than an error
+        byte[] oversized = [];
+        int length = 0;
+        bool pooled = false;
+
+        var index = 0;
+        while (index < payload.Length)
+        {
+            var tag = ReadVarint(payload, ref index);
+            if (tag == PayloadTag)
             {
-                payload.CopyTo(buffer.AsSpan());
+                var len = checked((int)ReadVarint(payload, ref index));
+                if (len < 0 || index + len > payload.Length) ThrowMalformed();
+
+                if (pooled) ArrayPool<byte>.Shared.Return(oversized); // replace, not append
+                if (len == 0)
+                {
+                    oversized = [];
+                    pooled = false;
+                }
+                else
+                {
+                    oversized = ArrayPool<byte>.Shared.Rent(len);
+                    pooled = true;
+                    payload.Slice(index, len).CopyTo(oversized);
+                }
+                length = len;
+                index += len;
             }
             else
             {
-#if !(NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER)
-                byte[] leased = [];
-#endif
-                foreach (var chunk in payload)
-                {
-#if NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
-                            ms.Write(chunk.Span);
-#else
-                    if (MemoryMarshal.TryGetArray(chunk, out segment))
-                    {
-                        ms.Write(segment.Array!, segment.Offset, segment.Count);
-                    }
-                    else
-                    {
-                        if (leased.Length < segment.Count)
-                        {
-                            ArrayPool<byte>.Shared.Return(leased);
-                            leased = ArrayPool<byte>.Shared.Rent(segment.Count);
-                        }
-                        segment.AsSpan().CopyTo(leased);
-                        ms.Write(leased, 0, segment.Count);
-                    }
-#endif
-                }
-#if !(NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER)
-                if (leased.Length != 0)
-                {
-                    ArrayPool<byte>.Shared.Return(leased);
-                }
-#endif
-                Debug.Assert(ms.Position == len, "should have written all bytes");
-                ms.Position = 0;
+                Skip(payload, ref index, (int)(tag & 7));
             }
         }
-        Debug.Assert(ms.Position == 0 && ms.Length == len, "full payload should be ready to read");
-        return model.Deserialize<BytesValue>(ms);
+        return new(oversized, length, pooled);
     }
+
+    private const ulong PayloadTag = (1 << 3) | 2; // field 1, string
+
+    /// <summary>
+    /// Skips one unknown field.
+    /// </summary>
+    /// <remarks>
+    /// Groups (wire types 3 and 4) are deliberately <em>not</em> supported, and that is the one place
+    /// this is less capable than the runtime model it replaced. <see cref="BytesValue"/> is
+    /// <c>.google.protobuf.BytesValue</c> - a frozen well-known type with exactly one field - so a
+    /// group inside it is not a payload anyone can produce by evolving a schema. Supporting it cost
+    /// recursion and a depth counter for a case that cannot arise, so it throws instead.
+    /// </remarks>
+    private static void Skip(ReadOnlySpan<byte> payload, ref int index, int wireType)
+    {
+        switch (wireType)
+        {
+            case 0: // varint
+                ReadVarint(payload, ref index);
+                break;
+            case 1: // fixed64
+                index += 8;
+                break;
+            case 2: // length-delimited
+                // NB two statements, deliberately: `index += ReadVarint(payload, ref index)` reads
+                // the left operand *before* the call advances `index` through the ref parameter, so
+                // the length prefix's own bytes get counted twice and the skip lands short
+                var skip = checked((int)ReadVarint(payload, ref index));
+                index += skip;
+                break;
+            case 5: // fixed32
+                index += 4;
+                break;
+            default: // 3/4 groups, 6/7 do not exist
+                ThrowMalformed();
+                break;
+        }
+        if (index > payload.Length) ThrowMalformed();
+    }
+
+    private static ulong ReadVarint(ReadOnlySpan<byte> payload, ref int index)
+    {
+        ulong value = 0;
+        var shift = 0;
+        while (index < payload.Length)
+        {
+            var b = payload[index++];
+            value |= (ulong)(b & 0x7F) << shift;
+            if ((b & 0x80) == 0) return value;
+            shift += 7;
+            if (shift > 63) break;
+        }
+        ThrowMalformed();
+        return 0;
+    }
+
+    private static void ThrowMalformed()
+        => throw new InvalidOperationException($"Invalid {nameof(BytesValue)} payload");
 
     internal static BytesValue? TryFastParse(ReadOnlySpan<byte> start, in ReadOnlySequence<byte> payload)
     {
