@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 using System.Reflection.Emit;
-#if NET6_0_OR_GREATER
+#if NET
 using System.Collections.Concurrent;
 using System.Runtime.Loader;
 using System.Threading;
@@ -12,7 +12,7 @@ internal static class ProxyModuleHelper
     static ProxyModuleHelper() { }
     public static readonly string ProxyModuleIdentity = typeof(ProxyEmitter).Namespace + ".Proxies";
 
-#if NET6_0_OR_GREATER
+#if NET
     private static int s_moduleCounter = 0;
     private static string GetNextModuleIdentity()
     {

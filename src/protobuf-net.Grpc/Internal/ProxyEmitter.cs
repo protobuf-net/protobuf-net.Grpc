@@ -10,7 +10,7 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-#if NET6_0_OR_GREATER
+#if NET
 using System.Runtime.Loader;
 #endif
 
@@ -140,7 +140,7 @@ namespace ProtoBuf.Grpc.Internal
         {
             Type baseType = GrpcClientFactory.ClientBaseType;
 
-#if NET6_0_OR_GREATER
+#if NET
             var proxyLoadContext = AssemblyLoadContext.GetLoadContext(typeof(TService).Assembly) ??
                 AssemblyLoadContext.Default;
             // Once we have the ALC for reflection, get or create the module for it.
