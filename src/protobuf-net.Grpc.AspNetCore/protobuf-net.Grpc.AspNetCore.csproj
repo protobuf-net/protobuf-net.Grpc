@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc.Server</RootNamespace>
+    <Title>protobuf-net.Grpc.AspNetCore</Title>
+    <Description>Hosts code-first gRPC services in ASP.NET Core</Description>
   </PropertyGroup>
 
   <ItemGroup>

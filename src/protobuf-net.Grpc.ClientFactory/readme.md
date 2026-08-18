@@ -1,28 +1,44 @@
-`protobuf-net.Grpc.ClientFactory` allows accessing clients in a standard .NET dependency-injection mechanism.
+# protobuf-net.Grpc.ClientFactory
 
-Core APIs:
+Registers [code-first gRPC](https://grpc.protobuf-net.dev/) clients with dependency injection, on top of
+`Grpc.Net.ClientFactory` — so the service contract interface is injectable, and gets `HttpClientFactory`'s
+handler lifetime, logging and resilience along with it.
 
-``` csharp
-services.AddCodeFirstGrpcClient<IMyService>(...);
+```csharp
+builder.Services.AddCodeFirstGrpcClient<IMyAmazingService>(options =>
+{
+    options.Address = new Uri("https://localhost:5001");
+});
 ```
 
-This works like the inbuilt [`AddGrpcClient<T>(...)` API](https://learn.microsoft.com/aspnet/core/grpc/clientfactory),
-but additionally configures the gRPC service for use with protobuf-net.Grpc's code-first style. In addition to
-other APIs, this allows the `GrpcClientFactory` API to be injected to provide access to services.
+This works like the built-in
+[`AddGrpcClient<T>(...)`](https://learn.microsoft.com/aspnet/core/grpc/clientfactory), but additionally
+configures the service for protobuf-net.Grpc's code-first style. Then take a dependency on the contract
+itself — or on `GrpcClientFactory`, to resolve services yourself:
 
-By default, this uses the default/shared configuration. If you wish to use a bespoke protobuf-net configuration,
-additional services can be injected into the service provider. For *servers*, the `BinderConfiguration` is the primary
-API to inject for additional configuration. For *clients*, the `ClientFactory` is the most important. You
-can (if you wish) unify this by providing both:
+```csharp
+public class MyController(IMyAmazingService service) { /* ... */ }
+```
 
-``` c#
-var model = RuntimeTypeModel.Create(); // custom model
-// not shown: configure protobuf-net model
+`ConfigureCodeFirstGrpcClient<T>` does the same for a client builder you already have.
 
-// prepare a custom protobuf-net.Grpc configuration using that model
+## Using a custom protobuf-net model
+
+The default/shared configuration is used unless you register your own. For *clients* the key service is
+`ClientFactory`; for *servers* it is `BinderConfiguration`. Both can come from one model:
+
+```csharp
+var model = RuntimeTypeModel.Create(); // configure the protobuf-net model as needed
+
 var marshallerFactory = ProtoBufMarshallerFactory.Create(model, ProtoBufMarshallerFactory.Options.None);
 var binderConfiguration = BinderConfiguration.Create([marshallerFactory]);
 
-// register server and client overrides
-services.AddSingleton(binderConfiguration).AddSingleton(ClientFactory.Create(binderConfiguration));
+services.AddSingleton(binderConfiguration)
+        .AddSingleton(ClientFactory.Create(binderConfiguration));
 ```
+
+## More
+
+- [Registering a client service](https://grpc.protobuf-net.dev/registerClientService)
+- [Configuration options](https://grpc.protobuf-net.dev/configuration)
+- [Release notes](https://github.com/protobuf-net/protobuf-net.Grpc/releases)

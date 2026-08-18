@@ -1,21 +1,37 @@
 # Package/Project Layout
 
-protobuf-net.Grpc is split over several projects:
+protobuf-net.Grpc is split over several packages; you generally reference the one that matches how you are
+hosting or consuming the service.
 
 ## `protobuf-net.Grpc`
 
-You will not usually reference this directly. This is the shared core and contains all the code that isn't tied to a specific client/server implementation,
-and it targets all runtimes. It does not have any expensive downstream dependencies and is entirely managed. It contains all of the code related to clients (both
-the managed and unmanaged client APIs share a common `ChannelBase` abstraction).
+The shared core: everything that is not tied to a specific client/server implementation. It targets all
+runtimes, is entirely managed, and has no expensive downstream dependencies. All the client-side code lives
+here — the managed and unmanaged client APIs share a common `ChannelBase` abstraction — so a client over
+`Grpc.Net.Client` needs only this package.
 
 ## `protobuf-net.Grpc.AspNetCore`
 
-This is for using gRPC as a **server** with the ASP.NET Core 3.1 implementation. It takes a dependency on `Grpc.AspNetCore.Server` and `Microsoft.AspNetCore.App`
-(although you'll already have the latter if you're hosting in ASP.NET Core). It only works on .NET Core 3.1 (or above).
+For using gRPC as a **server** on ASP.NET Core. It takes a dependency on `Grpc.AspNetCore.Server` and
+`Microsoft.AspNetCore.App` (which you already have if you are hosting in ASP.NET Core).
+
+## `protobuf-net.Grpc.ClientFactory`
+
+For resolving **clients** from dependency injection, on top of `Grpc.Net.ClientFactory`: the service contract
+interface becomes injectable, with `HttpClientFactory`'s handler lifetime and logging applied to it.
+
+## `protobuf-net.Grpc.Reflection`
+
+Generates `.proto` schemas from code-first contracts, and implements the gRPC reflection service over them.
+Useful on its own for producing a schema to hand to callers on other platforms.
+
+## `protobuf-net.Grpc.AspNetCore.Reflection`
+
+Wires the above into ASP.NET Core endpoint routing, so tools such as `grpcurl` can discover the services a
+code-first host exposes.
 
 ## `protobuf-net.Grpc.Native`
 
-This is for using gRPC as a **client or server** using the unmanaged/native binaries via `Grpc.Core` (specifically, the `Channel` API).
-Like `protobuf-net.Grpc`, it works on .NET Standard 2.0 or .NET Framework 4.6.1 (or above).
-
-(caveat: server API not yet implemented for `protobuf-net.Grpc.Native`)
+For using gRPC as a **client or server** over the unmanaged/native binaries via `Grpc.Core` (specifically,
+the `Channel` API). Like `protobuf-net.Grpc`, it works on .NET Standard 2.0 and .NET Framework. `Grpc.Core`
+itself is in maintenance, so prefer the managed stack where that is an option.
