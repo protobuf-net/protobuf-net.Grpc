@@ -2,11 +2,20 @@
   <Import Project="../Directory.Build.props" />
   <PropertyGroup>
     <PackageIcon>protobuf-net.png</PackageIcon>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <!-- the readme is included explicitly below; pack reads its items from the OUTER build of a
+         multi-targeting project, where the SDK's default item globs do not run, so the glob must
+         not be the only thing that finds it - and must not claim it twice -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);readme.md</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <None Include="../protobuf-net.png">
         <Pack>True</Pack>
         <PackagePath></PackagePath>
     </None>
+    <!-- each package carries its own readme.md - it is what nuget.org shows on the package page,
+         so it should describe THAT package; anything without one falls back to the repo readme -->
+    <None Include="readme.md" Pack="true" PackagePath="/" Condition="Exists('$(MSBuildProjectDirectory)/readme.md')" />
+    <None Include="../../readme.md" Link="readme.md" Pack="true" PackagePath="/" Visible="false" Condition="!Exists('$(MSBuildProjectDirectory)/readme.md')" />
   </ItemGroup>
 </Project>

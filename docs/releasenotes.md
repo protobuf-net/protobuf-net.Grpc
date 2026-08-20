@@ -1,5 +1,9 @@
 # Release Notes
 
+**[The GitHub releases page](https://github.com/protobuf-net/protobuf-net.Grpc/releases) is the primary
+source of release notes** — that is where each release is described, as it happens. The notes below remain
+as the history up to 1.2.2.
+
 ## unreleased
 
 ## 1.2.2

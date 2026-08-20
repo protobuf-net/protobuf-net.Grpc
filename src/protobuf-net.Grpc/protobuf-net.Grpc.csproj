@@ -2,6 +2,8 @@
     <PropertyGroup>
         <TargetFrameworks>net472;netstandard2.1;netstandard2.0;net8.0;net10.0</TargetFrameworks>
         <RootNamespace>ProtoBuf.Grpc</RootNamespace>
+        <Title>protobuf-net.Grpc</Title>
+        <Description>Code-first gRPC for .NET: declare services as .NET interfaces, with no .proto file and no generated client; shared core for clients and servers</Description>
         <DefineConstants>$(DefineConstants);PLAT_NO_CHANNEL_READALLASYNC</DefineConstants>
     </PropertyGroup>
     <ItemGroup>

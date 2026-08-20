@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netstandard2.1;net8.0</TargetFrameworks>
     <RootNamespace>ProtoBuf.Grpc.ClientFactory</RootNamespace>
+    <Title>protobuf-net.Grpc.ClientFactory</Title>
+    <Description>Code-first gRPC clients for dependency injection, via HttpClientFactory</Description>
   </PropertyGroup>
 
   <ItemGroup>

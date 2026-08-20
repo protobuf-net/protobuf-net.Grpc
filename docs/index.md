@@ -9,6 +9,7 @@
 - [Register Client Service in Startup.cs](registerClientService)
 - [.NET Streams](streams)
 - [Native AOT and trimming](aot) (preview)
+- [Release notes](https://github.com/protobuf-net/protobuf-net.Grpc/releases)
 
 Other Content
 

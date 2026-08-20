@@ -14,7 +14,7 @@
         <RepositoryUrl>https://github.com/protobuf-net/protobuf-net.Grpc</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <Product>protobuf-net.Grpc ($(TargetFramework))</Product>
-        <PackageReleaseNotes>https://protobuf-net.github.io/protobuf-net.Grpc/releasenotes#$(VersionPrefix)</PackageReleaseNotes>
+        <PackageReleaseNotes>https://github.com/protobuf-net/protobuf-net.Grpc/releases</PackageReleaseNotes>
 
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
         <PackageTags>grpc</PackageTags>

@@ -3,6 +3,8 @@
     <PropertyGroup>
         <TargetFrameworks>net472;netstandard2.1;netstandard2.0;net8.0;net10.0</TargetFrameworks>
         <RootNamespace>ProtoBuf.Grpc.Reflection</RootNamespace>
+        <Title>protobuf-net.Grpc.Reflection</Title>
+        <Description>Generates .proto schemas from code-first gRPC contracts, and implements the gRPC reflection service</Description>
     </PropertyGroup>
 
     <ItemGroup>
