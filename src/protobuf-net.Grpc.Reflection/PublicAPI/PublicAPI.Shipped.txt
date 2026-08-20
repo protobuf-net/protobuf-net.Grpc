@@ -1,0 +1,110 @@
+#nullable enable
+~grpc.reflection.v1alpha.ErrorResponse.ErrorMessage.get -> string
+~grpc.reflection.v1alpha.ErrorResponse.ErrorMessage.set -> void
+~grpc.reflection.v1alpha.ExtensionNumberResponse.BaseTypeName.get -> string
+~grpc.reflection.v1alpha.ExtensionNumberResponse.BaseTypeName.set -> void
+~grpc.reflection.v1alpha.ExtensionNumberResponse.ExtensionNumbers.get -> int[]
+~grpc.reflection.v1alpha.ExtensionNumberResponse.ExtensionNumbers.set -> void
+~grpc.reflection.v1alpha.ExtensionRequest.ContainingType.get -> string
+~grpc.reflection.v1alpha.ExtensionRequest.ContainingType.set -> void
+~grpc.reflection.v1alpha.FileDescriptorResponse.FileDescriptorProtoes.get -> System.Collections.Generic.List<byte[]>
+~grpc.reflection.v1alpha.IServerReflection.ServerReflectionInfoAsync(System.Collections.Generic.IAsyncEnumerable<grpc.reflection.v1alpha.ServerReflectionRequest> values, ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Collections.Generic.IAsyncEnumerable<grpc.reflection.v1alpha.ServerReflectionResponse>
+~grpc.reflection.v1alpha.ListServiceResponse.Services.get -> System.Collections.Generic.List<grpc.reflection.v1alpha.ServiceResponse>
+~grpc.reflection.v1alpha.ServerReflectionRequest.AllExtensionNumbersOfType.get -> string
+~grpc.reflection.v1alpha.ServerReflectionRequest.AllExtensionNumbersOfType.set -> void
+~grpc.reflection.v1alpha.ServerReflectionRequest.FileByFilename.get -> string
+~grpc.reflection.v1alpha.ServerReflectionRequest.FileByFilename.set -> void
+~grpc.reflection.v1alpha.ServerReflectionRequest.FileContainingExtension.get -> grpc.reflection.v1alpha.ExtensionRequest
+~grpc.reflection.v1alpha.ServerReflectionRequest.FileContainingExtension.set -> void
+~grpc.reflection.v1alpha.ServerReflectionRequest.FileContainingSymbol.get -> string
+~grpc.reflection.v1alpha.ServerReflectionRequest.FileContainingSymbol.set -> void
+~grpc.reflection.v1alpha.ServerReflectionRequest.Host.get -> string
+~grpc.reflection.v1alpha.ServerReflectionRequest.Host.set -> void
+~grpc.reflection.v1alpha.ServerReflectionRequest.ListServices.get -> string
+~grpc.reflection.v1alpha.ServerReflectionRequest.ListServices.set -> void
+~grpc.reflection.v1alpha.ServerReflectionResponse.AllExtensionNumbersResponse.get -> grpc.reflection.v1alpha.ExtensionNumberResponse
+~grpc.reflection.v1alpha.ServerReflectionResponse.AllExtensionNumbersResponse.set -> void
+~grpc.reflection.v1alpha.ServerReflectionResponse.ErrorResponse.get -> grpc.reflection.v1alpha.ErrorResponse
+~grpc.reflection.v1alpha.ServerReflectionResponse.ErrorResponse.set -> void
+~grpc.reflection.v1alpha.ServerReflectionResponse.FileDescriptorResponse.get -> grpc.reflection.v1alpha.FileDescriptorResponse
+~grpc.reflection.v1alpha.ServerReflectionResponse.FileDescriptorResponse.set -> void
+~grpc.reflection.v1alpha.ServerReflectionResponse.ListServicesResponse.get -> grpc.reflection.v1alpha.ListServiceResponse
+~grpc.reflection.v1alpha.ServerReflectionResponse.ListServicesResponse.set -> void
+~grpc.reflection.v1alpha.ServerReflectionResponse.OriginalRequest.get -> grpc.reflection.v1alpha.ServerReflectionRequest
+~grpc.reflection.v1alpha.ServerReflectionResponse.OriginalRequest.set -> void
+~grpc.reflection.v1alpha.ServerReflectionResponse.ValidHost.get -> string
+~grpc.reflection.v1alpha.ServerReflectionResponse.ValidHost.set -> void
+~grpc.reflection.v1alpha.ServiceResponse.Name.get -> string
+~grpc.reflection.v1alpha.ServiceResponse.Name.set -> void
+grpc.reflection.v1alpha.ErrorResponse
+grpc.reflection.v1alpha.ErrorResponse.ErrorCode.get -> int
+grpc.reflection.v1alpha.ErrorResponse.ErrorCode.set -> void
+grpc.reflection.v1alpha.ErrorResponse.ErrorResponse() -> void
+grpc.reflection.v1alpha.ExtensionNumberResponse
+grpc.reflection.v1alpha.ExtensionNumberResponse.ExtensionNumberResponse() -> void
+grpc.reflection.v1alpha.ExtensionRequest
+grpc.reflection.v1alpha.ExtensionRequest.ExtensionNumber.get -> int
+grpc.reflection.v1alpha.ExtensionRequest.ExtensionNumber.set -> void
+grpc.reflection.v1alpha.ExtensionRequest.ExtensionRequest() -> void
+grpc.reflection.v1alpha.FileDescriptorResponse
+grpc.reflection.v1alpha.FileDescriptorResponse.FileDescriptorResponse() -> void
+grpc.reflection.v1alpha.IServerReflection
+grpc.reflection.v1alpha.ListServiceResponse
+grpc.reflection.v1alpha.ListServiceResponse.ListServiceResponse() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestCase.get -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase.AllExtensionNumbersOfType = 6 -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase.FileByFilename = 3 -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase.FileContainingExtension = 5 -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase.FileContainingSymbol = 4 -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase.ListServices = 7 -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase.None = 0 -> grpc.reflection.v1alpha.ServerReflectionRequest.MessageRequestOneofCase
+grpc.reflection.v1alpha.ServerReflectionRequest.ResetAllExtensionNumbersOfType() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest.ResetFileByFilename() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest.ResetFileContainingExtension() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest.ResetFileContainingSymbol() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest.ResetListServices() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest.ServerReflectionRequest() -> void
+grpc.reflection.v1alpha.ServerReflectionRequest.ShouldSerializeAllExtensionNumbersOfType() -> bool
+grpc.reflection.v1alpha.ServerReflectionRequest.ShouldSerializeFileByFilename() -> bool
+grpc.reflection.v1alpha.ServerReflectionRequest.ShouldSerializeFileContainingExtension() -> bool
+grpc.reflection.v1alpha.ServerReflectionRequest.ShouldSerializeFileContainingSymbol() -> bool
+grpc.reflection.v1alpha.ServerReflectionRequest.ShouldSerializeListServices() -> bool
+grpc.reflection.v1alpha.ServerReflectionResponse
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseCase.get -> grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase.AllExtensionNumbersResponse = 5 -> grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase.ErrorResponse = 7 -> grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase.FileDescriptorResponse = 4 -> grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase.ListServicesResponse = 6 -> grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase.None = 0 -> grpc.reflection.v1alpha.ServerReflectionResponse.MessageResponseOneofCase
+grpc.reflection.v1alpha.ServerReflectionResponse.ResetAllExtensionNumbersResponse() -> void
+grpc.reflection.v1alpha.ServerReflectionResponse.ResetErrorResponse() -> void
+grpc.reflection.v1alpha.ServerReflectionResponse.ResetFileDescriptorResponse() -> void
+grpc.reflection.v1alpha.ServerReflectionResponse.ResetListServicesResponse() -> void
+grpc.reflection.v1alpha.ServerReflectionResponse.ServerReflectionResponse() -> void
+grpc.reflection.v1alpha.ServerReflectionResponse.ShouldSerializeAllExtensionNumbersResponse() -> bool
+grpc.reflection.v1alpha.ServerReflectionResponse.ShouldSerializeErrorResponse() -> bool
+grpc.reflection.v1alpha.ServerReflectionResponse.ShouldSerializeFileDescriptorResponse() -> bool
+grpc.reflection.v1alpha.ServerReflectionResponse.ShouldSerializeListServicesResponse() -> bool
+grpc.reflection.v1alpha.ServiceResponse
+grpc.reflection.v1alpha.ServiceResponse.ServiceResponse() -> void
+ProtoBuf.Grpc.Reflection.ReflectionService
+ProtoBuf.Grpc.Reflection.ReflectionService.ReflectionService(Google.Protobuf.Reflection.FileDescriptorSet! fileDescriptorSet) -> void
+ProtoBuf.Grpc.Reflection.ReflectionService.ReflectionService(params System.Type![]! types) -> void
+ProtoBuf.Grpc.Reflection.ReflectionService.ReflectionService(ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration, params System.Type![]! types) -> void
+ProtoBuf.Grpc.Reflection.SchemaGenerator
+ProtoBuf.Grpc.Reflection.SchemaGenerator.BinderConfiguration.get -> ProtoBuf.Grpc.Configuration.BinderConfiguration?
+ProtoBuf.Grpc.Reflection.SchemaGenerator.BinderConfiguration.set -> void
+ProtoBuf.Grpc.Reflection.SchemaGenerator.GetSchema(params System.Type![]! contractTypes) -> string!
+ProtoBuf.Grpc.Reflection.SchemaGenerator.GetSchema(System.Type! contractType) -> string!
+ProtoBuf.Grpc.Reflection.SchemaGenerator.GetSchema<TService>() -> string!
+ProtoBuf.Grpc.Reflection.SchemaGenerator.Options.get -> ProtoBuf.Meta.SchemaGenerationOptions!
+ProtoBuf.Grpc.Reflection.SchemaGenerator.ProtoSyntax.get -> ProtoBuf.Meta.ProtoSyntax
+ProtoBuf.Grpc.Reflection.SchemaGenerator.ProtoSyntax.set -> void
+ProtoBuf.Grpc.Reflection.SchemaGenerator.SchemaGenerator() -> void
+ProtoBuf.Grpc.Reflection.SymbolRegistry
+ProtoBuf.Grpc.Reflection.SymbolRegistry.FileByName(string! filename) -> Google.Protobuf.Reflection.FileDescriptorProto?
+ProtoBuf.Grpc.Reflection.SymbolRegistry.FileContainingSymbol(string! symbol) -> Google.Protobuf.Reflection.FileDescriptorProto?
+static ProtoBuf.Grpc.Reflection.SymbolRegistry.FromFiles(Google.Protobuf.Reflection.FileDescriptorSet! fileDescriptorSet) -> ProtoBuf.Grpc.Reflection.SymbolRegistry!

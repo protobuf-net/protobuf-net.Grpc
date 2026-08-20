@@ -1,0 +1,214 @@
+#nullable enable
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoGrpcAttribute
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoGrpcAttribute.Model.get -> System.Type?
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoGrpcAttribute.Model.set -> void
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoGrpcAttribute.ProtoGrpcAttribute() -> void
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoGrpcAttribute.RegistrationMethodName.get -> string?
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoGrpcAttribute.RegistrationMethodName.set -> void
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoServiceAttribute
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoServiceAttribute.Contract.get -> System.Type!
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoServiceAttribute.Implementation.get -> System.Type?
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoServiceAttribute.ProtoServiceAttribute(System.Type! contract, System.Type! implementation) -> void
+[PBN9001]ProtoBuf.Grpc.Configuration.ProtoServiceAttribute.ProtoServiceAttribute(System.Type! contract) -> void
+abstract ProtoBuf.Grpc.Configuration.ClientFactory.BinderConfiguration.get -> ProtoBuf.Grpc.Configuration.BinderConfiguration!
+abstract ProtoBuf.Grpc.Configuration.ClientFactory.CreateClient<TService>(Grpc.Core.CallInvoker! channel) -> TService!
+abstract ProtoBuf.Grpc.Configuration.MarshallerFactory.CanSerialize(System.Type! type) -> bool
+const ProtoBuf.Grpc.Internal.BytesValue.MaxLength = 2097151 -> int
+override ProtoBuf.Grpc.CallContext.Equals(object? obj) -> bool
+override ProtoBuf.Grpc.CallContext.GetHashCode() -> int
+override ProtoBuf.Grpc.CallContext.ToString() -> string!
+override ProtoBuf.Grpc.Client.GrpcClient.ToString() -> string!
+override ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase.ClientStreamingServerHandler<TRequest, TResponse>(Grpc.Core.IAsyncStreamReader<TRequest!>! requestStream, Grpc.Core.ServerCallContext! context, Grpc.Core.ClientStreamingServerMethod<TRequest!, TResponse!>! continuation) -> System.Threading.Tasks.Task<TResponse!>!
+override ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase.DuplexStreamingServerHandler<TRequest, TResponse>(Grpc.Core.IAsyncStreamReader<TRequest!>! requestStream, Grpc.Core.IServerStreamWriter<TResponse!>! responseStream, Grpc.Core.ServerCallContext! context, Grpc.Core.DuplexStreamingServerMethod<TRequest!, TResponse!>! continuation) -> System.Threading.Tasks.Task!
+override ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase.ServerStreamingServerHandler<TRequest, TResponse>(TRequest! request, Grpc.Core.IServerStreamWriter<TResponse!>! responseStream, Grpc.Core.ServerCallContext! context, Grpc.Core.ServerStreamingServerMethod<TRequest!, TResponse!>! continuation) -> System.Threading.Tasks.Task!
+override ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase.UnaryServerHandler<TRequest, TResponse>(TRequest! request, Grpc.Core.ServerCallContext! context, Grpc.Core.UnaryServerMethod<TRequest!, TResponse!>! continuation) -> System.Threading.Tasks.Task<TResponse!>!
+override ProtoBuf.Grpc.Internal.Empty.Equals(object? obj) -> bool
+override ProtoBuf.Grpc.Internal.Empty.GetHashCode() -> int
+override ProtoBuf.Grpc.Internal.Empty.ToString() -> string!
+ProtoBuf.Grpc.CallContext
+ProtoBuf.Grpc.CallContext.AggregateAsync<TRequest, TValue>(System.Collections.Generic.IAsyncEnumerable<TRequest>! source, System.Func<TValue, TRequest, ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask<TValue>>! aggregate, TValue seed) -> System.Threading.Tasks.ValueTask<TValue>
+ProtoBuf.Grpc.CallContext.As<T>() -> T!
+ProtoBuf.Grpc.CallContext.CallContext() -> void
+ProtoBuf.Grpc.CallContext.CallContext(in Grpc.Core.CallOptions callOptions = default(Grpc.Core.CallOptions), ProtoBuf.Grpc.CallContextFlags flags = ProtoBuf.Grpc.CallContextFlags.None, object? state = null) -> void
+ProtoBuf.Grpc.CallContext.CallContext(object! server, Grpc.Core.ServerCallContext! context) -> void
+ProtoBuf.Grpc.CallContext.CallOptions.get -> Grpc.Core.CallOptions
+ProtoBuf.Grpc.CallContext.CancellationToken.get -> System.Threading.CancellationToken
+ProtoBuf.Grpc.CallContext.ConsumeAsync<TRequest>(System.Collections.Generic.IAsyncEnumerable<TRequest>! source, System.Func<TRequest, ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! consumer) -> System.Threading.Tasks.ValueTask
+ProtoBuf.Grpc.CallContext.Deadline.get -> System.DateTime?
+ProtoBuf.Grpc.CallContext.FullDuplexAsync<T>(System.Func<ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! producer, System.Collections.Generic.IAsyncEnumerable<T>! source, System.Func<System.Collections.Generic.IAsyncEnumerable<T>!, ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! consumer) -> System.Threading.Tasks.ValueTask
+ProtoBuf.Grpc.CallContext.FullDuplexAsync<T>(System.Func<ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! producer, System.Collections.Generic.IAsyncEnumerable<T>! source, System.Func<T, ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! consumer) -> System.Threading.Tasks.ValueTask
+ProtoBuf.Grpc.CallContext.FullDuplexAsync<TRequest, TResponse>(System.Func<ProtoBuf.Grpc.CallContext, System.Collections.Generic.IAsyncEnumerable<TResponse>!>! producer, System.Collections.Generic.IAsyncEnumerable<TRequest>! source, System.Func<System.Collections.Generic.IAsyncEnumerable<TRequest>!, ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! consumer) -> System.Collections.Generic.IAsyncEnumerable<TResponse>!
+ProtoBuf.Grpc.CallContext.FullDuplexAsync<TRequest, TResponse>(System.Func<ProtoBuf.Grpc.CallContext, System.Collections.Generic.IAsyncEnumerable<TResponse>!>! producer, System.Collections.Generic.IAsyncEnumerable<TRequest>! source, System.Func<TRequest, ProtoBuf.Grpc.CallContext, System.Threading.Tasks.ValueTask>! consumer) -> System.Collections.Generic.IAsyncEnumerable<TResponse>!
+ProtoBuf.Grpc.CallContext.RequestHeaders.get -> Grpc.Core.Metadata?
+ProtoBuf.Grpc.CallContext.ResponseHeaders() -> Grpc.Core.Metadata!
+ProtoBuf.Grpc.CallContext.ResponseHeadersAsync() -> System.Threading.Tasks.ValueTask<Grpc.Core.Metadata!>
+ProtoBuf.Grpc.CallContext.ResponseStatus() -> Grpc.Core.Status
+ProtoBuf.Grpc.CallContext.ResponseTrailers() -> Grpc.Core.Metadata!
+ProtoBuf.Grpc.CallContext.ServerCallContext.get -> Grpc.Core.ServerCallContext?
+ProtoBuf.Grpc.CallContext.State.get -> object?
+ProtoBuf.Grpc.CallContext.WriteOptions.get -> Grpc.Core.WriteOptions?
+ProtoBuf.Grpc.CallContextFlags
+ProtoBuf.Grpc.CallContextFlags.CaptureMetadata = 1 -> ProtoBuf.Grpc.CallContextFlags
+ProtoBuf.Grpc.CallContextFlags.IgnoreStreamTermination = 2 -> ProtoBuf.Grpc.CallContextFlags
+ProtoBuf.Grpc.CallContextFlags.None = 0 -> ProtoBuf.Grpc.CallContextFlags
+ProtoBuf.Grpc.ChannelAsyncEnumerableExtensions
+ProtoBuf.Grpc.Client.GrpcClient
+ProtoBuf.Grpc.Client.GrpcClient.BlockingUnary<TRequest, TResponse>(TRequest! request, string! operationName, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> TResponse!
+ProtoBuf.Grpc.Client.GrpcClient.BlockingUnary<TRequest, TResponse>(TRequest! request, System.Reflection.MethodInfo! method, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> TResponse!
+ProtoBuf.Grpc.Client.GrpcClient.ClientStreamingAsync<TRequest, TResponse>(System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, string! operationName, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Threading.Tasks.Task<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.ClientStreamingAsync<TRequest, TResponse>(System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, System.Reflection.MethodInfo! method, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Threading.Tasks.Task<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.DuplexStreamingAsync<TRequest, TResponse>(System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, string! operationName, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Collections.Generic.IAsyncEnumerable<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.DuplexStreamingAsync<TRequest, TResponse>(System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, System.Reflection.MethodInfo! method, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Collections.Generic.IAsyncEnumerable<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.GrpcClient(Grpc.Core.CallInvoker! callInvoker, string! serviceName, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, string? host = null) -> void
+ProtoBuf.Grpc.Client.GrpcClient.GrpcClient(Grpc.Core.CallInvoker! callInvoker, System.Type! contractType, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, string? host = null) -> void
+ProtoBuf.Grpc.Client.GrpcClient.GrpcClient(Grpc.Core.ChannelBase! channel, string! serviceName, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, string? host = null) -> void
+ProtoBuf.Grpc.Client.GrpcClient.GrpcClient(Grpc.Core.ChannelBase! channel, System.Type! contractType, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, string? host = null) -> void
+ProtoBuf.Grpc.Client.GrpcClient.ServerStreamingAsync<TRequest, TResponse>(TRequest! request, string! operationName, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Collections.Generic.IAsyncEnumerable<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.ServerStreamingAsync<TRequest, TResponse>(TRequest! request, System.Reflection.MethodInfo! method, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Collections.Generic.IAsyncEnumerable<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.UnaryAsync<TRequest, TResponse>(TRequest! request, string! operationName, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Threading.Tasks.Task<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClient.UnaryAsync<TRequest, TResponse>(TRequest! request, System.Reflection.MethodInfo! method, in ProtoBuf.Grpc.CallContext context = default(ProtoBuf.Grpc.CallContext)) -> System.Threading.Tasks.Task<TResponse!>!
+ProtoBuf.Grpc.Client.GrpcClientFactory
+ProtoBuf.Grpc.Configuration.BinderConfiguration
+ProtoBuf.Grpc.Configuration.BinderConfiguration.Binder.get -> ProtoBuf.Grpc.Configuration.ServiceBinder!
+ProtoBuf.Grpc.Configuration.BinderConfiguration.GetMarshaller<T>() -> Grpc.Core.Marshaller<T>!
+ProtoBuf.Grpc.Configuration.BinderConfiguration.SetMarshaller<T>(Grpc.Core.Marshaller<T>? marshaller) -> void
+ProtoBuf.Grpc.Configuration.ClientFactory
+ProtoBuf.Grpc.Configuration.ClientFactory.ClientFactory() -> void
+ProtoBuf.Grpc.Configuration.IGrpcService
+ProtoBuf.Grpc.Configuration.IPayloadLength
+ProtoBuf.Grpc.Configuration.IPayloadLength.SetLength(long length) -> void
+ProtoBuf.Grpc.Configuration.MarshallerFactory
+ProtoBuf.Grpc.Configuration.MarshallerFactory.MarshallerFactory() -> void
+ProtoBuf.Grpc.Configuration.OperationAttribute
+ProtoBuf.Grpc.Configuration.OperationAttribute.Name.get -> string?
+ProtoBuf.Grpc.Configuration.OperationAttribute.OperationAttribute(string? name = null) -> void
+ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory
+ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Model.get -> ProtoBuf.Meta.TypeModel!
+ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options
+ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options.ContractTypesOnly = 1 -> ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options
+ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options.DisableContextualSerializer = 2 -> ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options
+ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options.None = 0 -> ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options
+ProtoBuf.Grpc.Configuration.ProxyAttribute
+ProtoBuf.Grpc.Configuration.ProxyAttribute.ProxyAttribute(System.Type! type) -> void
+ProtoBuf.Grpc.Configuration.ProxyAttribute.Type.get -> System.Type!
+ProtoBuf.Grpc.Configuration.ServerBinder
+ProtoBuf.Grpc.Configuration.ServerBinder.Bind(object! state, System.Type! serviceType, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, object? service = null) -> int
+ProtoBuf.Grpc.Configuration.ServerBinder.Bind<TService>(object! state, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, TService? service = null) -> int
+ProtoBuf.Grpc.Configuration.ServerBinder.MethodStub<TService>
+ProtoBuf.Grpc.Configuration.ServerBinder.MethodStub<TService>.CreateDelegate<TDelegate>() -> TDelegate!
+ProtoBuf.Grpc.Configuration.ServerBinder.MethodStub<TService>.Method.get -> System.Reflection.MethodInfo!
+ProtoBuf.Grpc.Configuration.ServerBinder.MethodStub<TService>.MethodStub() -> void
+ProtoBuf.Grpc.Configuration.ServerBinder.ServerBinder() -> void
+ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext
+ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext.ContractType.get -> System.Type!
+ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext.GetMetadata(System.Reflection.MethodInfo! method) -> System.Collections.Generic.IList<object!>!
+ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext.ServiceBinder.get -> ProtoBuf.Grpc.Configuration.ServiceBinder!
+ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext.ServiceType.get -> System.Type!
+ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext.State.get -> object!
+ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase
+ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase.ServerExceptionsInterceptorBase() -> void
+ProtoBuf.Grpc.Configuration.ServiceAttribute
+ProtoBuf.Grpc.Configuration.ServiceAttribute.Name.get -> string?
+ProtoBuf.Grpc.Configuration.ServiceAttribute.ServiceAttribute(string? name = null) -> void
+ProtoBuf.Grpc.Configuration.ServiceBinder
+ProtoBuf.Grpc.Configuration.ServiceBinder.GetMethodImplementation(System.Reflection.MethodInfo! serviceMethod, System.Type! contractType, System.Type! serviceType) -> System.Reflection.MethodInfo?
+ProtoBuf.Grpc.Configuration.ServiceBinder.ServiceBinder() -> void
+ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsAttribute
+ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsAttribute.SimpleRpcExceptionsAttribute() -> void
+ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsInterceptor
+ProtoBuf.Grpc.Configuration.SubServiceAttribute
+ProtoBuf.Grpc.Configuration.SubServiceAttribute.SubServiceAttribute() -> void
+ProtoBuf.Grpc.Internal.BytesValue
+ProtoBuf.Grpc.Internal.BytesValue.ArraySegment.get -> System.ArraySegment<byte>
+ProtoBuf.Grpc.Internal.BytesValue.BytesValue(byte[]! oversized, int length, bool pooled) -> void
+ProtoBuf.Grpc.Internal.BytesValue.IsEmpty.get -> bool
+ProtoBuf.Grpc.Internal.BytesValue.Length.get -> int
+ProtoBuf.Grpc.Internal.BytesValue.Memory.get -> System.ReadOnlyMemory<byte>
+ProtoBuf.Grpc.Internal.BytesValue.Recycle() -> void
+ProtoBuf.Grpc.Internal.BytesValue.RightSized.get -> byte[]!
+ProtoBuf.Grpc.Internal.BytesValue.RightSized.set -> void
+ProtoBuf.Grpc.Internal.BytesValue.Span.get -> System.ReadOnlySpan<byte>
+ProtoBuf.Grpc.Internal.Empty
+ProtoBuf.Grpc.Internal.Reshape
+ProtoBuf.Grpc.MetadataExtensions
+ProtoBuf.Grpc.ServiceBinderBaseExtensions
+static ProtoBuf.Grpc.CallContext.implicit operator ProtoBuf.Grpc.CallContext(in Grpc.Core.CallOptions options) -> ProtoBuf.Grpc.CallContext
+static ProtoBuf.Grpc.CallContext.implicit operator ProtoBuf.Grpc.CallContext(System.Threading.CancellationToken cancellationToken) -> ProtoBuf.Grpc.CallContext
+static ProtoBuf.Grpc.ChannelAsyncEnumerableExtensions.AsAsyncEnumerable<T>(this System.Threading.Channels.Channel<T>! channel, bool completeWriterOnCancellation, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
+static ProtoBuf.Grpc.ChannelAsyncEnumerableExtensions.AsAsyncEnumerable<T>(this System.Threading.Channels.Channel<T>! channel, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
+static ProtoBuf.Grpc.ChannelAsyncEnumerableExtensions.AsAsyncEnumerable<T>(this System.Threading.Channels.ChannelReader<T>! reader, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
+static ProtoBuf.Grpc.ChannelAsyncEnumerableExtensions.AsChannelReader<T>(this System.Collections.Generic.IAsyncEnumerable<T>! sequence, System.Threading.Channels.ChannelOptions? channelOptions = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Channels.ChannelReader<T>!
+static ProtoBuf.Grpc.Client.GrpcClientFactory.AllowUnencryptedHttp2.get -> bool
+static ProtoBuf.Grpc.Client.GrpcClientFactory.AllowUnencryptedHttp2.set -> void
+static ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService(this Grpc.Core.CallInvoker! client, System.Type! serviceType, ProtoBuf.Grpc.Configuration.ClientFactory? clientFactory = null) -> ProtoBuf.Grpc.Client.GrpcClient!
+static ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService(this Grpc.Core.ChannelBase! client, System.Type! serviceType, ProtoBuf.Grpc.Configuration.ClientFactory? clientFactory = null) -> ProtoBuf.Grpc.Client.GrpcClient!
+static ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService<TService>(this Grpc.Core.CallInvoker! client, ProtoBuf.Grpc.Configuration.ClientFactory? clientFactory = null) -> TService!
+static ProtoBuf.Grpc.Client.GrpcClientFactory.CreateGrpcService<TService>(this Grpc.Core.ChannelBase! client, ProtoBuf.Grpc.Configuration.ClientFactory? clientFactory = null) -> TService!
+static ProtoBuf.Grpc.Configuration.BinderConfiguration.Create(System.Collections.Generic.IList<ProtoBuf.Grpc.Configuration.MarshallerFactory!>? marshallerFactories = null, ProtoBuf.Grpc.Configuration.ServiceBinder? binder = null) -> ProtoBuf.Grpc.Configuration.BinderConfiguration!
+static ProtoBuf.Grpc.Configuration.BinderConfiguration.Default.get -> ProtoBuf.Grpc.Configuration.BinderConfiguration!
+static ProtoBuf.Grpc.Configuration.ClientFactory.Create(ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null) -> ProtoBuf.Grpc.Configuration.ClientFactory!
+static ProtoBuf.Grpc.Configuration.ClientFactory.Default.get -> ProtoBuf.Grpc.Configuration.ClientFactory!
+static ProtoBuf.Grpc.Configuration.ClientFactory.implicit operator ProtoBuf.Grpc.Configuration.BinderConfiguration!(ProtoBuf.Grpc.Configuration.ClientFactory? value) -> ProtoBuf.Grpc.Configuration.BinderConfiguration!
+static ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Create(ProtoBuf.Meta.RuntimeTypeModel? model, ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options options) -> ProtoBuf.Grpc.Configuration.MarshallerFactory!
+static ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Create(ProtoBuf.Meta.TypeModel? model = null, ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options options = ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Options.None, object? userState = null) -> ProtoBuf.Grpc.Configuration.MarshallerFactory!
+static ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.Default.get -> ProtoBuf.Grpc.Configuration.MarshallerFactory!
+static ProtoBuf.Grpc.Configuration.ProtoBufMarshallerFactory.GoogleProtobuf.get -> ProtoBuf.Grpc.Configuration.MarshallerFactory!
+static ProtoBuf.Grpc.Configuration.ServerBinder.Create(System.IO.TextWriter? log) -> ProtoBuf.Grpc.Configuration.ServerBinder!
+static ProtoBuf.Grpc.Configuration.ServiceBinder.Default.get -> ProtoBuf.Grpc.Configuration.ServiceBinder!
+static ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsAttribute.Default.get -> ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsAttribute!
+static ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsInterceptor.Instance.get -> ProtoBuf.Grpc.Configuration.SimpleRpcExceptionsInterceptor!
+static ProtoBuf.Grpc.Internal.BytesValue.Marshaller.get -> Grpc.Core.Marshaller<ProtoBuf.Grpc.Internal.BytesValue!>!
+static ProtoBuf.Grpc.Internal.Reshape.AsAsyncEnumerable<T>(this Grpc.Core.IAsyncStreamReader<T>! reader, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<T>!
+static ProtoBuf.Grpc.Internal.Reshape.AsObservable<T>(this Grpc.Core.IAsyncStreamReader<T>! reader) -> System.IObservable<T>!
+static ProtoBuf.Grpc.Internal.Reshape.ClientStreamingObservableTaskAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.IObservable<TRequest!>! request, string? host = null) -> System.Threading.Tasks.Task<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.ClientStreamingObservableValueTaskAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.IObservable<TRequest!>! request, string? host = null) -> System.Threading.Tasks.ValueTask<TResponse!>
+static ProtoBuf.Grpc.Internal.Reshape.ClientStreamingObservableValueTaskAsyncVoid<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.IObservable<TRequest!>! request, string? host = null) -> System.Threading.Tasks.ValueTask
+static ProtoBuf.Grpc.Internal.Reshape.ClientStreamingTaskAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, string? host = null) -> System.Threading.Tasks.Task<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.ClientStreamingValueTaskAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, string? host = null) -> System.Threading.Tasks.ValueTask<TResponse!>
+static ProtoBuf.Grpc.Internal.Reshape.ClientStreamingValueTaskAsyncVoid<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, string? host = null) -> System.Threading.Tasks.ValueTask
+static ProtoBuf.Grpc.Internal.Reshape.DuplexAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.Collections.Generic.IAsyncEnumerable<TRequest!>! request, string? host = null) -> System.Collections.Generic.IAsyncEnumerable<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.DuplexObservable<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext options, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, System.IObservable<TRequest!>! request, string? host = null) -> System.IObservable<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.EmptyTask(System.Threading.Tasks.Task! task) -> System.Threading.Tasks.Task<ProtoBuf.Grpc.Internal.Empty!>!
+static ProtoBuf.Grpc.Internal.Reshape.EmptyValueTask(System.Threading.Tasks.ValueTask task) -> System.Threading.Tasks.Task<ProtoBuf.Grpc.Internal.Empty!>!
+static ProtoBuf.Grpc.Internal.Reshape.ServerByteStreamingTaskAsync<TRequest, TResponse>(in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse>! method, TRequest! request, string? host = null) -> System.Threading.Tasks.Task<System.IO.Stream!>!
+static ProtoBuf.Grpc.Internal.Reshape.ServerByteStreamingValueTaskAsync<TRequest, TResponse>(in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse>! method, TRequest! request, string? host = null) -> System.Threading.Tasks.ValueTask<System.IO.Stream!>
+static ProtoBuf.Grpc.Internal.Reshape.ServerStreamingAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> System.Collections.Generic.IAsyncEnumerable<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.ServerStreamingObservable<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> System.IObservable<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.UnarySync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> TResponse!
+static ProtoBuf.Grpc.Internal.Reshape.UnarySyncVoid<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> void
+static ProtoBuf.Grpc.Internal.Reshape.UnaryTaskAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> System.Threading.Tasks.Task<TResponse!>!
+static ProtoBuf.Grpc.Internal.Reshape.UnaryValueTaskAsync<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> System.Threading.Tasks.ValueTask<TResponse!>
+static ProtoBuf.Grpc.Internal.Reshape.UnaryValueTaskAsyncVoid<TRequest, TResponse>(this in ProtoBuf.Grpc.CallContext context, Grpc.Core.CallInvoker! invoker, Grpc.Core.Method<TRequest!, TResponse!>! method, TRequest! request, string? host = null) -> System.Threading.Tasks.ValueTask
+static ProtoBuf.Grpc.Internal.Reshape.WithSimpleExceptionHandling(System.Threading.Tasks.Task! task) -> System.Threading.Tasks.Task!
+static ProtoBuf.Grpc.Internal.Reshape.WithSimpleExceptionHandling<T>(System.Threading.Tasks.Task<T>! task) -> System.Threading.Tasks.Task<T>!
+static ProtoBuf.Grpc.Internal.Reshape.WriteObservableTo<T>(this System.IObservable<T>! reader, Grpc.Core.IAsyncStreamWriter<T>! writer) -> System.Threading.Tasks.Task!
+static ProtoBuf.Grpc.Internal.Reshape.WriteStream(System.Threading.Tasks.Task<System.IO.Stream!>! source, Grpc.Core.IAsyncStreamWriter<ProtoBuf.Grpc.Internal.BytesValue!>! writer, Grpc.Core.ServerCallContext! context, bool writeTrailer) -> System.Threading.Tasks.Task!
+static ProtoBuf.Grpc.Internal.Reshape.WriteTo<T>(this System.Collections.Generic.IAsyncEnumerable<T>! reader, Grpc.Core.IServerStreamWriter<T>! writer, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+static ProtoBuf.Grpc.MetadataExtensions.Add(this Grpc.Core.Metadata! headers, string! key, int value) -> void
+static ProtoBuf.Grpc.MetadataExtensions.GetBytes(this Grpc.Core.Metadata? headers, string! key) -> byte[]?
+static ProtoBuf.Grpc.MetadataExtensions.GetEntry(this Grpc.Core.Metadata? headers, string! key) -> Grpc.Core.Metadata.Entry?
+static ProtoBuf.Grpc.MetadataExtensions.GetInt32(this Grpc.Core.Metadata? headers, string! key) -> int?
+static ProtoBuf.Grpc.MetadataExtensions.GetString(this Grpc.Core.Metadata? headers, string! key) -> string?
+static ProtoBuf.Grpc.ServiceBinderBaseExtensions.AddCodeFirst(this Grpc.Core.ServiceBinderBase! binder, object! service, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, System.IO.TextWriter? log = null) -> int
+static ProtoBuf.Grpc.ServiceBinderBaseExtensions.AddCodeFirst<TService>(this Grpc.Core.ServiceBinderBase! binder, TService! service, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, System.IO.TextWriter? log = null) -> int
+static ProtoBuf.Grpc.ServiceBinderBaseExtensions.Bind<T>(this Grpc.Core.ServiceBinderBase! binder, T? server = null) -> void
+static ProtoBuf.Grpc.ServiceBinderBaseExtensions.Intercept(this Grpc.Core.ServiceBinderBase! binder, Grpc.Core.Interceptors.Interceptor! interceptor) -> Grpc.Core.ServiceBinderBase!
+static ProtoBuf.Grpc.ServiceBinderBaseExtensions.Intercept(this Grpc.Core.ServiceBinderBase! binder, params Grpc.Core.Interceptors.Interceptor![]! interceptors) -> Grpc.Core.ServiceBinderBase!
+static readonly ProtoBuf.Grpc.CallContext.Default -> ProtoBuf.Grpc.CallContext
+static readonly ProtoBuf.Grpc.Internal.Empty.Instance -> ProtoBuf.Grpc.Internal.Empty!
+static readonly ProtoBuf.Grpc.Internal.Empty.InstanceTask -> System.Threading.Tasks.Task<ProtoBuf.Grpc.Internal.Empty!>!
+virtual ProtoBuf.Grpc.Configuration.ClientFactory.CreateClient(Grpc.Core.CallInvoker! channel, System.Type! contractType) -> ProtoBuf.Grpc.Client.GrpcClient!
+virtual ProtoBuf.Grpc.Configuration.MarshallerFactory.CreateMarshaller<T>() -> Grpc.Core.Marshaller<T>!
+virtual ProtoBuf.Grpc.Configuration.MarshallerFactory.Deserialize<T>(byte[]! payload) -> T
+virtual ProtoBuf.Grpc.Configuration.MarshallerFactory.Serialize<T>(T value) -> byte[]!
+virtual ProtoBuf.Grpc.Configuration.ServerBinder.OnError(string! message, object?[]? args = null) -> void
+virtual ProtoBuf.Grpc.Configuration.ServerBinder.OnServiceBound(object! state, string! serviceName, System.Type! serviceType, System.Type! serviceContract, int operationCount) -> void
+virtual ProtoBuf.Grpc.Configuration.ServerBinder.OnWarn(string! message, object?[]? args = null) -> void
+virtual ProtoBuf.Grpc.Configuration.ServerBinder.TryBind<TService, TRequest, TResponse>(ProtoBuf.Grpc.Configuration.ServerBinder.ServiceBindContext! bindContext, Grpc.Core.Method<TRequest!, TResponse!>! method, ProtoBuf.Grpc.Configuration.ServerBinder.MethodStub<TService!> stub) -> bool
+virtual ProtoBuf.Grpc.Configuration.ServerExceptionsInterceptorBase.OnException(System.Exception! exception, out Grpc.Core.Status status) -> bool
+virtual ProtoBuf.Grpc.Configuration.ServiceBinder.GetDataContractName(System.Type! contractType) -> string!
+virtual ProtoBuf.Grpc.Configuration.ServiceBinder.GetDefaultName(System.Reflection.MethodInfo! method) -> string!
+virtual ProtoBuf.Grpc.Configuration.ServiceBinder.GetDefaultName(System.Type! contractType) -> string!
+virtual ProtoBuf.Grpc.Configuration.ServiceBinder.GetMetadata(System.Reflection.MethodInfo! method, System.Type! contractType, System.Type! serviceType) -> System.Collections.Generic.IList<object!>!
+virtual ProtoBuf.Grpc.Configuration.ServiceBinder.IsOperationContract(System.Reflection.MethodInfo! method, out string? name) -> bool
+virtual ProtoBuf.Grpc.Configuration.ServiceBinder.IsServiceContract(System.Type! contractType, out string? name) -> bool
