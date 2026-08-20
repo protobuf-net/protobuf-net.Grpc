@@ -1,0 +1,28 @@
+# Two ecosystems, for two different reasons.
+#
+# nuget: keeps the referenced packages current, and - more to the point - surfaces a security
+# advisory against something we depend on as a PR rather than as something someone has to notice.
+# Central package management means the versions all live in Directory.Packages.props, which
+# Dependabot understands.
+#
+# github-actions: the workflows pin actions by commit SHA (see the note in each), and a SHA does
+# not float. Dependabot is what moves those pins, rewriting the SHA and the trailing version
+# comment together. Without this, pinning would simply mean never updating.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # one PR per family rather than one per package; these move together anyway
+      grpc:
+        patterns: [ "Grpc*" ]
+      microsoft:
+        patterns: [ "Microsoft.*", "System.*" ]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
