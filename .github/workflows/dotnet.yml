@@ -30,3 +30,7 @@ jobs:
       run: dotnet build Build.csproj --no-restore -c Release /p:CI=true /p:GeneratePackageOnBuild=false
     - name: Test
       run: dotnet test Build.csproj --no-build -c Release /p:CI=true --verbosity normal
+    # pack is what runs package validation; without a pack in PR CI it would only run at
+    # release time, which is far too late for it to stop anything
+    - name: Pack (runs package validation)
+      run: dotnet pack Build.csproj --no-build -c Release /p:Packing=true /p:CI=true /p:PackageOutputPath=${{ github.workspace }}\.nupkgs
