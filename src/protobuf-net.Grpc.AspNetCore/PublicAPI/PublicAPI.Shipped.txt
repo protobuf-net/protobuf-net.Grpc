@@ -1,0 +1,7 @@
+#nullable enable
+Microsoft.AspNetCore.Http.HttpContextAccessorExtensions
+ProtoBuf.Grpc.Server.ServicesExtensions
+static Microsoft.AspNetCore.Http.HttpContextAccessorExtensions.GetCallContext(this Microsoft.AspNetCore.Http.IHttpContextAccessor! httpContextAccessor, object! service) -> ProtoBuf.Grpc.CallContext
+static Microsoft.AspNetCore.Http.HttpContextAccessorExtensions.GetServerCallContext(this Microsoft.AspNetCore.Http.IHttpContextAccessor! httpContextAccessor) -> Grpc.Core.ServerCallContext!
+static ProtoBuf.Grpc.Server.ServicesExtensions.AddCodeFirstGrpc(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Grpc.AspNetCore.Server.GrpcServiceOptions!>? configureOptions) -> Grpc.AspNetCore.Server.IGrpcServerBuilder!
+static ProtoBuf.Grpc.Server.ServicesExtensions.AddCodeFirstGrpc(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> void

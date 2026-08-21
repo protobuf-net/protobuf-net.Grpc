@@ -1,0 +1,4 @@
+#nullable enable
+ProtoBuf.Grpc.Server.ReflectionExtensions
+static ProtoBuf.Grpc.Server.ReflectionExtensions.AddCodeFirstGrpcReflection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static ProtoBuf.Grpc.Server.ReflectionExtensions.MapCodeFirstGrpcReflectionService(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! builder) -> Microsoft.AspNetCore.Builder.IEndpointConventionBuilder!

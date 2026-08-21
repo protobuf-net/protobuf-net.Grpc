@@ -1,0 +1,5 @@
+#nullable enable
+ProtoBuf.Grpc.Server.ServiceDefinitionCollectionExtensions
+static ProtoBuf.Grpc.Server.ServiceDefinitionCollectionExtensions.AddCodeFirst(this Grpc.Core.Server.ServiceDefinitionCollection! services, object! service, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, System.IO.TextWriter? log = null, System.Collections.Generic.IEnumerable<Grpc.Core.Interceptors.Interceptor!>? interceptors = null) -> int
+static ProtoBuf.Grpc.Server.ServiceDefinitionCollectionExtensions.AddCodeFirst<TService>(Grpc.Core.Server.ServiceDefinitionCollection! services, TService! service, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration, System.IO.TextWriter? log) -> int
+static ProtoBuf.Grpc.Server.ServiceDefinitionCollectionExtensions.AddCodeFirst<TService>(this Grpc.Core.Server.ServiceDefinitionCollection! services, TService! service, ProtoBuf.Grpc.Configuration.BinderConfiguration? binderConfiguration = null, System.IO.TextWriter? log = null, System.Collections.Generic.IEnumerable<Grpc.Core.Interceptors.Interceptor!>? interceptors = null) -> int

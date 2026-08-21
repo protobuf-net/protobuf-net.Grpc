@@ -18,4 +18,14 @@
         <ProjectReference Include="..\protobuf-net.Grpc\protobuf-net.Grpc.csproj" />
     </ItemGroup>
 
+    <ItemGroup Label="public API tracking">
+        <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+        <!-- one surface for every target framework: these projects have no per-TFM API differences -->
+        <AdditionalFiles Include="PublicAPI/PublicAPI.*.txt" />
+    </ItemGroup>
+    <PropertyGroup>
+        <!-- the grpc.reflection.v1alpha surface is generated from reflection.proto, and the generator
+             emits oblivious reference types; RS0041 is about those, and nothing here can fix them -->
+        <NoWarn>$(NoWarn);RS0041</NoWarn>
+    </PropertyGroup>
 </Project>
