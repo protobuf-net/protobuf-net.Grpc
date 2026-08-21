@@ -3,6 +3,13 @@
   <PropertyGroup>
     <PackageIcon>protobuf-net.png</PackageIcon>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <!-- ApiCompat, as built into the SDK: at pack time this downloads the baseline version of each
+         package from nuget.org and diffs the surface, so a removed member or a narrowed signature
+         fails the build (CP0001/CP0002/CP0003) instead of shipping. It also cross-checks that a
+         consumer resolving the netstandard2.0 asset gets something compatible with the net8.0 one.
+         All six packages are on the same version, so one baseline covers them. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.3.14</PackageValidationBaselineVersion>
     <!-- the readme is included explicitly below; pack reads its items from the OUTER build of a
          multi-targeting project, where the SDK's default item globs do not run, so the glob must
          not be the only thing that finds it - and must not claim it twice -->
