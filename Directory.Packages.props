@@ -33,7 +33,7 @@
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="TaskBuilder.fs" Version="2.1.0" />
-    <PackageVersion Include="FSharp.Core" Version="10.1.300" />
+    <PackageVersion Include="FSharp.Core" Version="10.1.400" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.8" />
   </ItemGroup>
 </Project>
