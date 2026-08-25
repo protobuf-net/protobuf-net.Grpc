@@ -11,7 +11,10 @@
         <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)ProtoBuf.snk</AssemblyOriginatorKeyFile>
         <Copyright>Marc Gravell, 2019-</Copyright>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <PackageProjectUrl>https://github.com/protobuf-net/protobuf-net.Grpc</PackageProjectUrl>
+        <!-- the project's home, not its source: RepositoryUrl below already carries the repo,
+             and nuget.org renders the two as separate links - pointing both at GitHub spends
+             the "Project website" slot on a duplicate -->
+        <PackageProjectUrl>https://grpc.protobuf-net.dev</PackageProjectUrl>
         <RepositoryUrl>https://github.com/protobuf-net/protobuf-net.Grpc</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <Product>protobuf-net.Grpc ($(TargetFramework))</Product>
