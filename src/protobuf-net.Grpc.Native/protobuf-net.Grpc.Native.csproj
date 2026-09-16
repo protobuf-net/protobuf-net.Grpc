@@ -13,6 +13,7 @@
   <ItemGroup Label="public API tracking">
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <!-- one surface for every target framework: these projects have no per-TFM API differences -->
+    <PackageReference Include="protobuf-net" VersionOverride="3.4.30" />
     <AdditionalFiles Include="PublicAPI/PublicAPI.*.txt" />
   </ItemGroup>
 </Project>

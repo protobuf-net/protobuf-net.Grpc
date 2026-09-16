@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <!-- one surface for every target framework: these projects have no per-TFM API differences -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="10.0.12" />
+    <PackageReference Include="protobuf-net" />
     <AdditionalFiles Include="PublicAPI/PublicAPI.*.txt" />
   </ItemGroup>
 </Project>
