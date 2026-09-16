@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <ProjectReference Include="..\..\src\protobuf-net.Grpc.ClientFactory\protobuf-net.Grpc.ClientFactory.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <ProjectReference Include="..\protobuf-net.Grpc.Tests.TestProxy\protobuf-net.Grpc.Tests.TestProxy.csproj">
