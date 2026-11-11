@@ -149,7 +149,7 @@ namespace ProtoBuf.Grpc.Internal
 #else
             ModuleBuilder moduleBuilder = ProxyModuleHelper.MainProxyModule;
 #endif
-            var typeIdentity = ProxyModuleHelper.ProxyModuleIdentity + "." + baseType.Name + "." + typeof(TService).Name + "_Proxy_" + _typeIndex++;
+            var typeIdentity = ProxyModuleHelper.ProxyModuleIdentity + "." + baseType.Name + "." + typeof(TService).Name + "_Proxy_" + Interlocked.Increment(ref _typeIndex);
 
             var callInvoker = baseType.GetProperty("CallInvoker", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetGetMethod(true);
             if (callInvoker == null || callInvoker.ReturnType != typeof(CallInvoker) || callInvoker.GetParameters().Length != 0)

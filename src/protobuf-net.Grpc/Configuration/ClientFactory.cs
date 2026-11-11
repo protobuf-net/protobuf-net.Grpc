@@ -3,6 +3,7 @@ using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Internal;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace ProtoBuf.Grpc.Configuration
@@ -50,23 +51,48 @@ namespace ProtoBuf.Grpc.Configuration
         {
             protected override BinderConfiguration BinderConfiguration { get; } = binderConfiguration ?? BinderConfiguration.Default;
 
+            // values are Func<CallInvoker, TService> once resolved, with an in-progress
+            // Lazy<Func<CallInvoker, TService>> placeholder so that concurrent first
+            // callers share a single proxy emission (the emitted types are rooted for
+            // the lifetime of the module, so redundant emissions are leaked, not just wasted)
             private readonly ConcurrentDictionary<Type, object> _proxyCache = new ConcurrentDictionary<Type, object>();
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             private TService SlowCreateClient<TService>(CallInvoker channel)
                 where TService : class
             {
-                var factory = ProxyEmitter.CreateFactory<TService>(BinderConfiguration, null);
                 var key = typeof(TService);
-
-                if (!_proxyCache.TryAdd(key, factory)) factory = (Func<CallInvoker, TService>)_proxyCache[key];
-                return factory(channel);
+                var obj = _proxyCache.GetOrAdd(key, _ => new Lazy<Func<CallInvoker, TService>>(
+                    () => ProxyEmitter.CreateFactory<TService>(BinderConfiguration, null)));
+                if (obj is Lazy<Func<CallInvoker, TService>> pending)
+                {
+                    Func<CallInvoker, TService> factory;
+                    try
+                    {
+                        factory = pending.Value;
+                    }
+                    catch
+                    {
+                        // evict the failed placeholder (if still current), so that
+                        // later callers retry rather than observing a cached failure
+                        ((ICollection<KeyValuePair<Type, object>>)_proxyCache).Remove(
+                            new KeyValuePair<Type, object>(key, obj));
+                        throw;
+                    }
+                    // swap in the resolved delegate for the fast path
+                    _proxyCache.TryUpdate(key, factory, obj);
+                    return factory(channel);
+                }
+                return ((Func<CallInvoker, TService>)obj)(channel);
             }
             public override TService CreateClient<TService>(CallInvoker channel)
                 where TService : class
             {
-                if (_proxyCache.TryGetValue(typeof(TService), out var obj))
-                    return ((Func<CallInvoker, TService>)obj)(channel);
+                if (_proxyCache.TryGetValue(typeof(TService), out var obj)
+                    && obj is Func<CallInvoker, TService> factory)
+                {
+                    return factory(channel);
+                }
                 return SlowCreateClient<TService>(channel);
             }
         }
