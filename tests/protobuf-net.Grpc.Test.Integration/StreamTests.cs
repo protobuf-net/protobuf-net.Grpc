@@ -849,6 +849,33 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
+        [Fact]
+        public async Task DuplexEchoWriteFault()
+        {
+            // same as DuplexEchoRequestFault, but the request is produced fine and writing it fails
+            await using var svc = CreateClient(out var client);
+
+            var ex = await Assert.ThrowsAnyAsync<Exception>(async () =>
+            {
+                await foreach (var item in client.DuplexEcho(UnserializableRequests()))
+                {
+                    _ = item;
+                }
+            });
+            Assert.Equal("ProtoBuf.Grpc.Internal.IncompleteSendRpcException", ex.GetType().FullName);
+            Assert.Contains(nameof(UnknownFoo), Assert.IsType<InvalidOperationException>(ex.InnerException).Message);
+
+            static async IAsyncEnumerable<Foo> UnserializableRequests()
+            {
+                yield return new Foo { Bar = 0 };
+                await Task.Yield();
+                yield return new UnknownFoo();
+            }
+        }
+
+        // not a known sub-type of Foo, so serializing it fails
+        private sealed class UnknownFoo : Foo { }
+
         IAsyncEnumerable<Foo> For(Scenario scenario, int count, int from = 0, int millisecondsDelay = 10)
             => ForImpl(_fixture, count, from, millisecondsDelay, scenario switch
             {
