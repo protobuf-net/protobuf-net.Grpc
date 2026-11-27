@@ -825,6 +825,30 @@ namespace protobuf_net.Grpc.Test.Integration
             }
         }
 
+        [Fact]
+        public async Task DuplexEchoRequestFault()
+        {
+            // a fault on the sending side cancels the call; the caller should see that fault,
+            // not the RpcException(Cancelled) that the cancellation causes on the response stream
+            await using var svc = CreateClient(out var client);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await foreach (var item in client.DuplexEcho(FaultingRequests()))
+                {
+                    _ = item;
+                }
+            });
+            Assert.Equal("request fault", ex.Message);
+
+            static async IAsyncEnumerable<Foo> FaultingRequests()
+            {
+                yield return new Foo { Bar = 0 };
+                await Task.Yield();
+                throw new InvalidOperationException("request fault");
+            }
+        }
+
         IAsyncEnumerable<Foo> For(Scenario scenario, int count, int from = 0, int millisecondsDelay = 10)
             => ForImpl(_fixture, count, from, millisecondsDelay, scenario switch
             {
