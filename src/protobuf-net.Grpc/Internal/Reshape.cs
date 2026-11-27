@@ -857,6 +857,12 @@ namespace ProtoBuf.Grpc.Internal
                         {   // but we want to catch the RpcException to capture the outbound headers
                             haveMore = await seq.MoveNext(allDone.Token).ConfigureAwait(false);
                         }
+                        catch (Exception fault) when (IsCausedBySendFault(fault))
+                        {
+                            if (fault is RpcException rpc) metadata?.SetTrailers(rpc);
+                            await sendAll.ConfigureAwait(false); // SendAll is already in its catch: this rethrows its fault
+                            throw;
+                        }
                         catch (RpcException fault)
                         {
                             metadata?.SetTrailers(fault);
@@ -885,6 +891,12 @@ namespace ProtoBuf.Grpc.Internal
                     throw;
                 }
                 metadata?.SetTrailers(call);
+
+                // SendAll cancels allDone when sending faults, and then reading fails only with that cancellation;
+                // if the caller cancelled, SendAll may not be finishing at all, so it must not be awaited
+                bool IsCausedBySendFault(Exception fault) => allDone.IsCancellationRequested
+                    && !contextCancel.IsCancellationRequested && !consumerCancel.IsCancellationRequested
+                    && fault is OperationCanceledException or RpcException { StatusCode: StatusCode.Cancelled };
             }
         }
 
